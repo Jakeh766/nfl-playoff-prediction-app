@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Create and save your preseason NFL playoff seeding and bracket predictions."
+    />
+    <title>Road to the Bowl — NFL Playoff Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="Road to the Bowl home">
+        <span class="brand-mark" aria-hidden="true">◆</span>
+        <span>ROAD TO THE BOWL</span>
+      </a>
+      <div class="season-badge">PRESEASON PICKS</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">CALL IT BEFORE KICKOFF</p>
+          <h1>Build your road<br />to the championship.</h1>
+          <p class="hero-description">
+            Seed both conferences, pick every winner, and lock in your preseason
+            playoff prediction under your name.
+          </p>
+        </div>
+
+        <form class="profile-card" id="profile-form">
+          <div>
+            <p class="card-kicker">YOUR BRACKET</p>
+            <h2>Who’s making the picks?</h2>
+          </div>
+          <label for="player-name">Name</label>
+          <div class="name-row">
+            <input
+              id="player-name"
+              name="player-name"
+              type="text"
+              maxlength="40"
+              autocomplete="name"
+              placeholder="Enter your name"
+              required
+            />
+            <button class="button button-primary" type="submit">Start picking</button>
+          </div>
+          <p class="name-preview" id="name-preview" aria-live="polite">
+            Your bracket will be saved under: <strong>your name</strong>
+          </p>
+          <p class="input-hint">
+            Returning? Enter the same name to load your saved picks.
+          </p>
+        </form>
+      </section>
+
+      <section class="predictor hidden" id="predictor" aria-live="polite">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">01 · SET THE FIELD</p>
+            <h2><span id="welcome-name"></span>, seed your playoff teams.</h2>
+            <p class="active-profile">
+              Current bracket: <strong id="profile-name-display"></strong>
+            </p>
+            <p>
+              Pick each North, South, East, and West winner first. Then rank
+              those four teams as seeds 1–4 before choosing the three wild
+              cards. The No. 1 seeds earn a first-round bye.
+            </p>
+            <p class="odds-status" id="odds-status" role="status">
+              Loading projected season win totals…
+            </p>
+          </div>
+          <button class="button button-ghost" id="switch-profile" type="button">
+            Switch profile
+          </button>
+        </div>
+
+        <div class="conference-grid">
+          <section class="conference-card afc-card">
+            <div class="conference-title">
+              <span class="conference-icon">A</span>
+              <div>
+                <p>AMERICAN FOOTBALL CONFERENCE</p>
+                <h3>AFC Seeding</h3>
+              </div>
+            </div>
+            <div class="seed-list" id="afc-seeds"></div>
+          </section>
+
+          <section class="conference-card nfc-card">
+            <div class="conference-title">
+              <span class="conference-icon">N</span>
+              <div>
+                <p>NATIONAL FOOTBALL CONFERENCE</p>
+                <h3>NFC Seeding</h3>
+              </div>
+            </div>
+            <div class="seed-list" id="nfc-seeds"></div>
+          </section>
+        </div>
+
+        <div class="field-actions">
+          <p class="validation-message" id="seeding-message"></p>
+          <button class="button button-primary button-large" id="build-bracket" type="button">
+            Build my playoff bracket
+          </button>
+        </div>
+
+        <section class="bracket-section hidden" id="bracket-section">
+          <div class="section-heading bracket-heading">
+            <div>
+              <p class="eyebrow">02 · PICK EVERY GAME</p>
+              <h2>Your playoff bracket.</h2>
+              <p>Click a team to advance it. Later rounds update automatically.</p>
+            </div>
+            <div class="save-state" id="save-state" role="status">
+              <span class="save-dot"></span>
+              <span>Not saved yet</span>
+            </div>
+          </div>
+
+          <div class="bracket-shell">
+            <div class="bracket-conference">
+              <div class="bracket-conference-label afc-label">AFC</div>
+              <div class="rounds" id="afc-bracket"></div>
+            </div>
+
+            <section class="super-bowl-card">
+              <p class="card-kicker">THE FINAL</p>
+              <h3>Championship</h3>
+              <p class="super-bowl-status" id="super-bowl-status" aria-live="polite"></p>
+              <div id="super-bowl-game"></div>
+              <div class="champion-display empty" id="champion-display">
+                <span class="trophy" aria-hidden="true">♜</span>
+                <p>YOUR CHAMPION</p>
+                <strong>Make your final pick</strong>
+              </div>
+            </section>
+
+            <div class="bracket-conference">
+              <div class="bracket-conference-label nfc-label">NFC</div>
+              <div class="rounds" id="nfc-bracket"></div>
+            </div>
+          </div>
+
+          <div class="final-actions">
+            <button class="button button-secondary" id="reset-picks" type="button">
+              Reset game picks
+            </button>
+            <button class="button button-primary button-large" id="save-prediction" type="button">
+              Save prediction
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <section class="saved-section">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">SAVED LOCALLY</p>
+            <h2>Prediction locker.</h2>
+          </div>
+        </div>
+        <div class="saved-grid" id="saved-grid"></div>
+        <p class="empty-locker" id="empty-locker">
+          No saved brackets yet. Your first prediction will appear here.
+        </p>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <footer>
+      <span>ROAD TO THE BOWL</span>
+      <p>Predictions are stored on this device.</p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
