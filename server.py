@@ -1,9 +1,11 @@
-"""Serve the NFL predictor and refresh projected win totals from DraftKings."""
+"""Serve the NFL predictor and refresh consensus NFL win totals."""
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import statistics
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,8 +13,9 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 HOST = "127.0.0.1"
-PORT = 8000
-DRAFTKINGS_URL = "https://sportsbook.draftkings.com/page/nfl-futures"
+PORT = int(os.environ.get("PORT", "8000"))
+API_VERSION = 2
+ODDS_URL = "https://www.vegasinsider.com/nfl/odds/win-totals/"
 CACHE_FILE = ROOT / ".win-totals-cache.json"
 
 FALLBACK_TOTALS = {
@@ -35,9 +38,9 @@ FALLBACK_TOTALS = {
 }
 
 
-def fetch_draftkings_totals() -> dict[str, float]:
+def fetch_live_totals() -> dict[str, float]:
     request = Request(
-        DRAFTKINGS_URL,
+        ODDS_URL,
         headers={
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -50,23 +53,39 @@ def fetch_draftkings_totals() -> dict[str, float]:
         html = response.read().decode("utf-8", errors="ignore")
 
     totals: dict[str, float] = {}
-    for team in FALLBACK_TOTALS:
-        escaped_team = re.escape(team)
-        patterns = [
-            rf"{escaped_team}.{{0,450}}?(?:Regular Season Wins|Team Wins|Wins).{{0,160}}?(\d{{1,2}}\.5)",
-            rf"(?:Regular Season Wins|Team Wins|Wins).{{0,160}}?{escaped_team}.{{0,250}}?(\d{{1,2}}\.5)",
+    rows = re.findall(
+        r'<tr[^>]*data-name="[^"]+"[^>]*>(.*?)</tr>',
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    for row in rows:
+        team_match = re.search(
+            r'"description":"([^"]+)"',
+            row,
+            flags=re.IGNORECASE,
+        )
+        if not team_match:
+            continue
+
+        team = team_match.group(1)
+        if team not in FALLBACK_TOTALS:
+            continue
+
+        book_lines = [
+            float(value)
+            for value in re.findall(
+                r'class="data-value"[^>]*>\s*[ou](\d+(?:\.5)?)',
+                row,
+                flags=re.IGNORECASE,
+            )
         ]
-        for pattern in patterns:
-            match = re.search(pattern, html, flags=re.IGNORECASE | re.DOTALL)
-            if match:
-                value = float(match.group(1))
-                if 2.5 <= value <= 14.5:
-                    totals[team] = value
-                    break
+        valid_lines = [value for value in book_lines if 2.5 <= value <= 14.5]
+        if valid_lines:
+            totals[team] = float(statistics.median(valid_lines))
 
     if len(totals) < 32:
         raise ValueError(
-            f"DraftKings returned only {len(totals)} readable team win totals"
+            f"VegasInsider returned only {len(totals)} readable team win totals"
         )
     return totals
 
@@ -83,11 +102,12 @@ def load_cached_totals() -> dict | None:
 
 def get_win_totals() -> dict:
     try:
-        totals = fetch_draftkings_totals()
+        totals = fetch_live_totals()
         payload = {
+            "apiVersion": API_VERSION,
             "totals": totals,
-            "source": "DraftKings Sportsbook NFL Futures",
-            "sourceUrl": DRAFTKINGS_URL,
+            "source": "VegasInsider sportsbook consensus",
+            "sourceUrl": ODDS_URL,
             "status": "live",
             "updatedAt": int(time.time()),
         }
@@ -96,13 +116,16 @@ def get_win_totals() -> dict:
     except Exception as error:
         cached = load_cached_totals()
         if cached:
+            cached["apiVersion"] = API_VERSION
             cached["status"] = "cached"
+            cached.pop("message", None)
             cached["message"] = str(error)
             return cached
         return {
+            "apiVersion": API_VERSION,
             "totals": FALLBACK_TOTALS,
             "source": "bundled 2026 FanDuel/DraftKings market snapshot",
-            "sourceUrl": DRAFTKINGS_URL,
+            "sourceUrl": ODDS_URL,
             "status": "fallback",
             "updatedAt": None,
             "message": str(error),

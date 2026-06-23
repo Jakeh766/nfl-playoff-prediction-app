@@ -244,6 +244,9 @@ async function loadWinTotals() {
     if (!response.ok) throw new Error("Odds endpoint unavailable");
 
     const data = await response.json();
+    if (data.apiVersion !== 2) {
+      throw new Error("The odds server is outdated. Restart server.py.");
+    }
     if (!data.totals || Object.keys(data.totals).length < 32) {
       throw new Error("Incomplete odds response");
     }
@@ -257,9 +260,13 @@ async function loadWinTotals() {
           ? "Cached"
           : "Fallback";
     elements.oddsStatus.textContent = `${sourceLabel} projected wins from ${data.source}. Teams are ranked within each division.`;
-  } catch {
-    elements.oddsStatus.textContent =
-      "Projected wins use the bundled 2026 sportsbook snapshot. Run through server.py for live refreshes.";
+    elements.oddsStatus.title = data.message || "";
+  } catch (error) {
+    const isStaleServer = error.message.includes("outdated");
+    elements.oddsStatus.textContent = isStaleServer
+      ? "Odds server is outdated. Stop it, restart server.py, then refresh this page."
+      : "Projected wins use the bundled 2026 sportsbook snapshot. Run through server.py for live refreshes.";
+    elements.oddsStatus.title = error.message;
   }
 
   if (!elements.predictor.classList.contains("hidden")) {
