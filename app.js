@@ -823,7 +823,7 @@ function renderSuperBowl() {
 
   const game = {
     id: "super-bowl",
-    title: afcWinner && nfcWinner ? "Pick the Super Bowl champion" : "Championship Game",
+    title: afcWinner && nfcWinner ? "Pick the Super Bowl champion" : "Super Bowl",
     teams: [afcWinner, nfcWinner],
   };
   elements.superBowlGame.innerHTML = "";
@@ -1032,6 +1032,10 @@ elements.form.addEventListener("submit", (event) => {
 elements.playerName.addEventListener("input", () => {
   const cleanName = elements.playerName.value.trim().replace(/\s+/g, " ");
   elements.namePreview.textContent = cleanName || "your name";
+});
+
+document.querySelectorAll(".conference-logo").forEach((logo) => {
+  logo.addEventListener("error", () => logo.classList.add("logo-error"));
 });
 elements.buildBracket.addEventListener("click", buildBracket);
 elements.savePrediction.addEventListener("click", savePrediction);

@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=4" />
+    <link rel="stylesheet" href="styles.css?v=6" />
   </head>
   <body>
     <header class="site-header">
@@ -88,7 +88,14 @@
         <div class="conference-grid">
           <section class="conference-card afc-card">
             <div class="conference-title">
-              <span class="conference-icon">A</span>
+              <span class="conference-icon">
+                <img
+                  class="conference-logo"
+                  src="https://a.espncdn.com/i/teamlogos/nfl/500/afc.png"
+                  alt="AFC logo"
+                />
+                <span class="conference-logo-fallback">A</span>
+              </span>
               <div>
                 <p>AMERICAN FOOTBALL CONFERENCE</p>
                 <h3>AFC Seeding</h3>
@@ -99,7 +106,14 @@
 
           <section class="conference-card nfc-card">
             <div class="conference-title">
-              <span class="conference-icon">N</span>
+              <span class="conference-icon">
+                <img
+                  class="conference-logo"
+                  src="https://a.espncdn.com/i/teamlogos/nfl/500/nfc.png"
+                  alt="NFC logo"
+                />
+                <span class="conference-logo-fallback">N</span>
+              </span>
               <div>
                 <p>NATIONAL FOOTBALL CONFERENCE</p>
                 <h3>NFC Seeding</h3>
@@ -131,13 +145,20 @@
 
           <div class="bracket-shell">
             <div class="bracket-conference">
-              <div class="bracket-conference-label afc-label">AFC</div>
+              <div class="bracket-conference-label afc-label">
+                <img
+                  class="bracket-conference-logo"
+                  src="https://a.espncdn.com/i/teamlogos/nfl/500/afc.png"
+                  alt="AFC logo"
+                />
+                <span>AFC</span>
+              </div>
               <div class="rounds" id="afc-bracket"></div>
             </div>
 
             <section class="super-bowl-card">
-              <p class="card-kicker">THE FINAL</p>
-              <h3>Championship</h3>
+              <p class="card-kicker">THE BIG GAME</p>
+              <h3>Super Bowl</h3>
               <p class="super-bowl-status" id="super-bowl-status" aria-live="polite"></p>
               <div id="super-bowl-game"></div>
               <div class="champion-display empty" id="champion-display">
@@ -148,7 +169,14 @@
             </section>
 
             <div class="bracket-conference">
-              <div class="bracket-conference-label nfc-label">NFC</div>
+              <div class="bracket-conference-label nfc-label">
+                <img
+                  class="bracket-conference-logo"
+                  src="https://a.espncdn.com/i/teamlogos/nfl/500/nfc.png"
+                  alt="NFC logo"
+                />
+                <span>NFC</span>
+              </div>
               <div class="rounds" id="nfc-bracket"></div>
             </div>
           </div>
@@ -185,6 +213,6 @@
       <p>Predictions are stored on this device.</p>
     </footer>
 
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>

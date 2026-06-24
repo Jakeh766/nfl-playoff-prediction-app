@@ -187,7 +187,9 @@ h1 {
 }
 
 .name-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
 }
 
 input,
@@ -203,10 +205,11 @@ select {
 }
 
 input {
+  min-width: 0;
   padding: 0 15px;
   color: var(--ink);
   background-color: #fff;
-  border-radius: 5px 0 0 5px;
+  border-radius: 5px;
   caret-color: var(--red);
   font-weight: 700;
   opacity: 1;
@@ -302,8 +305,9 @@ select:focus {
 }
 
 .name-row .button {
+  width: 100%;
   min-height: 50px;
-  border-radius: 0 5px 5px 0;
+  border-radius: 5px;
 }
 
 .predictor,
@@ -398,6 +402,30 @@ select:focus {
   border-radius: 50%;
   font-family: var(--display);
   font-size: 24px;
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.conference-logo {
+  position: relative;
+  z-index: 1;
+  width: 39px;
+  height: 39px;
+  display: block;
+  object-fit: contain;
+}
+
+.conference-logo-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+
+.conference-logo:not(.logo-error) + .conference-logo-fallback {
+  visibility: hidden;
 }
 
 .conference-title p {
@@ -649,10 +677,23 @@ select:focus {
 .bracket-conference-label {
   padding: 13px;
   color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   font-family: var(--display);
   font-size: 18px;
   letter-spacing: 0.12em;
   text-align: center;
+}
+
+.bracket-conference-logo {
+  width: 29px;
+  height: 29px;
+  padding: 3px;
+  background: white;
+  border-radius: 50%;
+  object-fit: contain;
 }
 
 .afc-label {
@@ -1072,8 +1113,7 @@ footer p {
   }
 
   .name-row {
-    flex-direction: column;
-    gap: 10px;
+    grid-template-columns: 1fr;
   }
 
   input,
