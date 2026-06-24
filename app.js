@@ -37,6 +37,10 @@ const TEAMS = {
   ],
 };
 
+const TEST_MODE =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1";
+
 const TEAM_DIVISIONS = {
   "Baltimore Ravens": "AFC North",
   "Buffalo Bills": "AFC East",
@@ -191,6 +195,7 @@ const elements = {
   afcSeeds: document.querySelector("#afc-seeds"),
   nfcSeeds: document.querySelector("#nfc-seeds"),
   seedingMessage: document.querySelector("#seeding-message"),
+  randomizeBracket: document.querySelector("#randomize-bracket"),
   buildBracket: document.querySelector("#build-bracket"),
   bracketSection: document.querySelector("#bracket-section"),
   afcBracket: document.querySelector("#afc-bracket"),
@@ -206,6 +211,10 @@ const elements = {
   emptyLocker: document.querySelector("#empty-locker"),
   toast: document.querySelector("#toast"),
 };
+
+if (!TEST_MODE) {
+  elements.randomizeBracket.classList.add("hidden");
+}
 
 function getStoredPredictions() {
   try {
@@ -225,6 +234,20 @@ function createEmptyPicks() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function shuffled(values) {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
+function randomTeam(teams) {
+  const availableTeams = teams.filter(Boolean);
+  return availableTeams[Math.floor(Math.random() * availableTeams.length)];
 }
 
 function getTeamNickname(teamName) {
@@ -598,6 +621,65 @@ function buildBracket() {
   renderBracket();
   elements.bracketSection.classList.remove("hidden");
   updateSaveState(false);
+  requestAnimationFrame(() => {
+    elements.bracketSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function randomizeBracket() {
+  if (!TEST_MODE) return;
+
+  state.divisionWinners = createEmptyDivisionWinners();
+  state.seeds = { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
+  state.picks = createEmptyPicks();
+
+  for (const conference of ["AFC", "NFC"]) {
+    for (const division of DIVISION_ORDER) {
+      state.divisionWinners[conference][division] = randomTeam(
+        DIVISION_TEAMS[conference][division],
+      );
+    }
+
+    const divisionWinners = Object.values(state.divisionWinners[conference]);
+    const wildCards = shuffled(
+      TEAMS[conference].filter((team) => !divisionWinners.includes(team)),
+    ).slice(0, 3);
+    state.seeds[conference] = [...shuffled(divisionWinners), ...wildCards];
+  }
+
+  state.bracketBuilt = true;
+  state.savedAt = null;
+
+  for (const conference of ["AFC", "NFC"]) {
+    let games = getConferenceGames(conference);
+    games.wildCard.forEach((game) => {
+      state.picks[conference][game.id] = randomTeam(game.teams).name;
+    });
+
+    games = getConferenceGames(conference);
+    games.divisional.forEach((game) => {
+      state.picks[conference][game.id] = randomTeam(game.teams).name;
+    });
+
+    games = getConferenceGames(conference);
+    const championship = games.championship[0];
+    state.picks[conference][championship.id] = randomTeam(
+      championship.teams,
+    ).name;
+  }
+
+  state.picks.superBowl = randomTeam([
+    getConferenceWinner("AFC"),
+    getConferenceWinner("NFC"),
+  ]).name;
+
+  elements.seedingMessage.textContent = "";
+  renderSeedSelectors();
+  renderBracket();
+  elements.bracketSection.classList.remove("hidden");
+  updateSaveState(false);
+  showToast("Random seeds and game picks are ready.");
+
   requestAnimationFrame(() => {
     elements.bracketSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -1038,6 +1120,7 @@ document.querySelectorAll(".conference-logo").forEach((logo) => {
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
 });
 elements.buildBracket.addEventListener("click", buildBracket);
+elements.randomizeBracket.addEventListener("click", randomizeBracket);
 elements.savePrediction.addEventListener("click", savePrediction);
 elements.resetPicks.addEventListener("click", resetGamePicks);
 elements.switchProfile.addEventListener("click", switchProfile);
