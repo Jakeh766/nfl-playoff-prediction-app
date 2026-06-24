@@ -89,6 +89,41 @@ const DIVISION_TEAMS = {
   },
 };
 
+const TEAM_LOGO_CODES = {
+  "Arizona Cardinals": "ari",
+  "Atlanta Falcons": "atl",
+  "Baltimore Ravens": "bal",
+  "Buffalo Bills": "buf",
+  "Carolina Panthers": "car",
+  "Chicago Bears": "chi",
+  "Cincinnati Bengals": "cin",
+  "Cleveland Browns": "cle",
+  "Dallas Cowboys": "dal",
+  "Denver Broncos": "den",
+  "Detroit Lions": "det",
+  "Green Bay Packers": "gb",
+  "Houston Texans": "hou",
+  "Indianapolis Colts": "ind",
+  "Jacksonville Jaguars": "jax",
+  "Kansas City Chiefs": "kc",
+  "Las Vegas Raiders": "lv",
+  "Los Angeles Chargers": "lac",
+  "Los Angeles Rams": "lar",
+  "Miami Dolphins": "mia",
+  "Minnesota Vikings": "min",
+  "New England Patriots": "ne",
+  "New Orleans Saints": "no",
+  "New York Giants": "nyg",
+  "New York Jets": "nyj",
+  "Philadelphia Eagles": "phi",
+  "Pittsburgh Steelers": "pit",
+  "San Francisco 49ers": "sf",
+  "Seattle Seahawks": "sea",
+  "Tampa Bay Buccaneers": "tb",
+  "Tennessee Titans": "ten",
+  "Washington Commanders": "wsh",
+};
+
 const FALLBACK_WIN_TOTALS = {
   "Arizona Cardinals": 4.5,
   "Atlanta Falcons": 7.5,
@@ -196,6 +231,20 @@ function getTeamNickname(teamName) {
   return teamName.split(" ").at(-1);
 }
 
+function teamLogoUrl(teamName) {
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${TEAM_LOGO_CODES[teamName]}.png`;
+}
+
+function createTeamLogo(teamName, className = "team-logo") {
+  const logo = document.createElement("img");
+  logo.className = className;
+  logo.src = teamLogoUrl(teamName);
+  logo.alt = `${teamName} logo`;
+  logo.loading = "lazy";
+  logo.addEventListener("error", () => logo.classList.add("logo-error"));
+  return logo;
+}
+
 function seedTeam(conference, seed) {
   const name = state.seeds[conference][seed - 1];
   return name ? { name, seed } : null;
@@ -226,12 +275,28 @@ function appendDivisionGroupedOptions(select, conference, teams, selectedTeam) {
     divisionTeams.forEach((team) => {
       const option = document.createElement("option");
       option.value = team;
-      option.textContent = `${team} — ${projectedWins(team).toFixed(1)} wins`;
+      option.textContent =
+        selectedTeam === team
+          ? team
+          : `${team} (${projectedWins(team).toFixed(1)} proj)`;
       option.selected = selectedTeam === team;
       group.appendChild(option);
     });
 
     select.appendChild(group);
+  });
+}
+
+function appendProjectedOptions(select, teams, selectedTeam) {
+  sortTeamsByProjection(teams).forEach((team) => {
+    const option = document.createElement("option");
+    option.value = team;
+    option.textContent =
+      selectedTeam === team
+        ? team
+        : `${team} (${projectedWins(team).toFixed(1)} proj)`;
+    option.selected = selectedTeam === team;
+    select.appendChild(option);
   });
 }
 
@@ -315,7 +380,19 @@ function renderConferenceSeeds(conference, container) {
     );
 
     select.addEventListener("change", handleDivisionWinnerChange);
-    field.append(label, select);
+    const control = document.createElement("div");
+    control.className = "logo-select-control";
+    const selectedTeam = state.divisionWinners[conference][division];
+    if (selectedTeam) {
+      control.appendChild(createTeamLogo(selectedTeam, "select-team-logo"));
+    } else {
+      const placeholderLogo = document.createElement("span");
+      placeholderLogo.className = "select-logo-placeholder";
+      placeholderLogo.textContent = "—";
+      control.appendChild(placeholderLogo);
+    }
+    control.appendChild(select);
+    field.append(label, control);
     divisionGrid.appendChild(field);
   });
   container.appendChild(divisionGrid);
@@ -323,7 +400,7 @@ function renderConferenceSeeds(conference, container) {
   const seedingHeading = document.createElement("div");
   seedingHeading.className = "seed-group-heading seed-order-group";
   seedingHeading.innerHTML =
-    "<strong>2. Rank Division Winners</strong><span>Order your four winners as seeds 1–4</span>";
+    "<strong>2. Rank Division Winners</strong><span>Choices sorted by projected wins</span>";
   container.appendChild(seedingHeading);
 
   for (let index = 0; index < 7; index += 1) {
@@ -331,7 +408,7 @@ function renderConferenceSeeds(conference, container) {
       const group = document.createElement("div");
       group.className = "seed-group-heading wild-card-group";
       group.innerHTML =
-        "<strong>3. Pick Wild Cards</strong><span>Seeds 5–7 · unlock after ranking</span>";
+        "<strong>3. Pick Wild Cards</strong><span>Seeds 5–7 · unlock after division picks</span>";
       container.appendChild(group);
     }
 
@@ -343,6 +420,13 @@ function renderConferenceSeeds(conference, container) {
     number.className = "seed-number";
     number.textContent = index + 1;
 
+    const logoSlot = document.createElement("span");
+    logoSlot.className = "seed-logo-slot";
+    const selectedSeedTeam = state.seeds[conference][index];
+    if (selectedSeedTeam) {
+      logoSlot.appendChild(createTeamLogo(selectedSeedTeam, "seed-team-logo"));
+    }
+
     const select = document.createElement("select");
     select.dataset.conference = conference;
     select.dataset.seedIndex = index;
@@ -351,19 +435,27 @@ function renderConferenceSeeds(conference, container) {
     const placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent =
-      index < 4 ? "Pick division winners first" : "Rank division winners first";
+      "Pick division winners first";
     select.appendChild(placeholder);
 
     const availableTeams =
       index < 4
         ? Object.values(state.divisionWinners[conference]).filter(Boolean)
         : TEAMS[conference];
-    appendDivisionGroupedOptions(
-      select,
-      conference,
-      availableTeams,
-      state.seeds[conference][index],
-    );
+    if (index < 4) {
+      appendProjectedOptions(
+        select,
+        availableTeams,
+        state.seeds[conference][index],
+      );
+    } else {
+      appendDivisionGroupedOptions(
+        select,
+        conference,
+        availableTeams,
+        state.seeds[conference][index],
+      );
+    }
 
     select.addEventListener("change", handleSeedChange);
 
@@ -372,7 +464,7 @@ function renderConferenceSeeds(conference, container) {
     note.textContent =
       index === 0 ? "Division winner · bye" : index < 4 ? "Division winner" : "Wild card";
 
-    row.append(number, select, note);
+    row.append(number, logoSlot, select, note);
     container.appendChild(row);
   }
 
@@ -384,17 +476,16 @@ function handleSeedChange(event) {
   const index = Number(seedIndex);
   state.seeds[conference][index] = event.target.value;
 
-  if (index < 4 && !divisionSeedingComplete(conference)) {
-    state.seeds[conference].fill("", 4);
-  }
-
   state.bracketBuilt = false;
   state.picks = createEmptyPicks();
   state.savedAt = null;
   elements.bracketSection.classList.add("hidden");
   elements.seedingMessage.textContent = "";
   updateSaveState(false);
-  updateDisabledTeamOptions(conference);
+  renderConferenceSeeds(
+    conference,
+    conference === "AFC" ? elements.afcSeeds : elements.nfcSeeds,
+  );
 }
 
 function handleDivisionWinnerChange(event) {
@@ -410,7 +501,7 @@ function handleDivisionWinnerChange(event) {
     return team;
   });
 
-  if (!divisionSeedingComplete(conference)) {
+  if (!divisionWinnersComplete(conference)) {
     state.seeds[conference].fill("", 4);
   }
 
@@ -452,7 +543,7 @@ function updateDisabledTeamOptions(conference) {
       const seedIndex = Number(select.dataset.seedIndex);
       const isDivisionWinner = seedIndex < 4;
       const divisionPicksComplete = divisionWinnersComplete(conference);
-      const wildCardsUnlocked = divisionSeedingComplete(conference);
+      const wildCardsUnlocked = divisionPicksComplete;
       const divisionWinnerTeams = new Set(
         Object.values(state.divisionWinners[conference]).filter(Boolean),
       );
@@ -460,9 +551,7 @@ function updateDisabledTeamOptions(conference) {
       select.disabled = isDivisionWinner ? !divisionPicksComplete : !wildCardsUnlocked;
       select.closest(".seed-row").classList.toggle("locked", select.disabled);
       select.options[0].textContent = select.disabled
-        ? isDivisionWinner
-          ? "Pick all division winners first"
-          : "Rank division winners first"
+        ? "Pick all division winners first"
         : isDivisionWinner
           ? `Select seed ${seedIndex + 1}`
           : "Select a wild-card team";
@@ -675,7 +764,18 @@ function createGameCard(conference, game, isSuperBowl = false) {
     check.className = "pick-check";
     check.textContent = team && team.name === selectedTeam ? "✓" : "";
 
-    button.append(seed, name, check);
+    if (team) {
+      button.append(
+        seed,
+        createTeamLogo(team.name, "bracket-team-logo"),
+        name,
+        check,
+      );
+    } else {
+      const emptyLogo = document.createElement("span");
+      emptyLogo.className = "bracket-logo-placeholder";
+      button.append(seed, emptyLogo, name, check);
+    }
     if (team) {
       button.addEventListener("click", () => handleGamePick(conference, game.id, team.name, isSuperBowl));
     }
@@ -731,6 +831,15 @@ function renderSuperBowl() {
 
   const champion = state.picks.superBowl;
   const championName = elements.championDisplay.querySelector("strong");
+  const existingLogo = elements.championDisplay.querySelector(".champion-logo");
+  if (existingLogo) existingLogo.remove();
+  if (champion) {
+    const championLogo = createTeamLogo(champion, "champion-logo");
+    elements.championDisplay.insertBefore(
+      championLogo,
+      elements.championDisplay.querySelector("p"),
+    );
+  }
   championName.textContent = champion || "Make your final pick";
   elements.championDisplay.classList.toggle("empty", !champion);
 }

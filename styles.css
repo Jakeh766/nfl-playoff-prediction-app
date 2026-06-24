@@ -470,7 +470,7 @@ select:focus {
   display: block;
 }
 
-.division-winner-field span {
+.division-winner-field > span {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
@@ -484,13 +484,71 @@ select:focus {
   min-height: 46px;
 }
 
+.logo-select-control {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  background: white;
+  border: 1px solid #c9c8c2;
+  border-radius: 5px;
+}
+
+.logo-select-control select {
+  min-width: 0;
+  border: 0;
+  border-left: 1px solid #e2dfd8;
+  border-radius: 0 5px 5px 0;
+}
+
+.select-team-logo,
+.select-logo-placeholder {
+  width: 27px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  background: white;
+  border-radius: 5px 0 0 5px;
+}
+
+.select-team-logo {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
+  margin: auto;
+  padding: 0;
+  object-fit: contain;
+}
+
+.select-logo-placeholder {
+  font-size: 10px;
+  color: #b5b3ad;
+}
+
 .seed-row {
   padding: 11px 0;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 66px;
-  gap: 12px;
+  grid-template-columns: 30px 34px minmax(0, 1fr) 66px;
+  gap: 9px;
   align-items: center;
   border-bottom: 1px solid var(--line);
+}
+
+.seed-logo-slot {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+}
+
+.seed-team-logo {
+  width: 31px;
+  height: 31px;
+  max-width: 31px;
+  max-height: 31px;
+  display: block;
+  object-fit: contain;
 }
 
 .seed-row.locked {
@@ -671,15 +729,32 @@ select:focus {
 .team-pick {
   width: 100%;
   min-height: 42px;
-  padding: 8px 10px;
+  padding: 8px 6px;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 15px;
-  gap: 7px;
+  grid-template-columns: 23px 21px minmax(0, 1fr) 12px;
+  gap: 3px;
   align-items: center;
   color: var(--ink);
   background: white;
   border: 0;
   text-align: left;
+}
+
+.bracket-team-logo {
+  width: 20px;
+  height: 20px;
+  max-width: 20px;
+  max-height: 20px;
+  display: block;
+  object-fit: contain;
+}
+
+.bracket-logo-placeholder {
+  width: 24px;
+}
+
+.logo-error {
+  visibility: hidden;
 }
 
 .team-pick + .team-pick {
@@ -719,7 +794,7 @@ select:focus {
 
 .team-name {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -781,6 +856,16 @@ select:focus {
   margin-top: 28px;
   padding-top: 25px;
   border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.champion-logo {
+  width: 68px;
+  height: 68px;
+  max-width: 68px;
+  max-height: 68px;
+  display: block;
+  margin: 10px auto 0;
+  object-fit: contain;
 }
 
 .trophy {
@@ -1035,7 +1120,7 @@ footer p {
   }
 
   .seed-row {
-    grid-template-columns: 30px minmax(0, 1fr) 52px;
+    grid-template-columns: 24px 28px minmax(0, 1fr) 52px;
     gap: 8px;
   }
 
