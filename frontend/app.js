@@ -163,8 +163,6 @@ const FALLBACK_WIN_TOTALS = {
   "Washington Commanders": 7.5,
 };
 
-const STORAGE_KEY = "road-to-bowl-predictions-v1";
-
 function createEmptyDivisionWinners() {
   return {
     AFC: { North: "", South: "", East: "", West: "" },
@@ -182,6 +180,7 @@ const state = {
   picks: { AFC: {}, NFC: {}, superBowl: "" },
   bracketBuilt: false,
   savedAt: null,
+  savedPredictions: {},
 };
 
 const elements = {
@@ -216,14 +215,6 @@ if (!TEST_MODE) {
   elements.randomizeBracket.classList.add("hidden");
 }
 
-function getStoredPredictions() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-
 function normalizeName(name) {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
@@ -234,6 +225,45 @@ function createEmptyPicks() {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    cache: "no-store",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(
+      payload.message || "The prediction service is unavailable.",
+    );
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+async function refreshSavedPredictions() {
+  try {
+    const data = await apiRequest("/api/predictions");
+    state.savedPredictions = Object.fromEntries(
+      (data.predictions || []).map((prediction) => [
+        prediction.profileKey,
+        prediction,
+      ]),
+    );
+    renderSavedPredictions();
+  } catch (error) {
+    elements.emptyLocker.classList.remove("hidden");
+    elements.emptyLocker.textContent =
+      "Saved brackets could not be loaded. Please refresh and try again.";
+    elements.emptyLocker.title = error.message;
+  }
 }
 
 function shuffled(values) {
@@ -333,7 +363,7 @@ async function loadWinTotals() {
 
     const data = await response.json();
     if (data.apiVersion !== 2) {
-      throw new Error("The odds server is outdated. Restart server.py.");
+      throw new Error("The odds server is outdated. Restart backend/server.py.");
     }
     if (!data.totals || Object.keys(data.totals).length < 32) {
       throw new Error("Incomplete odds response");
@@ -352,8 +382,8 @@ async function loadWinTotals() {
   } catch (error) {
     const isStaleServer = error.message.includes("outdated");
     elements.oddsStatus.textContent = isStaleServer
-      ? "Odds server is outdated. Stop it, restart server.py, then refresh this page."
-      : "Projected wins use the bundled 2026 sportsbook snapshot. Run through server.py for live refreshes.";
+      ? "Odds server is outdated. Stop it, restart backend/server.py, then refresh this page."
+      : "Projected wins use the bundled 2026 sportsbook snapshot. Run through backend/server.py for live refreshes.";
     elements.oddsStatus.title = error.message;
   }
 
@@ -935,7 +965,7 @@ function allGamesPicked() {
   return Boolean(state.picks.superBowl);
 }
 
-function savePrediction() {
+async function savePrediction() {
   if (!state.bracketBuilt) {
     showToast("Build your bracket before saving.");
     return;
@@ -945,34 +975,63 @@ function savePrediction() {
     return;
   }
 
-  const predictions = getStoredPredictions();
-  const now = new Date().toISOString();
-  predictions[state.profileKey] = {
+  const prediction = {
     displayName: state.displayName,
     divisionWinners: clone(state.divisionWinners),
     seeds: clone(state.seeds),
     picks: clone(state.picks),
     bracketBuilt: true,
-    savedAt: now,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(predictions));
-  state.savedAt = now;
-  updateSaveState(true);
-  renderSavedPredictions();
-  showToast(`Prediction saved for ${state.displayName}.`);
+
+  elements.savePrediction.disabled = true;
+  elements.savePrediction.textContent = "Saving…";
+  try {
+    const saved = await apiRequest(
+      `/api/predictions/${encodeURIComponent(state.profileKey)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(prediction),
+      },
+    );
+    state.savedAt = saved.savedAt;
+    state.savedPredictions[state.profileKey] = saved;
+    updateSaveState(true);
+    renderSavedPredictions();
+    showToast(`Prediction saved for ${state.displayName}.`);
+  } catch (error) {
+    updateSaveState(false);
+    showToast(`Could not save: ${error.message}`);
+  } finally {
+    elements.savePrediction.disabled = false;
+    elements.savePrediction.textContent = "Save prediction";
+  }
 }
 
 function updateSaveState(saved) {
   elements.saveState.classList.toggle("saved", saved);
   elements.saveState.querySelector("span:last-child").textContent = saved
-    ? "Saved to this device"
+    ? "Saved online"
     : "Unsaved changes";
 }
 
-function loadProfile(name) {
+async function loadProfile(name) {
   const cleanName = name.trim().replace(/\s+/g, " ");
   const key = normalizeName(cleanName);
-  const stored = getStoredPredictions()[key];
+  let stored = state.savedPredictions[key];
+
+  if (!stored) {
+    try {
+      stored = await apiRequest(
+        `/api/predictions/${encodeURIComponent(key)}`,
+      );
+      state.savedPredictions[key] = stored;
+    } catch (error) {
+      if (error.status !== 404) {
+        showToast(`Could not load saved picks: ${error.message}`);
+        return;
+      }
+    }
+  }
 
   state.profileKey = key;
   state.displayName = stored?.displayName || cleanName;
@@ -1033,7 +1092,7 @@ function resetGamePicks() {
 }
 
 function renderSavedPredictions() {
-  const predictions = Object.entries(getStoredPredictions()).sort(
+  const predictions = Object.entries(state.savedPredictions).sort(
     ([, a], [, b]) => new Date(b.savedAt) - new Date(a.savedAt),
   );
 
@@ -1051,7 +1110,7 @@ function renderSavedPredictions() {
     const name = document.createElement("h3");
     name.textContent = prediction.displayName;
     const time = document.createElement("time");
-    time.dateTime = prediction.savedAt;
+    time.dateTime = new Date(prediction.savedAt).toISOString();
     time.textContent = `Saved ${new Intl.DateTimeFormat(undefined, {
       month: "short",
       day: "numeric",
@@ -1086,16 +1145,21 @@ function renderSavedPredictions() {
   });
 }
 
-function deletePrediction(key, displayName) {
-  const predictions = getStoredPredictions();
-  delete predictions[key];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(predictions));
-  renderSavedPredictions();
-  if (state.profileKey === key) {
-    state.savedAt = null;
-    updateSaveState(false);
+async function deletePrediction(key, displayName) {
+  try {
+    await apiRequest(`/api/predictions/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+    delete state.savedPredictions[key];
+    renderSavedPredictions();
+    if (state.profileKey === key) {
+      state.savedAt = null;
+      updateSaveState(false);
+    }
+    showToast(`Deleted ${displayName}'s saved prediction.`);
+  } catch (error) {
+    showToast(`Could not delete: ${error.message}`);
   }
-  showToast(`Deleted ${displayName}’s saved prediction.`);
 }
 
 let toastTimer;
@@ -1125,5 +1189,5 @@ elements.savePrediction.addEventListener("click", savePrediction);
 elements.resetPicks.addEventListener("click", resetGamePicks);
 elements.switchProfile.addEventListener("click", switchProfile);
 
-renderSavedPredictions();
+refreshSavedPredictions();
 loadWinTotals();
