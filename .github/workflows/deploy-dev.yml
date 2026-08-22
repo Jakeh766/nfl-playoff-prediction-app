@@ -96,7 +96,8 @@ jobs:
       - name: Verify migrated dev state
         shell: bash
         run: |
-          if ! terraform -chdir=terraform/envs/dev state list | grep -q .; then
+          state_resources="$(terraform -chdir=terraform/envs/dev state list)"
+          if [[ -z "$state_resources" ]]; then
             echo "The remote dev state is empty. Migrate the existing local state before deploying."
             exit 1
           fi
