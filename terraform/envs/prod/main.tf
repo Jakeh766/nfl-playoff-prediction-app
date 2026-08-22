@@ -12,9 +12,9 @@ terraform {
     }
   }
 
-  # Keep the existing production state in its current location.
+  # Keep production state with the production environment root.
   backend "local" {
-    path = "../../terraform.tfstate"
+    path = "terraform.tfstate"
   }
 }
 

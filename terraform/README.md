@@ -5,6 +5,7 @@ independent Terraform roots:
 
 ```text
 terraform/
+  bootstrap/      State bucket and GitHub OIDC deployment role
   modules/app/    Reusable S3, CloudFront, API Gateway, Lambda, and DynamoDB stack
   envs/dev/       Development resources and state
   envs/prod/      Production resources and existing production state
@@ -39,10 +40,34 @@ the existing state addresses into the shared module without recreating them.
 
 The states are separate:
 
-- Dev: `terraform/envs/dev/terraform.tfstate`
-- Prod: `terraform/terraform.tfstate` (the existing state location)
+- Bootstrap: S3 object `nfl-playoff-predictor/bootstrap/terraform.tfstate`
+- Dev: S3 object `nfl-playoff-predictor/dev/terraform.tfstate`
+- Prod: `terraform/envs/prod/terraform.tfstate`
 
 Never copy one environment's state into the other.
+
+## Automatic dev deployment
+
+Every push to the `dev` branch runs `.github/workflows/deploy-dev.yml`. The
+workflow checks the JavaScript and Python syntax, checks and validates the
+Terraform configuration, and then plans and applies the dev environment. It
+uses GitHub OIDC to obtain temporary AWS credentials.
+
+The one-time AWS prerequisites are managed by `terraform/bootstrap`. It created:
+
+- state bucket `nfl-playoff-predictor-tfstate-410533922944`;
+- GitHub OIDC provider `token.actions.githubusercontent.com`;
+- role `nfl-playoff-predictor-dev-github-actions`, trusted only by the
+  `Jakeh766/nfl-playoff-prediction-app` repository's `dev` environment.
+
+The existing dev state has been migrated into the state bucket. The workflow
+also verifies that remote state is nonempty before it plans or applies.
+
+The GitHub environment named `dev` must define these environment variables:
+
+- `AWS_ROLE_ARN` =
+  `arn:aws:iam::410533922944:role/nfl-playoff-predictor-dev-github-actions`
+- `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
 ## Review and deploy dev
 
@@ -52,6 +77,13 @@ From the repository root:
 terraform -chdir=terraform/envs/dev init
 terraform -chdir=terraform/envs/dev plan
 terraform -chdir=terraform/envs/dev apply
+```
+
+After the state migration, pass the state bucket when initializing from a new
+checkout:
+
+```powershell
+terraform -chdir=terraform/envs/dev init -backend-config="bucket=nfl-playoff-predictor-tfstate-410533922944"
 ```
 
 Use the `app_url` output after the apply completes. Dev is a complete cloud
