@@ -8,7 +8,7 @@ terraform {
     }
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
   }
 
@@ -35,6 +35,7 @@ provider "aws" {
 module "nfl_app" {
   source = "../../modules/app"
 
+  aws_region                 = var.aws_region
   environment                = "dev"
   project_name               = var.project_name
   cache_ttl_seconds          = var.cache_ttl_seconds
@@ -64,4 +65,16 @@ output "cache_table" {
 
 output "predictions_table" {
   value = module.nfl_app.predictions_table
+}
+
+output "cognito_user_pool_id" {
+  value = module.nfl_app.cognito_user_pool_id
+}
+
+output "cognito_client_id" {
+  value = module.nfl_app.cognito_client_id
+}
+
+output "cognito_domain" {
+  value = module.nfl_app.cognito_domain
 }

@@ -171,8 +171,7 @@ function createEmptyDivisionWinners() {
 }
 
 const state = {
-  profileKey: "",
-  displayName: "",
+  userEmail: "",
   winTotals: { ...FALLBACK_WIN_TOTALS },
   oddsSource: "2026 sportsbook snapshot",
   divisionWinners: createEmptyDivisionWinners(),
@@ -180,16 +179,20 @@ const state = {
   picks: { AFC: {}, NFC: {}, superBowl: "" },
   bracketBuilt: false,
   savedAt: null,
-  savedPredictions: {},
+  savedPrediction: null,
 };
 
 const elements = {
-  form: document.querySelector("#profile-form"),
-  playerName: document.querySelector("#player-name"),
-  namePreview: document.querySelector("#name-preview strong"),
+  signedOutPanel: document.querySelector("#signed-out-panel"),
+  signedInPanel: document.querySelector("#signed-in-panel"),
+  signIn: document.querySelector("#sign-in"),
+  openPrediction: document.querySelector("#open-prediction"),
+  signedInEmail: document.querySelector("#signed-in-email"),
+  authMessage: document.querySelector("#auth-message"),
+  headerAccountEmail: document.querySelector("#header-account-email"),
+  headerSignOut: document.querySelector("#header-sign-out"),
   predictor: document.querySelector("#predictor"),
-  welcomeName: document.querySelector("#welcome-name"),
-  profileNameDisplay: document.querySelector("#profile-name-display"),
+  accountEmail: document.querySelector("#account-email"),
   oddsStatus: document.querySelector("#odds-status"),
   afcSeeds: document.querySelector("#afc-seeds"),
   nfcSeeds: document.querySelector("#nfc-seeds"),
@@ -204,8 +207,9 @@ const elements = {
   championDisplay: document.querySelector("#champion-display"),
   savePrediction: document.querySelector("#save-prediction"),
   resetPicks: document.querySelector("#reset-picks"),
-  switchProfile: document.querySelector("#switch-profile"),
+  predictorSignOut: document.querySelector("#predictor-sign-out"),
   saveState: document.querySelector("#save-state"),
+  savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
   emptyLocker: document.querySelector("#empty-locker"),
   toast: document.querySelector("#toast"),
@@ -213,10 +217,6 @@ const elements = {
 
 if (!TEST_MODE) {
   elements.randomizeBracket.classList.add("hidden");
-}
-
-function normalizeName(name) {
-  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
 function createEmptyPicks() {
@@ -227,12 +227,252 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
+const AUTH_TRANSACTION_KEY = "road-to-bowl.auth.transaction";
+
+function authConfig() {
+  const config = window.AUTH_CONFIG || {};
+  return {
+    domain: String(config.domain || "").replace(/\/$/, ""),
+    clientId: String(config.clientId || ""),
+    redirectUri: String(config.redirectUri || window.location.origin),
+    logoutUri: String(config.logoutUri || window.location.origin),
+  };
+}
+
+function authIsConfigured() {
+  const config = authConfig();
+  return Boolean(config.domain && config.clientId);
+}
+
+function encodeBase64Url(bytes) {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function randomBase64Url(byteLength = 48) {
+  return encodeBase64Url(crypto.getRandomValues(new Uint8Array(byteLength)));
+}
+
+async function pkceChallenge(verifier) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  return encodeBase64Url(new Uint8Array(digest));
+}
+
+function loadAuthSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || "null");
+  } catch (error) {
+    console.warn("Discarding an invalid authentication session.", error);
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    return null;
+  }
+}
+
+function saveAuthSession(tokenResponse, previousSession = null) {
+  const session = {
+    accessToken: tokenResponse.access_token,
+    idToken: tokenResponse.id_token || previousSession?.idToken || "",
+    refreshToken:
+      tokenResponse.refresh_token || previousSession?.refreshToken || "",
+    expiresAt: Date.now() + Number(tokenResponse.expires_in || 3600) * 1000,
+  };
+  sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+function clearAuthSession() {
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
+  sessionStorage.removeItem(AUTH_TRANSACTION_KEY);
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const encoded = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch (error) {
+    console.warn("Could not decode the Cognito token.", error);
+    return {};
+  }
+}
+
+async function requestTokens(parameters) {
+  const config = authConfig();
+  const response = await fetch(`${config.domain}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(parameters),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error_description || "Cognito rejected the login request.");
+  }
+  return payload;
+}
+
+async function beginSignIn() {
+  if (!authIsConfigured()) {
+    elements.authMessage.textContent =
+      "Authentication is not configured for this environment.";
+    return;
+  }
+
+  const config = authConfig();
+  const verifier = randomBase64Url();
+  const oauthState = randomBase64Url(24);
+  sessionStorage.setItem(
+    AUTH_TRANSACTION_KEY,
+    JSON.stringify({ verifier, oauthState }),
+  );
+
+  const parameters = new URLSearchParams({
+    response_type: "code",
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    scope: "openid email",
+    state: oauthState,
+    code_challenge_method: "S256",
+    code_challenge: await pkceChallenge(verifier),
+  });
+  window.location.assign(`${config.domain}/oauth2/authorize?${parameters}`);
+}
+
+async function handleOAuthCallback() {
+  const parameters = new URLSearchParams(window.location.search);
+  const oauthError = parameters.get("error");
+  if (oauthError) {
+    history.replaceState({}, document.title, window.location.pathname);
+    throw new Error(
+      parameters.get("error_description") || "Cognito could not complete sign-in.",
+    );
+  }
+
+  const code = parameters.get("code");
+  if (!code) return false;
+
+  const transaction = JSON.parse(
+    sessionStorage.getItem(AUTH_TRANSACTION_KEY) || "null",
+  );
+  sessionStorage.removeItem(AUTH_TRANSACTION_KEY);
+  if (!transaction || transaction.oauthState !== parameters.get("state")) {
+    throw new Error("The sign-in response could not be verified. Please try again.");
+  }
+
+  const config = authConfig();
+  const tokenResponse = await requestTokens({
+    grant_type: "authorization_code",
+    client_id: config.clientId,
+    code,
+    redirect_uri: config.redirectUri,
+    code_verifier: transaction.verifier,
+  });
+  saveAuthSession(tokenResponse);
+  history.replaceState({}, document.title, window.location.pathname);
+  return true;
+}
+
+async function getValidAccessToken() {
+  const session = loadAuthSession();
+  if (!session?.accessToken) return null;
+  if (session.expiresAt > Date.now() + 60_000) return session.accessToken;
+  if (!session.refreshToken) {
+    clearAuthSession();
+    return null;
+  }
+
+  try {
+    const config = authConfig();
+    const tokenResponse = await requestTokens({
+      grant_type: "refresh_token",
+      client_id: config.clientId,
+      refresh_token: session.refreshToken,
+    });
+    return saveAuthSession(tokenResponse, session).accessToken;
+  } catch (error) {
+    console.warn("The Cognito session could not be refreshed.", error);
+    clearAuthSession();
+    return null;
+  }
+}
+
+function currentUserEmail() {
+  const session = loadAuthSession();
+  return String(decodeJwtPayload(session?.idToken || "").email || "");
+}
+
+function renderAuthentication(signedIn) {
+  state.userEmail = signedIn ? currentUserEmail() : "";
+  elements.signedOutPanel.classList.toggle("hidden", signedIn);
+  elements.signedInPanel.classList.toggle("hidden", !signedIn);
+  elements.headerSignOut.classList.toggle("hidden", !signedIn);
+  elements.headerAccountEmail.classList.toggle("hidden", !signedIn);
+  elements.savedSection.classList.toggle("hidden", !signedIn);
+  elements.signedInEmail.textContent = state.userEmail;
+  elements.headerAccountEmail.textContent = state.userEmail;
+  elements.accountEmail.textContent = state.userEmail;
+
+  if (!signedIn) {
+    state.savedPrediction = null;
+    elements.predictor.classList.add("hidden");
+    elements.savedSection.classList.add("hidden");
+  }
+}
+
+async function signOut() {
+  const config = authConfig();
+  const session = loadAuthSession();
+  clearAuthSession();
+  renderAuthentication(false);
+
+  if (session?.refreshToken) {
+    try {
+      await fetch(`${config.domain}/oauth2/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          token: session.refreshToken,
+          client_id: config.clientId,
+        }),
+        keepalive: true,
+      });
+    } catch (error) {
+      console.warn("The Cognito refresh token could not be revoked.", error);
+    }
+  }
+
+  const parameters = new URLSearchParams({
+    client_id: config.clientId,
+    logout_uri: config.logoutUri,
+  });
+  window.location.assign(`${config.domain}/logout?${parameters}`);
+}
+
 async function apiRequest(path, options = {}) {
+  const protectedRequest = path === "/api/prediction";
+  const accessToken = protectedRequest ? await getValidAccessToken() : null;
+  if (protectedRequest && !accessToken) {
+    renderAuthentication(false);
+    const error = new Error("Your session expired. Please sign in again.");
+    error.status = 401;
+    throw error;
+  }
+
   const response = await fetch(path, {
     cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...options.headers,
     },
   });
@@ -243,27 +483,29 @@ async function apiRequest(path, options = {}) {
       payload.message || "The prediction service is unavailable.",
     );
     error.status = response.status;
+    if (response.status === 401 && protectedRequest) {
+      clearAuthSession();
+      renderAuthentication(false);
+    }
     throw error;
   }
   return payload;
 }
 
-async function refreshSavedPredictions() {
+async function refreshSavedPrediction() {
   try {
-    const data = await apiRequest("/api/predictions");
-    state.savedPredictions = Object.fromEntries(
-      (data.predictions || []).map((prediction) => [
-        prediction.profileKey,
-        prediction,
-      ]),
-    );
-    renderSavedPredictions();
+    state.savedPrediction = await apiRequest("/api/prediction");
   } catch (error) {
-    elements.emptyLocker.classList.remove("hidden");
-    elements.emptyLocker.textContent =
-      "Saved brackets could not be loaded. Please refresh and try again.";
-    elements.emptyLocker.title = error.message;
+    if (error.status === 404) {
+      state.savedPrediction = null;
+    } else {
+      elements.emptyLocker.classList.remove("hidden");
+      elements.emptyLocker.textContent =
+        "Your saved bracket could not be loaded. Please refresh and try again.";
+      elements.emptyLocker.title = error.message;
+    }
   }
+  renderSavedPrediction();
 }
 
 function shuffled(values) {
@@ -976,7 +1218,6 @@ async function savePrediction() {
   }
 
   const prediction = {
-    displayName: state.displayName,
     divisionWinners: clone(state.divisionWinners),
     seeds: clone(state.seeds),
     picks: clone(state.picks),
@@ -986,18 +1227,15 @@ async function savePrediction() {
   elements.savePrediction.disabled = true;
   elements.savePrediction.textContent = "Saving…";
   try {
-    const saved = await apiRequest(
-      `/api/predictions/${encodeURIComponent(state.profileKey)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(prediction),
-      },
-    );
+    const saved = await apiRequest("/api/prediction", {
+      method: "PUT",
+      body: JSON.stringify(prediction),
+    });
     state.savedAt = saved.savedAt;
-    state.savedPredictions[state.profileKey] = saved;
+    state.savedPrediction = saved;
     updateSaveState(true);
-    renderSavedPredictions();
-    showToast(`Prediction saved for ${state.displayName}.`);
+    renderSavedPrediction();
+    showToast("Prediction saved.");
   } catch (error) {
     updateSaveState(false);
     showToast(`Could not save: ${error.message}`);
@@ -1014,27 +1252,8 @@ function updateSaveState(saved) {
     : "Unsaved changes";
 }
 
-async function loadProfile(name) {
-  const cleanName = name.trim().replace(/\s+/g, " ");
-  const key = normalizeName(cleanName);
-  let stored = state.savedPredictions[key];
-
-  if (!stored) {
-    try {
-      stored = await apiRequest(
-        `/api/predictions/${encodeURIComponent(key)}`,
-      );
-      state.savedPredictions[key] = stored;
-    } catch (error) {
-      if (error.status !== 404) {
-        showToast(`Could not load saved picks: ${error.message}`);
-        return;
-      }
-    }
-  }
-
-  state.profileKey = key;
-  state.displayName = stored?.displayName || cleanName;
+function openPrediction(scrollToPredictor = true) {
+  const stored = state.savedPrediction;
   state.seeds = stored?.seeds
     ? clone(stored.seeds)
     : { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
@@ -1055,8 +1274,6 @@ async function loadProfile(name) {
   state.bracketBuilt = Boolean(stored?.bracketBuilt);
   state.savedAt = stored?.savedAt || null;
 
-  elements.welcomeName.textContent = state.displayName;
-  elements.profileNameDisplay.textContent = state.displayName;
   elements.predictor.classList.remove("hidden");
   renderSeedSelectors();
 
@@ -1064,23 +1281,17 @@ async function loadProfile(name) {
     renderBracket();
     elements.bracketSection.classList.remove("hidden");
     updateSaveState(Boolean(state.savedAt));
-    showToast(`Loaded ${state.displayName}’s saved prediction.`);
+    showToast("Loaded your saved prediction.");
   } else {
     elements.bracketSection.classList.add("hidden");
-    showToast(`Ready for your picks, ${state.displayName}.`);
+    showToast("Ready for your picks.");
   }
 
-  requestAnimationFrame(() => {
-    elements.predictor.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-}
-
-function switchProfile() {
-  elements.predictor.classList.add("hidden");
-  elements.playerName.value = "";
-  elements.namePreview.textContent = "your name";
-  elements.playerName.focus();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (scrollToPredictor) {
+    requestAnimationFrame(() => {
+      elements.predictor.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 }
 
 function resetGamePicks() {
@@ -1091,72 +1302,66 @@ function resetGamePicks() {
   showToast("Game picks reset. Your seeding is unchanged.");
 }
 
-function renderSavedPredictions() {
-  const predictions = Object.entries(state.savedPredictions).sort(
-    ([, a], [, b]) => new Date(b.savedAt) - new Date(a.savedAt),
-  );
-
+function renderSavedPrediction() {
+  const prediction = state.savedPrediction;
   elements.savedGrid.innerHTML = "";
-  elements.emptyLocker.classList.toggle("hidden", predictions.length > 0);
+  elements.emptyLocker.classList.toggle("hidden", Boolean(prediction));
+  if (!prediction) return;
 
-  predictions.forEach(([key, prediction]) => {
-    const card = document.createElement("article");
-    card.className = "saved-card";
+  const card = document.createElement("article");
+  card.className = "saved-card";
 
-    const top = document.createElement("div");
-    top.className = "saved-card-top";
+  const top = document.createElement("div");
+  top.className = "saved-card-top";
 
-    const identity = document.createElement("div");
-    const name = document.createElement("h3");
-    name.textContent = prediction.displayName;
-    const time = document.createElement("time");
-    time.dateTime = new Date(prediction.savedAt).toISOString();
-    time.textContent = `Saved ${new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(new Date(prediction.savedAt))}`;
-    identity.append(name, time);
-    top.appendChild(identity);
+  const identity = document.createElement("div");
+  const name = document.createElement("h3");
+  name.textContent = "Your saved bracket";
+  const time = document.createElement("time");
+  time.dateTime = new Date(prediction.savedAt).toISOString();
+  time.textContent = `Saved ${new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(prediction.savedAt))}`;
+  identity.append(name, time);
+  top.appendChild(identity);
 
-    const champion = document.createElement("div");
-    champion.className = "champion-chip";
-    champion.textContent = `★ Champion: ${prediction.picks.superBowl}`;
+  const champion = document.createElement("div");
+  champion.className = "champion-chip";
+  champion.textContent = `★ Champion: ${prediction.picks.superBowl}`;
 
-    const actions = document.createElement("div");
-    actions.className = "saved-card-actions";
+  const actions = document.createElement("div");
+  actions.className = "saved-card-actions";
 
-    const load = document.createElement("button");
-    load.type = "button";
-    load.className = "button button-secondary";
-    load.textContent = "Open bracket";
-    load.addEventListener("click", () => loadProfile(prediction.displayName));
+  const load = document.createElement("button");
+  load.type = "button";
+  load.className = "button button-secondary";
+  load.textContent = "Open bracket";
+  load.addEventListener("click", () => openPrediction());
 
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "delete-button";
-    remove.textContent = "Delete";
-    remove.setAttribute("aria-label", `Delete ${prediction.displayName}'s prediction`);
-    remove.addEventListener("click", () => deletePrediction(key, prediction.displayName));
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "delete-button";
+  remove.textContent = "Delete";
+  remove.setAttribute("aria-label", "Delete your saved prediction");
+  remove.addEventListener("click", deletePrediction);
 
-    actions.append(load, remove);
-    card.append(top, champion, actions);
-    elements.savedGrid.appendChild(card);
-  });
+  actions.append(load, remove);
+  card.append(top, champion, actions);
+  elements.savedGrid.appendChild(card);
 }
 
-async function deletePrediction(key, displayName) {
+async function deletePrediction() {
   try {
-    await apiRequest(`/api/predictions/${encodeURIComponent(key)}`, {
+    await apiRequest("/api/prediction", {
       method: "DELETE",
     });
-    delete state.savedPredictions[key];
-    renderSavedPredictions();
-    if (state.profileKey === key) {
-      state.savedAt = null;
-      updateSaveState(false);
-    }
-    showToast(`Deleted ${displayName}'s saved prediction.`);
+    state.savedPrediction = null;
+    state.savedAt = null;
+    renderSavedPrediction();
+    updateSaveState(false);
+    showToast("Deleted your saved prediction.");
   } catch (error) {
     showToast(`Could not delete: ${error.message}`);
   }
@@ -1170,16 +1375,6 @@ function showToast(message) {
   toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2800);
 }
 
-elements.form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!elements.playerName.value.trim()) return;
-  loadProfile(elements.playerName.value);
-});
-elements.playerName.addEventListener("input", () => {
-  const cleanName = elements.playerName.value.trim().replace(/\s+/g, " ");
-  elements.namePreview.textContent = cleanName || "your name";
-});
-
 document.querySelectorAll(".conference-logo").forEach((logo) => {
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
 });
@@ -1187,7 +1382,37 @@ elements.buildBracket.addEventListener("click", buildBracket);
 elements.randomizeBracket.addEventListener("click", randomizeBracket);
 elements.savePrediction.addEventListener("click", savePrediction);
 elements.resetPicks.addEventListener("click", resetGamePicks);
-elements.switchProfile.addEventListener("click", switchProfile);
+elements.signIn.addEventListener("click", beginSignIn);
+elements.openPrediction.addEventListener("click", () => openPrediction());
+elements.headerSignOut.addEventListener("click", signOut);
+elements.predictorSignOut.addEventListener("click", signOut);
 
-refreshSavedPredictions();
+async function initializeAuthentication() {
+  if (!authIsConfigured()) {
+    renderAuthentication(false);
+    elements.signIn.disabled = true;
+    elements.authMessage.textContent = TEST_MODE
+      ? "Set COGNITO_DOMAIN and COGNITO_CLIENT_ID before starting the local server."
+      : "Authentication is not configured for this deployment.";
+    return;
+  }
+
+  try {
+    const completedSignIn = await handleOAuthCallback();
+    const accessToken = await getValidAccessToken();
+    renderAuthentication(Boolean(accessToken));
+    if (!accessToken) return;
+
+    await refreshSavedPrediction();
+    if (!loadAuthSession()) return;
+    openPrediction(completedSignIn);
+  } catch (error) {
+    history.replaceState({}, document.title, window.location.pathname);
+    clearAuthSession();
+    renderAuthentication(false);
+    elements.authMessage.textContent = error.message;
+  }
+}
+
 loadWinTotals();
+initializeAuthentication();

@@ -8,9 +8,10 @@ import re
 import statistics
 import threading
 import time
+from base64 import urlsafe_b64decode
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -24,6 +25,11 @@ ODDS_URL = "https://www.vegasinsider.com/nfl/odds/win-totals/"
 CACHE_FILE = DATA_DIR / "win-totals-cache.json"
 PREDICTIONS_FILE = DATA_DIR / "predictions.json"
 PREDICTIONS_LOCK = threading.RLock()
+COGNITO_DOMAIN = os.environ.get("COGNITO_DOMAIN", "").rstrip("/")
+COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+COGNITO_REDIRECT_URI = os.environ.get(
+    "COGNITO_REDIRECT_URI", f"http://localhost:{PORT}"
+)
 
 FALLBACK_TOTALS = {
     "Arizona Cardinals": 4.5, "Atlanta Falcons": 7.5,
@@ -168,20 +174,26 @@ class PredictorHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/auth-config.js":
+            config = {
+                "domain": COGNITO_DOMAIN,
+                "clientId": COGNITO_CLIENT_ID,
+                "redirectUri": COGNITO_REDIRECT_URI,
+                "logoutUri": COGNITO_REDIRECT_URI,
+            }
+            self.send_javascript(
+                200, f"window.AUTH_CONFIG = {json.dumps(config)};\n"
+            )
+            return
         if path == "/api/win-totals":
             self.send_json(200, get_win_totals())
             return
-        if path == "/api/predictions":
-            predictions = sorted(
-                load_predictions().values(),
-                key=lambda prediction: prediction.get("savedAt", 0),
-                reverse=True,
-            )
-            self.send_json(200, {"predictions": predictions})
-            return
-        if path.startswith("/api/predictions/"):
-            profile_key = unquote(path.removeprefix("/api/predictions/"))
-            prediction = load_predictions().get(profile_key)
+        if path == "/api/prediction":
+            user_id = self.authenticated_user_id()
+            if not user_id:
+                self.send_json(401, {"message": "Authentication required"})
+                return
+            prediction = load_predictions().get(user_id)
             if prediction:
                 self.send_json(200, prediction)
             else:
@@ -191,24 +203,26 @@ class PredictorHandler(SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
-        if not path.startswith("/api/predictions/"):
+        if path != "/api/prediction":
             self.send_json(404, {"message": "Not found"})
             return
 
-        profile_key = unquote(path.removeprefix("/api/predictions/"))
+        user_id = self.authenticated_user_id()
+        if not user_id:
+            self.send_json(401, {"message": "Authentication required"})
+            return
+
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             prediction = json.loads(self.rfile.read(content_length) or b"{}")
-            display_name = prediction.get("displayName", "").strip()
-            if not profile_key or not 1 <= len(display_name) <= 40:
-                raise ValueError("Invalid profile")
+            if not isinstance(prediction, dict):
+                raise ValueError("Invalid prediction")
         except (TypeError, ValueError, json.JSONDecodeError):
             self.send_json(400, {"message": "Invalid prediction"})
             return
 
         saved = {
-            "profileKey": profile_key,
-            "displayName": display_name,
+            "profileKey": user_id,
             "divisionWinners": prediction.get("divisionWinners", {}),
             "seeds": prediction.get("seeds", {}),
             "picks": prediction.get("picks", {}),
@@ -217,22 +231,65 @@ class PredictorHandler(SimpleHTTPRequestHandler):
         }
         with PREDICTIONS_LOCK:
             predictions = load_predictions()
-            predictions[profile_key] = saved
+            predictions[user_id] = saved
             save_predictions(predictions)
         self.send_json(200, saved)
 
     def do_DELETE(self):
         path = urlparse(self.path).path
-        if not path.startswith("/api/predictions/"):
+        if path != "/api/prediction":
             self.send_json(404, {"message": "Not found"})
             return
 
-        profile_key = unquote(path.removeprefix("/api/predictions/"))
+        user_id = self.authenticated_user_id()
+        if not user_id:
+            self.send_json(401, {"message": "Authentication required"})
+            return
+
         with PREDICTIONS_LOCK:
             predictions = load_predictions()
-            predictions.pop(profile_key, None)
+            predictions.pop(user_id, None)
             save_predictions(predictions)
         self.send_json(200, {"deleted": True})
+
+    def authenticated_user_id(self) -> str | None:
+        """Read Cognito claims for loopback development only.
+
+        Production JWT signature and claim validation is performed by API Gateway.
+        The local server is bound to 127.0.0.1 and decodes the token solely to keep
+        the local development flow dependency-free.
+        """
+        authorization = self.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer "):
+            return None
+
+        try:
+            token = authorization.removeprefix("Bearer ").strip()
+            encoded_payload = token.split(".")[1]
+            padding = "=" * (-len(encoded_payload) % 4)
+            claims = json.loads(
+                urlsafe_b64decode(encoded_payload + padding).decode("utf-8")
+            )
+            user_id = claims.get("sub")
+            if claims.get("token_use") != "access":
+                return None
+            if int(claims.get("exp", 0)) <= int(time.time()):
+                return None
+            if COGNITO_CLIENT_ID and claims.get("client_id") != COGNITO_CLIENT_ID:
+                return None
+            if not isinstance(user_id, str) or not user_id:
+                return None
+            return user_id
+        except (IndexError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    def send_javascript(self, status: int, script: str) -> None:
+        payload = script.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def send_json(self, status: int, data: dict) -> None:
         payload = json.dumps(data).encode("utf-8")

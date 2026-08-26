@@ -98,6 +98,28 @@ button {
   letter-spacing: 0.12em;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-email {
+  max-width: 240px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-sign-out {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 11px;
+}
+
 main {
   overflow: hidden;
 }
@@ -177,6 +199,32 @@ h1 {
   font-size: clamp(2rem, 4vw, 3.25rem);
   line-height: 1.05;
   text-transform: uppercase;
+}
+
+.auth-description {
+  margin-bottom: 24px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.auth-button {
+  width: 100%;
+  min-height: 52px;
+}
+
+.signed-in-email {
+  margin-bottom: 24px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.auth-message {
+  min-height: 18px;
+  margin: 16px 0 0;
+  color: var(--red-dark);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .profile-card label {
@@ -1099,6 +1147,10 @@ footer p {
   }
 
   .season-badge {
+    display: none;
+  }
+
+  .account-email {
     display: none;
   }
 

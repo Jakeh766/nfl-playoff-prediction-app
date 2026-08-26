@@ -8,6 +8,11 @@ variable "environment" {
   }
 }
 
+variable "aws_region" {
+  description = "AWS region used to construct the Cognito issuer and hosted domain URLs."
+  type        = string
+}
+
 variable "project_name" {
   description = "Lowercase name used as the prefix for AWS resources."
   type        = string

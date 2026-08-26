@@ -8,7 +8,7 @@ terraform {
     }
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
   }
 
@@ -33,6 +33,7 @@ provider "aws" {
 module "nfl_app" {
   source = "../../modules/app"
 
+  aws_region   = var.aws_region
   environment  = "prod"
   project_name = var.project_name
 
@@ -65,6 +66,18 @@ output "cache_table" {
 
 output "predictions_table" {
   value = module.nfl_app.predictions_table
+}
+
+output "cognito_user_pool_id" {
+  value = module.nfl_app.cognito_user_pool_id
+}
+
+output "cognito_client_id" {
+  value = module.nfl_app.cognito_client_id
+}
+
+output "cognito_domain" {
+  value = module.nfl_app.cognito_domain
 }
 
 # These moves preserve the existing production resources as they enter the module.
@@ -101,11 +114,6 @@ moved {
 moved {
   from = aws_apigatewayv2_route.prediction_put
   to   = module.nfl_app.aws_apigatewayv2_route.prediction_put
-}
-
-moved {
-  from = aws_apigatewayv2_route.predictions_list
-  to   = module.nfl_app.aws_apigatewayv2_route.predictions_list
 }
 
 moved {

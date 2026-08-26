@@ -47,6 +47,9 @@ jobs:
       - name: Check backend Python syntax
         run: python -m py_compile backend/server.py backend/lambda/app.py
 
+      - name: Test authenticated prediction ownership
+        run: python -m unittest discover -s backend -p "test_*.py"
+
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive terraform
 

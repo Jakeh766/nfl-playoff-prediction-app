@@ -8,7 +8,6 @@ import re
 import statistics
 import time
 from decimal import Decimal
-from urllib.parse import unquote
 from urllib.request import Request, urlopen
 
 import boto3
@@ -204,16 +203,13 @@ def parse_body(event) -> dict:
     return body
 
 
-def validate_prediction(profile_key: str, prediction: dict) -> dict:
-    display_name = prediction.get("displayName")
+def validate_prediction(user_id: str, prediction: dict) -> dict:
     division_winners = prediction.get("divisionWinners")
     seeds = prediction.get("seeds")
     picks = prediction.get("picks")
 
-    if not profile_key or len(profile_key) > 80:
-        raise ValueError("Invalid profile key")
-    if not isinstance(display_name, str) or not 1 <= len(display_name.strip()) <= 40:
-        raise ValueError("displayName must contain 1-40 characters")
+    if not user_id or len(user_id) > 128:
+        raise ValueError("Invalid authenticated user")
     if not isinstance(division_winners, dict):
         raise ValueError("divisionWinners must be an object")
     if not isinstance(seeds, dict):
@@ -227,8 +223,7 @@ def validate_prediction(profile_key: str, prediction: dict) -> dict:
 
     saved_at = int(time.time() * 1000)
     return {
-        "profileKey": profile_key,
-        "displayName": display_name.strip(),
+        "profileKey": user_id,
         "divisionWinners": division_winners,
         "seeds": seeds,
         "picks": picks,
@@ -237,64 +232,61 @@ def validate_prediction(profile_key: str, prediction: dict) -> dict:
     }
 
 
-def list_predictions() -> list[dict]:
-    items = []
-    scan_kwargs = {}
-    while True:
-        result = predictions_table().scan(**scan_kwargs)
-        items.extend(result.get("Items", []))
-        last_key = result.get("LastEvaluatedKey")
-        if not last_key:
-            break
-        scan_kwargs["ExclusiveStartKey"] = last_key
-
-    items.sort(key=lambda item: int(item.get("savedAt", 0)), reverse=True)
-    return items
-
-
-def get_prediction(profile_key: str) -> dict | None:
-    result = predictions_table().get_item(Key={"profileKey": profile_key})
+def get_prediction(user_id: str) -> dict | None:
+    result = predictions_table().get_item(Key={"profileKey": user_id})
     return result.get("Item")
 
 
-def put_prediction(profile_key: str, event: dict) -> dict:
-    prediction = validate_prediction(profile_key, parse_body(event))
+def put_prediction(user_id: str, event: dict) -> dict:
+    prediction = validate_prediction(user_id, parse_body(event))
     predictions_table().put_item(Item=prediction)
     return prediction
 
 
-def delete_prediction(profile_key: str) -> None:
-    predictions_table().delete_item(Key={"profileKey": profile_key})
+def delete_prediction(user_id: str) -> None:
+    predictions_table().delete_item(Key={"profileKey": user_id})
+
+
+def authenticated_user_id(event: dict) -> str | None:
+    claims = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+    )
+    user_id = claims.get("sub")
+    return user_id if isinstance(user_id, str) and user_id else None
 
 
 def handler(event, context):
     del context
     method = event.get("requestContext", {}).get("http", {}).get("method")
     path = event.get("rawPath")
-    profile_key = event.get("pathParameters", {}).get("profileKey")
-    if profile_key:
-        profile_key = unquote(profile_key)
 
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())
 
-    if method == "GET" and path == "/api/predictions":
-        return response(200, {"predictions": list_predictions()})
+    if path != "/api/prediction":
+        return response(404, {"message": "Not found"})
 
-    if profile_key and method == "GET":
-        prediction = get_prediction(profile_key)
+    user_id = authenticated_user_id(event)
+    if not user_id:
+        return response(401, {"message": "Authentication required"})
+
+    if method == "GET":
+        prediction = get_prediction(user_id)
         if not prediction:
             return response(404, {"message": "Prediction not found"})
         return response(200, prediction)
 
-    if profile_key and method == "PUT":
+    if method == "PUT":
         try:
-            return response(200, put_prediction(profile_key, event))
+            return response(200, put_prediction(user_id, event))
         except ValueError as error:
             return response(400, {"message": str(error)})
 
-    if profile_key and method == "DELETE":
-        delete_prediction(profile_key)
+    if method == "DELETE":
+        delete_prediction(user_id)
         return response(200, {"deleted": True})
 
     return response(404, {"message": "Not found"})

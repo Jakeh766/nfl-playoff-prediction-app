@@ -22,7 +22,13 @@
         <span class="brand-mark" aria-hidden="true">◆</span>
         <span>ROAD TO THE BOWL</span>
       </a>
-      <div class="season-badge">PRESEASON PICKS</div>
+      <div class="header-actions">
+        <span class="account-email hidden" id="header-account-email"></span>
+        <button class="button button-ghost header-sign-out hidden" id="header-sign-out" type="button">
+          Sign out
+        </button>
+        <div class="season-badge">PRESEASON PICKS</div>
+      </div>
     </header>
 
     <main>
@@ -32,44 +38,40 @@
           <h1>Build your road<br />to the championship.</h1>
           <p class="hero-description">
             Seed both conferences, pick every winner, and lock in your preseason
-            playoff prediction under your name.
+            playoff prediction under your account.
           </p>
         </div>
 
-        <form class="profile-card" id="profile-form">
-          <div>
+        <section class="profile-card auth-card" id="auth-card">
+          <div id="signed-out-panel">
             <p class="card-kicker">YOUR BRACKET</p>
-            <h2>Who’s making the picks?</h2>
+            <h2>Save your road to the championship.</h2>
+            <p class="auth-description">
+              Sign in with your email to keep one private bracket synced across devices.
+            </p>
+            <button class="button button-primary auth-button" id="sign-in" type="button">
+              Sign in or create account
+            </button>
           </div>
-          <label for="player-name">Name</label>
-          <div class="name-row">
-            <input
-              id="player-name"
-              name="player-name"
-              type="text"
-              maxlength="40"
-              autocomplete="name"
-              placeholder="Enter your name"
-              required
-            />
-            <button class="button button-primary" type="submit">Start picking</button>
+          <div class="hidden" id="signed-in-panel">
+            <p class="card-kicker">SIGNED IN</p>
+            <h2>Your bracket is ready.</h2>
+            <p class="signed-in-email" id="signed-in-email"></p>
+            <button class="button button-primary auth-button" id="open-prediction" type="button">
+              Open my bracket
+            </button>
           </div>
-          <p class="name-preview" id="name-preview" aria-live="polite">
-            Your bracket will be saved under: <strong>your name</strong>
-          </p>
-          <p class="input-hint">
-            Returning? Enter the same name to load your saved picks.
-          </p>
-        </form>
+          <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+        </section>
       </section>
 
       <section class="predictor hidden" id="predictor" aria-live="polite">
         <div class="section-heading">
           <div>
             <p class="eyebrow">01 · SET THE FIELD</p>
-            <h2><span id="welcome-name"></span>, seed your playoff teams.</h2>
+            <h2>Seed your playoff teams.</h2>
             <p class="active-profile">
-              Current bracket: <strong id="profile-name-display"></strong>
+              Signed in as <strong id="account-email"></strong>
             </p>
             <p>
               Pick each North, South, East, and West winner first. Then rank
@@ -80,8 +82,8 @@
               Loading projected season win totals…
             </p>
           </div>
-          <button class="button button-ghost" id="switch-profile" type="button">
-            Switch profile
+          <button class="button button-ghost" id="predictor-sign-out" type="button">
+            Sign out
           </button>
         </div>
 
@@ -195,16 +197,16 @@
         </section>
       </section>
 
-      <section class="saved-section">
+      <section class="saved-section hidden" id="saved-section">
         <div class="section-heading compact">
           <div>
-            <p class="eyebrow">SAVED ONLINE</p>
-            <h2>Prediction locker.</h2>
+            <p class="eyebrow">PRIVATE &amp; SAVED ONLINE</p>
+            <h2>My prediction.</h2>
           </div>
         </div>
         <div class="saved-grid" id="saved-grid"></div>
         <p class="empty-locker" id="empty-locker">
-          No saved brackets yet. Your first prediction will appear here.
+          You have not saved a bracket yet. Your first prediction will appear here.
         </p>
       </section>
     </main>
@@ -213,9 +215,10 @@
 
     <footer>
       <span>ROAD TO THE BOWL</span>
-      <p>Predictions are stored online.</p>
+      <p>Your prediction is private and stored online.</p>
     </footer>
 
-    <script src="app.js?v=7"></script>
+    <script src="auth-config.js"></script>
+    <script src="app.js?v=8"></script>
   </body>
 </html>

@@ -41,6 +41,43 @@ resource "aws_dynamodb_table" "predictions" {
   }
 }
 
+resource "aws_cognito_user_pool" "users" {
+  name                     = "${local.resource_prefix}-users"
+  username_attributes      = ["email"]
+  auto_verified_attributes = ["email"]
+  mfa_configuration        = "OFF"
+
+  username_configuration {
+    case_sensitive = false
+  }
+
+  password_policy {
+    minimum_length                   = 12
+    require_lowercase                = true
+    require_numbers                  = true
+    require_symbols                  = true
+    require_uppercase                = true
+    temporary_password_validity_days = 7
+  }
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = false
+  }
+}
+
+resource "aws_cognito_user_pool_domain" "login" {
+  domain                = "${local.resource_prefix}-${data.aws_caller_identity.current.account_id}"
+  managed_login_version = 2
+  user_pool_id          = aws_cognito_user_pool.users.id
+}
+
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = var.lambda_source_dir
@@ -87,8 +124,7 @@ resource "aws_iam_role_policy" "lambda_cache" {
         Action = [
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:Scan"
+          "dynamodb:PutItem"
         ]
         Resource = aws_dynamodb_table.predictions.arn
       }
@@ -128,6 +164,57 @@ resource "aws_apigatewayv2_api" "api" {
   protocol_type = "HTTP"
 }
 
+resource "aws_cognito_user_pool_client" "browser" {
+  name         = "${local.resource_prefix}-browser"
+  user_pool_id = aws_cognito_user_pool.users.id
+
+  generate_secret                      = false
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["email", "openid"]
+  supported_identity_providers         = ["COGNITO"]
+  callback_urls = concat(
+    ["https://${aws_cloudfront_distribution.app.domain_name}"],
+    var.environment == "dev" ? ["http://localhost:8000"] : []
+  )
+  logout_urls = concat(
+    ["https://${aws_cloudfront_distribution.app.domain_name}"],
+    var.environment == "dev" ? ["http://localhost:8000"] : []
+  )
+  default_redirect_uri          = "https://${aws_cloudfront_distribution.app.domain_name}"
+  enable_token_revocation       = true
+  prevent_user_existence_errors = "ENABLED"
+  access_token_validity         = 1
+  id_token_validity             = 1
+  refresh_token_validity        = 30
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+}
+
+resource "aws_cognito_managed_login_branding" "browser" {
+  client_id                   = aws_cognito_user_pool_client.browser.id
+  user_pool_id                = aws_cognito_user_pool.users.id
+  use_cognito_provided_values = true
+
+  depends_on = [aws_cognito_user_pool_domain.login]
+}
+
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.api.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "${local.resource_prefix}-cognito"
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.browser.id]
+    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+  }
+}
+
 resource "aws_apigatewayv2_integration" "lambda" {
   api_id                 = aws_apigatewayv2_api.api.id
   integration_type       = "AWS_PROXY"
@@ -141,28 +228,31 @@ resource "aws_apigatewayv2_route" "win_totals" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
-resource "aws_apigatewayv2_route" "predictions_list" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "GET /api/predictions"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
-}
-
 resource "aws_apigatewayv2_route" "prediction_get" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "GET /api/predictions/{profileKey}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id               = aws_apigatewayv2_api.api.id
+  route_key            = "GET /api/prediction"
+  target               = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
+  authorization_scopes = ["openid"]
 }
 
 resource "aws_apigatewayv2_route" "prediction_put" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "PUT /api/predictions/{profileKey}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id               = aws_apigatewayv2_api.api.id
+  route_key            = "PUT /api/prediction"
+  target               = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
+  authorization_scopes = ["openid"]
 }
 
 resource "aws_apigatewayv2_route" "prediction_delete" {
-  api_id    = aws_apigatewayv2_api.api.id
-  route_key = "DELETE /api/predictions/{profileKey}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id               = aws_apigatewayv2_api.api.id
+  route_key            = "DELETE /api/prediction"
+  target               = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
+  authorization_scopes = ["openid"]
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -205,6 +295,23 @@ resource "aws_s3_object" "frontend" {
   source       = each.value.source
   etag         = filemd5(each.value.source)
   content_type = each.value.content_type
+}
+
+locals {
+  auth_config_javascript = "window.AUTH_CONFIG = ${jsonencode({
+    domain      = "https://${aws_cognito_user_pool_domain.login.domain}.auth.${var.aws_region}.amazoncognito.com"
+    clientId    = aws_cognito_user_pool_client.browser.id
+    redirectUri = "https://${aws_cloudfront_distribution.app.domain_name}"
+    logoutUri   = "https://${aws_cloudfront_distribution.app.domain_name}"
+  })};\n"
+}
+
+resource "aws_s3_object" "auth_config" {
+  bucket       = aws_s3_bucket.frontend.id
+  key          = "auth-config.js"
+  content_type = "application/javascript; charset=utf-8"
+  content      = local.auth_config_javascript
+  etag         = md5(local.auth_config_javascript)
 }
 
 resource "aws_cloudfront_origin_access_control" "frontend" {
