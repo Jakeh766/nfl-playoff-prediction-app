@@ -16,10 +16,13 @@ Both environments deploy the same architecture:
 ```text
 Browser
   -> CloudFront
-       -> private S3 bucket (index.html, app.js, styles.css)
-       -> API Gateway /api/* -> Lambda -> VegasInsider
-                                      -> DynamoDB scrape cache
-                                      -> DynamoDB saved predictions
+       -> private S3 bucket (index.html, app.js, styles.css, generated auth-config.js)
+       -> Cognito managed login (email/password, authorization code + PKCE)
+       -> API Gateway
+            -> public /api/win-totals -> Lambda -> VegasInsider
+                                                  -> DynamoDB scrape cache
+            -> JWT-protected /api/prediction -> Lambda
+                                                -> DynamoDB saved predictions
 ```
 
 ## Environment isolation
@@ -100,9 +103,12 @@ terraform -chdir=terraform/envs/prod plan
 terraform -chdir=terraform/envs/prod apply
 ```
 
-The first prod plan after this refactor should show state-address moves into
-`module.nfl_app`. Carefully review it and do not apply if it proposes replacing
-the existing bucket, DynamoDB tables, API, Lambda, or CloudFront distribution.
+The authentication deployment creates a Cognito user pool, browser app client,
+managed-login domain and default branding, plus an API Gateway JWT authorizer.
+It replaces the public prediction routes with one protected `/api/prediction`
+resource while leaving the existing predictions table in place. Carefully
+review the production plan and do not apply if it proposes replacing the
+existing bucket, DynamoDB tables, API, Lambda, or CloudFront distribution.
 
 ## Configuration
 
@@ -111,9 +117,15 @@ without affecting prod. The default API limits are 10 sustained requests per
 second with a burst of 20, and successful scrape results are cached for six
 hours.
 
-Saved predictions use the normalized display name as their DynamoDB key. There
-is no authentication yet, so anyone who knows or guesses a profile name can
-view, replace, or delete that prediction.
+New saved predictions use the authenticated Cognito `sub` claim as their
+DynamoDB key. Each account can access one private prediction. Existing
+anonymous name-keyed rows remain in the table but are not returned or modified
+by the authenticated API.
+
+The module also publishes `cognito_user_pool_id`, `cognito_client_id`, and
+`cognito_domain` outputs. Dev registers `http://localhost:8000` in addition to
+its CloudFront URL; production accepts only its CloudFront URL. Email
+verification is required and MFA is explicitly `OFF`.
 
 Review AWS pricing and the target site's automated-access policy before
 deploying. These resources are not guaranteed to remain free.
