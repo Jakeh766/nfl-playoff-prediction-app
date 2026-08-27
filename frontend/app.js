@@ -361,6 +361,7 @@ async function beginSignIn() {
       state: oauthState,
       code_challenge_method: "S256",
       code_challenge: await pkceChallenge(verifier),
+      prompt: "login",
     });
     window.location.assign(`${config.domain}/oauth2/authorize?${parameters}`);
   } catch (error) {
