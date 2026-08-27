@@ -71,6 +71,15 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('AuthFlow: "USER_PASSWORD_AUTH"', app_javascript)
         self.assertIn('"ALLOW_USER_PASSWORD_AUTH"', terraform)
 
+    def test_deployed_frontend_files_are_not_browser_cached(self):
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+        cache_directive = (
+            'cache_control = "no-store, no-cache, must-revalidate, max-age=0"'
+        )
+        self.assertEqual(terraform.count(cache_directive), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

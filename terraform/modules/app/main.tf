@@ -291,11 +291,12 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 resource "aws_s3_object" "frontend" {
   for_each = local.frontend_files
 
-  bucket       = aws_s3_bucket.frontend.id
-  key          = each.key
-  source       = each.value.source
-  etag         = filemd5(each.value.source)
-  content_type = each.value.content_type
+  bucket        = aws_s3_bucket.frontend.id
+  key           = each.key
+  source        = each.value.source
+  etag          = filemd5(each.value.source)
+  content_type  = each.value.content_type
+  cache_control = "no-store, no-cache, must-revalidate, max-age=0"
 }
 
 locals {
@@ -309,11 +310,12 @@ locals {
 }
 
 resource "aws_s3_object" "auth_config" {
-  bucket       = aws_s3_bucket.frontend.id
-  key          = "auth-config.js"
-  content_type = "application/javascript; charset=utf-8"
-  content      = local.auth_config_javascript
-  etag         = md5(local.auth_config_javascript)
+  bucket        = aws_s3_bucket.frontend.id
+  key           = "auth-config.js"
+  content_type  = "application/javascript; charset=utf-8"
+  content       = local.auth_config_javascript
+  etag          = md5(local.auth_config_javascript)
+  cache_control = "no-store, no-cache, must-revalidate, max-age=0"
 }
 
 resource "aws_cloudfront_origin_access_control" "frontend" {
