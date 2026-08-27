@@ -45,13 +45,38 @@
         <section class="profile-card auth-card" id="auth-card">
           <div id="signed-out-panel">
             <p class="card-kicker">YOUR BRACKET</p>
-            <h2>Save your road to the championship.</h2>
+            <h2>Sign in to your bracket.</h2>
             <p class="auth-description">
               Sign in with your email to keep one private bracket synced across devices.
             </p>
-            <button class="button button-primary auth-button" id="sign-in" type="button">
-              Sign in or create account
-            </button>
+            <form class="sign-in-form" id="sign-in-form" method="post">
+              <label for="login-email">Email address</label>
+              <input
+                id="login-email"
+                name="username"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <label for="login-password">Password</label>
+              <input
+                id="login-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+              <button class="button button-primary auth-button" id="sign-in" type="submit">
+                Sign in
+              </button>
+            </form>
+            <div class="auth-links">
+              <a href="#" id="forgot-password">Forgot password?</a>
+              <a href="#" id="create-account">Create account</a>
+            </div>
           </div>
           <div class="hidden" id="signed-in-panel">
             <p class="card-kicker">SIGNED IN</p>
@@ -219,6 +244,6 @@
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
   </body>
 </html>

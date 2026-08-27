@@ -27,6 +27,7 @@ PREDICTIONS_FILE = DATA_DIR / "predictions.json"
 PREDICTIONS_LOCK = threading.RLock()
 COGNITO_DOMAIN = os.environ.get("COGNITO_DOMAIN", "").rstrip("/")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+COGNITO_REGION = os.environ.get("COGNITO_REGION", "us-east-1")
 COGNITO_REDIRECT_URI = os.environ.get(
     "COGNITO_REDIRECT_URI", f"http://localhost:{PORT}"
 )
@@ -178,6 +179,7 @@ class PredictorHandler(SimpleHTTPRequestHandler):
             config = {
                 "domain": COGNITO_DOMAIN,
                 "clientId": COGNITO_CLIENT_ID,
+                "region": COGNITO_REGION,
                 "redirectUri": COGNITO_REDIRECT_URI,
                 "logoutUri": COGNITO_REDIRECT_URI,
             }

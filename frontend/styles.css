@@ -207,9 +207,33 @@ h1 {
   line-height: 1.65;
 }
 
+.sign-in-form {
+  display: grid;
+  gap: 10px;
+}
+
+.sign-in-form label:not(:first-child) {
+  margin-top: 6px;
+}
+
 .auth-button {
   width: 100%;
   min-height: 52px;
+  margin-top: 8px;
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-links a {
+  color: var(--blue-dark);
+  text-underline-offset: 3px;
 }
 
 .signed-in-email {

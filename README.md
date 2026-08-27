@@ -15,7 +15,10 @@ and using the median as a consensus projection for each team.
 
 ## Authentication
 
-The deployed app uses Cognito managed login with the OAuth 2.0 authorization
+The deployed app signs existing users in with a password-manager-friendly form
+on the application origin. The form sends credentials directly to Cognito over
+TLS with Cognito's `USER_PASSWORD_AUTH` flow. Account creation and password
+recovery continue to use Cognito managed login with the OAuth 2.0 authorization
 code flow and PKCE. Email verification is required and MFA is off. API Gateway
 validates Cognito access tokens before invoking the prediction routes, and the
 Lambda function uses the verified Cognito `sub` claim as the DynamoDB key.

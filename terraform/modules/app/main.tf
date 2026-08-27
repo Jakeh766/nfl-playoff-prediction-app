@@ -169,6 +169,7 @@ resource "aws_cognito_user_pool_client" "browser" {
   user_pool_id = aws_cognito_user_pool.users.id
 
   generate_secret                      = false
+  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH"]
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["email", "openid"]
@@ -301,6 +302,7 @@ locals {
   auth_config_javascript = "window.AUTH_CONFIG = ${jsonencode({
     domain      = "https://${aws_cognito_user_pool_domain.login.domain}.auth.${var.aws_region}.amazoncognito.com"
     clientId    = aws_cognito_user_pool_client.browser.id
+    region      = var.aws_region
     redirectUri = "https://${aws_cloudfront_distribution.app.domain_name}"
     logoutUri   = "https://${aws_cloudfront_distribution.app.domain_name}"
   })};\n"

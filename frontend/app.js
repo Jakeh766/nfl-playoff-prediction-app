@@ -185,7 +185,12 @@ const state = {
 const elements = {
   signedOutPanel: document.querySelector("#signed-out-panel"),
   signedInPanel: document.querySelector("#signed-in-panel"),
+  signInForm: document.querySelector("#sign-in-form"),
   signIn: document.querySelector("#sign-in"),
+  loginEmail: document.querySelector("#login-email"),
+  loginPassword: document.querySelector("#login-password"),
+  forgotPassword: document.querySelector("#forgot-password"),
+  createAccount: document.querySelector("#create-account"),
   openPrediction: document.querySelector("#open-prediction"),
   signedInEmail: document.querySelector("#signed-in-email"),
   authMessage: document.querySelector("#auth-message"),
@@ -229,14 +234,20 @@ function clone(value) {
 
 const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
 const AUTH_TRANSACTION_KEY = "road-to-bowl.auth.transaction";
-const SIGN_IN_LABEL = "Sign in or create account";
+const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
+  const domain = String(config.domain || "").replace(/\/$/, "");
+  const domainRegion = domain.match(/\.auth\.([a-z0-9-]+)\.amazoncognito\.com$/)?.[1];
+  const region = String(config.region || domainRegion || "");
   return {
-    domain: String(config.domain || "").replace(/\/$/, ""),
+    domain,
     clientId: String(config.clientId || ""),
+    cognitoEndpoint: region
+      ? `https://cognito-idp.${region}.amazonaws.com`
+      : "",
     redirectUri: String(config.redirectUri || window.location.origin),
     logoutUri: String(config.logoutUri || window.location.origin),
   };
@@ -244,7 +255,7 @@ function authConfig() {
 
 function authIsConfigured() {
   const config = authConfig();
-  return Boolean(config.domain && config.clientId);
+  return Boolean(config.domain && config.clientId && config.cognitoEndpoint);
 }
 
 function resetSignInButton() {
@@ -329,7 +340,53 @@ async function requestTokens(parameters) {
   return payload;
 }
 
-async function beginSignIn() {
+async function requestPasswordSignIn(username, password) {
+  const config = authConfig();
+  const response = await fetch(config.cognitoEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+    },
+    body: JSON.stringify({
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: config.clientId,
+      AuthParameters: {
+        USERNAME: username,
+        PASSWORD: password,
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.message || "Cognito rejected the login request.");
+    error.code = String(payload.__type || "").split("#").at(-1);
+    throw error;
+  }
+  if (!payload.AuthenticationResult) {
+    throw new Error("This account requires an additional sign-in step.");
+  }
+  return payload.AuthenticationResult;
+}
+
+function signInErrorMessage(error) {
+  if (["NotAuthorizedException", "UserNotFoundException"].includes(error.code)) {
+    return "Incorrect email or password.";
+  }
+  if (error.code === "UserNotConfirmedException") {
+    return "Confirm your email before signing in.";
+  }
+  if (error.code === "PasswordResetRequiredException") {
+    return "Reset your password before signing in.";
+  }
+  if (error.code === "TooManyRequestsException") {
+    return "Too many sign-in attempts. Wait a moment and try again.";
+  }
+  return error.message;
+}
+
+async function submitSignIn(event) {
+  event.preventDefault();
   if (signInPending) return;
 
   if (!authIsConfigured()) {
@@ -341,35 +398,54 @@ async function beginSignIn() {
   signInPending = true;
   elements.signIn.disabled = true;
   elements.signIn.setAttribute("aria-busy", "true");
-  elements.signIn.textContent = "Opening sign in…";
-  elements.authMessage.textContent = "Opening secure sign in…";
+  elements.signIn.textContent = "Signing in…";
+  elements.authMessage.textContent = "Signing in securely…";
 
   try {
-    const config = authConfig();
-    const verifier = randomBase64Url();
-    const oauthState = randomBase64Url(24);
-    sessionStorage.setItem(
-      AUTH_TRANSACTION_KEY,
-      JSON.stringify({ verifier, oauthState }),
+    const authentication = await requestPasswordSignIn(
+      elements.loginEmail.value.trim(),
+      elements.loginPassword.value,
     );
-
-    const parameters = new URLSearchParams({
-      response_type: "code",
-      client_id: config.clientId,
-      redirect_uri: config.redirectUri,
-      scope: "openid email",
-      state: oauthState,
-      code_challenge_method: "S256",
-      code_challenge: await pkceChallenge(verifier),
-      prompt: "login",
+    saveAuthSession({
+      access_token: authentication.AccessToken,
+      id_token: authentication.IdToken,
+      refresh_token: authentication.RefreshToken,
+      expires_in: authentication.ExpiresIn,
     });
-    window.location.assign(`${config.domain}/oauth2/authorize?${parameters}`);
+    elements.loginPassword.value = "";
+    renderAuthentication(true);
+    await refreshSavedPrediction();
+    if (loadAuthSession()) openPrediction();
   } catch (error) {
-    console.error("Could not begin Cognito sign in.", error);
+    console.error("Could not sign in with Cognito.", error);
+    elements.authMessage.textContent = signInErrorMessage(error);
+  } finally {
     resetSignInButton();
-    elements.authMessage.textContent =
-      "Could not open sign in. Refresh the page and try again.";
   }
+}
+
+async function beginManagedFlow(path) {
+  if (!authIsConfigured()) return;
+
+  const config = authConfig();
+  const verifier = randomBase64Url();
+  const oauthState = randomBase64Url(24);
+  sessionStorage.setItem(
+    AUTH_TRANSACTION_KEY,
+    JSON.stringify({ verifier, oauthState }),
+  );
+
+  const parameters = new URLSearchParams({
+    response_type: "code",
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    scope: "openid email",
+    state: oauthState,
+    code_challenge_method: "S256",
+    code_challenge: await pkceChallenge(verifier),
+    prompt: "login",
+  });
+  window.location.assign(`${config.domain}${path}?${parameters}`);
 }
 
 async function handleOAuthCallback() {
@@ -1407,7 +1483,15 @@ elements.buildBracket.addEventListener("click", buildBracket);
 elements.randomizeBracket.addEventListener("click", randomizeBracket);
 elements.savePrediction.addEventListener("click", savePrediction);
 elements.resetPicks.addEventListener("click", resetGamePicks);
-elements.signIn.addEventListener("click", beginSignIn);
+elements.signInForm.addEventListener("submit", submitSignIn);
+elements.forgotPassword.addEventListener("click", (event) => {
+  event.preventDefault();
+  beginManagedFlow("/forgotPassword");
+});
+elements.createAccount.addEventListener("click", (event) => {
+  event.preventDefault();
+  beginManagedFlow("/signup");
+});
 elements.openPrediction.addEventListener("click", () => openPrediction());
 elements.headerSignOut.addEventListener("click", signOut);
 elements.predictorSignOut.addEventListener("click", signOut);
