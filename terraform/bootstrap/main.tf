@@ -183,6 +183,72 @@ data "aws_iam_policy_document" "github_dev_deploy" {
   }
 
   statement {
+    sid       = "CreateDevCognitoUserPool"
+    actions   = ["cognito-idp:CreateUserPool"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Environment"
+      values   = ["dev"]
+    }
+  }
+
+  statement {
+    sid = "ManageDevCognitoUserPool"
+    actions = [
+      "cognito-idp:CreateManagedLoginBranding",
+      "cognito-idp:CreateUserPoolClient",
+      "cognito-idp:CreateUserPoolDomain",
+      "cognito-idp:DeleteManagedLoginBranding",
+      "cognito-idp:DeleteUserPool",
+      "cognito-idp:DeleteUserPoolClient",
+      "cognito-idp:DeleteUserPoolDomain",
+      "cognito-idp:DescribeManagedLoginBranding",
+      "cognito-idp:DescribeManagedLoginBrandingByClient",
+      "cognito-idp:DescribeUserPool",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:GetUserPoolMfaConfig",
+      "cognito-idp:ListTagsForResource",
+      "cognito-idp:ListUserPoolClients",
+      "cognito-idp:TagResource",
+      "cognito-idp:UntagResource",
+      "cognito-idp:UpdateManagedLoginBranding",
+      "cognito-idp:UpdateUserPool",
+      "cognito-idp:UpdateUserPoolClient",
+      "cognito-idp:UpdateUserPoolDomain",
+    ]
+    resources = ["arn:aws:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
+      values   = ["dev"]
+    }
+  }
+
+  statement {
+    sid = "ReadCognitoInventory"
+    actions = [
+      "cognito-idp:DescribeUserPoolDomain",
+      "cognito-idp:ListUserPools",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid = "DevLambdaRole"
     actions = [
       "iam:AttachRolePolicy",
