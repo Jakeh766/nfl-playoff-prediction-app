@@ -229,6 +229,8 @@ function clone(value) {
 
 const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
 const AUTH_TRANSACTION_KEY = "road-to-bowl.auth.transaction";
+const SIGN_IN_LABEL = "Sign in or create account";
+let signInPending = false;
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
@@ -243,6 +245,13 @@ function authConfig() {
 function authIsConfigured() {
   const config = authConfig();
   return Boolean(config.domain && config.clientId);
+}
+
+function resetSignInButton() {
+  signInPending = false;
+  elements.signIn.disabled = !authIsConfigured();
+  elements.signIn.removeAttribute("aria-busy");
+  elements.signIn.textContent = SIGN_IN_LABEL;
 }
 
 function encodeBase64Url(bytes) {
@@ -321,30 +330,45 @@ async function requestTokens(parameters) {
 }
 
 async function beginSignIn() {
+  if (signInPending) return;
+
   if (!authIsConfigured()) {
     elements.authMessage.textContent =
       "Authentication is not configured for this environment.";
     return;
   }
 
-  const config = authConfig();
-  const verifier = randomBase64Url();
-  const oauthState = randomBase64Url(24);
-  sessionStorage.setItem(
-    AUTH_TRANSACTION_KEY,
-    JSON.stringify({ verifier, oauthState }),
-  );
+  signInPending = true;
+  elements.signIn.disabled = true;
+  elements.signIn.setAttribute("aria-busy", "true");
+  elements.signIn.textContent = "Opening sign in…";
+  elements.authMessage.textContent = "Opening secure sign in…";
 
-  const parameters = new URLSearchParams({
-    response_type: "code",
-    client_id: config.clientId,
-    redirect_uri: config.redirectUri,
-    scope: "openid email",
-    state: oauthState,
-    code_challenge_method: "S256",
-    code_challenge: await pkceChallenge(verifier),
-  });
-  window.location.assign(`${config.domain}/oauth2/authorize?${parameters}`);
+  try {
+    const config = authConfig();
+    const verifier = randomBase64Url();
+    const oauthState = randomBase64Url(24);
+    sessionStorage.setItem(
+      AUTH_TRANSACTION_KEY,
+      JSON.stringify({ verifier, oauthState }),
+    );
+
+    const parameters = new URLSearchParams({
+      response_type: "code",
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
+      scope: "openid email",
+      state: oauthState,
+      code_challenge_method: "S256",
+      code_challenge: await pkceChallenge(verifier),
+    });
+    window.location.assign(`${config.domain}/oauth2/authorize?${parameters}`);
+  } catch (error) {
+    console.error("Could not begin Cognito sign in.", error);
+    resetSignInButton();
+    elements.authMessage.textContent =
+      "Could not open sign in. Refresh the page and try again.";
+  }
 }
 
 async function handleOAuthCallback() {
@@ -1386,6 +1410,7 @@ elements.signIn.addEventListener("click", beginSignIn);
 elements.openPrediction.addEventListener("click", () => openPrediction());
 elements.headerSignOut.addEventListener("click", signOut);
 elements.predictorSignOut.addEventListener("click", signOut);
+window.addEventListener("pageshow", resetSignInButton);
 
 async function initializeAuthentication() {
   if (!authIsConfigured()) {
@@ -1396,6 +1421,8 @@ async function initializeAuthentication() {
       : "Authentication is not configured for this deployment.";
     return;
   }
+
+  resetSignInButton();
 
   try {
     const completedSignIn = await handleOAuthCallback();
