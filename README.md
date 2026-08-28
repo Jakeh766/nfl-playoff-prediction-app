@@ -6,9 +6,9 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Claim a unique public leaderboard name when saving a prediction.
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
-- Track a private 302-point score as official results become available.
+- Track a 302-point score as official results become available.
 - Create or join password-protected groups with their own member-only leaderboards.
-- Privately save, reopen, update, and delete one prediction per account.
+- Save, reopen, update, and delete one prediction per account.
 - Permanently delete their saved prediction and account from the signed-in view.
 
 Predictions are stored in DynamoDB and are available across devices. The Lambda
@@ -35,9 +35,11 @@ duplicate another account's name. New and existing accounts are prompted for a
 leaderboard name the first time they select **Save prediction**. Deleting an
 account releases its name for someone else to use.
 
-The public leaderboard returns only leaderboard name, playoff-field and seeding
-points, playoff-round points, total points, and rank. It does not expose email
-addresses, Cognito identifiers, or private bracket picks.
+The public leaderboard returns leaderboard name, playoff-field and seeding
+points, playoff-round points, total points, and rank. Each leaderboard name
+links to a read-only view of that player's saved bracket. Public bracket views
+do not expose email addresses, Cognito identifiers, profile keys, or editing
+controls.
 
 Signed-in users can create or join multiple private groups using a unique group
 name and shared password. Group passwords are salted and hashed with PBKDF2
@@ -45,8 +47,9 @@ before storage. A group leaderboard can only be loaded by a current member and
 uses the same live scoring as the global leaderboard, filtered to members with
 saved predictions. Deleting an account removes all of its group memberships.
 
-Win-total projections remain public. Prediction reads and writes require a
-signed-in account.
+Win-total projections, leaderboard scores, and read-only leaderboard brackets
+are public. Reading or writing your own saved prediction requires a signed-in
+account.
 
 ## Scoring
 

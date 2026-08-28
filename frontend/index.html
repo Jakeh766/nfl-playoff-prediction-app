@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=12" />
+    <link rel="stylesheet" href="styles.css?v=13" />
   </head>
   <body>
     <header class="site-header">
@@ -46,7 +46,7 @@
             <p class="card-kicker">YOUR BRACKET</p>
             <h2>Sign in to your bracket.</h2>
             <p class="auth-description">
-              Sign in with your email to keep one private bracket synced across devices.
+              Sign in with your email to keep one bracket synced across devices.
             </p>
             <form class="sign-in-form" id="sign-in-form" method="post">
               <label for="login-email">Email address</label>
@@ -337,7 +337,7 @@
       <section class="saved-section hidden" id="saved-section">
         <div class="section-heading compact">
           <div>
-            <p class="eyebrow">PRIVATE &amp; SAVED ONLINE</p>
+            <p class="eyebrow">SAVED TO YOUR ACCOUNT</p>
             <h2>My prediction.</h2>
           </div>
         </div>
@@ -400,8 +400,8 @@
             <p class="eyebrow">04 · THE STANDINGS</p>
             <h2>Public leaderboard.</h2>
             <p>
-              Compare every saved preseason prediction. Only leaderboard names
-              and score totals are public; account details and brackets stay private.
+              Compare every saved preseason prediction. Select a player to view
+              their bracket; account details stay private.
             </p>
             <p class="leaderboard-status" id="leaderboard-status" role="status">
               Loading leaderboard…
@@ -485,6 +485,29 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <dialog
+      class="account-dialog public-bracket-dialog"
+      id="public-bracket-dialog"
+      aria-labelledby="public-bracket-title"
+    >
+      <div class="dialog-heading">
+        <div>
+          <p class="card-kicker">PUBLIC BRACKET</p>
+          <h2 id="public-bracket-title">Saved bracket.</h2>
+        </div>
+        <button
+          class="dialog-close"
+          id="close-public-bracket"
+          type="button"
+          aria-label="Close public bracket"
+        >
+          ×
+        </button>
+      </div>
+      <p class="public-bracket-status" id="public-bracket-status" role="status" aria-live="polite"></p>
+      <div id="public-bracket-content"></div>
+    </dialog>
+
+    <dialog
       class="account-dialog"
       id="account-dialog"
       aria-labelledby="account-dialog-title"
@@ -536,8 +559,8 @@
         <p class="card-kicker">LEADERBOARD PROFILE</p>
         <h2 id="leaderboard-name-title">Choose your name.</h2>
         <p id="leaderboard-name-description">
-          Choose the public name that will identify your saved prediction. Every
-          name is unique, ignoring capitalization.
+          Choose the public name that will identify your saved prediction and
+          read-only bracket. Every name is unique, ignoring capitalization.
         </p>
         <label for="leaderboard-name">Leaderboard name</label>
         <input
@@ -650,10 +673,10 @@
 
     <footer>
       <span>ROAD TO THE BOWL</span>
-      <p>Your prediction is private and stored online.</p>
+      <p>Your account details stay private.</p>
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=17"></script>
+    <script src="app.js?v=18"></script>
   </body>
 </html>

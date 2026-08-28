@@ -262,6 +262,12 @@ resource "aws_apigatewayv2_route" "leaderboard_get" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+resource "aws_apigatewayv2_route" "public_bracket_get" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /api/leaderboard/{leaderboardName}/bracket"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
 resource "aws_apigatewayv2_route" "prediction_put" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "PUT /api/prediction"

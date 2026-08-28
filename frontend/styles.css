@@ -503,6 +503,98 @@ select:focus {
   width: 100%;
 }
 
+.public-bracket-dialog {
+  width: min(1180px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.public-bracket-status {
+  min-height: 20px;
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.public-bracket-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.public-bracket-conference {
+  min-width: 0;
+  overflow: hidden;
+  background: rgba(255, 254, 250, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.public-bracket-rounds {
+  padding: 15px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.public-bracket-round {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.public-game-card {
+  box-shadow: none;
+}
+
+.public-team-pick {
+  min-height: 40px;
+  padding: 7px 6px;
+  display: grid;
+  grid-template-columns: 23px 21px minmax(0, 1fr) 12px;
+  gap: 3px;
+  align-items: center;
+  color: var(--ink);
+  background: white;
+}
+
+.public-team-pick + .public-team-pick {
+  border-top: 1px solid #ebe8e2;
+}
+
+.public-team-pick.selected {
+  color: white;
+  background: var(--ink);
+}
+
+.public-champion {
+  margin-top: 18px;
+  padding: 24px;
+  color: white;
+  background: var(--ink);
+  border-radius: 7px;
+  text-align: center;
+}
+
+.public-champion .card-kicker {
+  color: var(--gold);
+}
+
+.public-champion .champion-logo {
+  width: 56px;
+  height: 56px;
+  margin: 8px auto;
+}
+
+.public-champion strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 24px;
+  text-transform: uppercase;
+}
+
 .account-dialog > form > p:not(.card-kicker):not(.dialog-message) {
   margin-bottom: 22px;
   color: var(--muted);
@@ -1322,6 +1414,38 @@ select:focus {
   border-bottom: 0;
 }
 
+.leaderboard-player-button {
+  padding: 0;
+  color: var(--blue-dark);
+  background: none;
+  border: 0;
+  text-align: left;
+}
+
+.leaderboard-player-button strong,
+.leaderboard-player-button span {
+  display: block;
+}
+
+.leaderboard-player-button strong {
+  font-size: 14px;
+}
+
+.leaderboard-player-button span {
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-transform: uppercase;
+}
+
+.leaderboard-player-button:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .leaderboard-rank {
   width: 78px;
   font-size: 18px;
@@ -1623,6 +1747,10 @@ footer p {
     max-width: 650px;
   }
 
+  .public-bracket-grid {
+    grid-template-columns: 1fr;
+  }
+
   .bracket-shell {
     grid-template-columns: 1fr;
   }
@@ -1671,6 +1799,14 @@ footer p {
 
   .account-dialog {
     padding: 25px;
+  }
+
+  .public-bracket-dialog {
+    padding: 20px;
+  }
+
+  .public-bracket-rounds {
+    grid-template-columns: 1fr;
   }
 
   .account-settings-actions {

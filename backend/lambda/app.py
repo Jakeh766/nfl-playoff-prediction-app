@@ -13,6 +13,7 @@ import time
 import uuid
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import unquote
 from urllib.request import Request, urlopen
 
 import boto3
@@ -263,6 +264,75 @@ def build_leaderboard(member_ids: set[str] | None = None) -> dict:
 
 def get_leaderboard() -> dict:
     return build_leaderboard()
+
+
+def public_bracket(profile: dict, prediction: dict) -> dict:
+    division_winners = prediction.get("divisionWinners", {})
+    seeds = prediction.get("seeds", {})
+    picks = prediction.get("picks", {})
+    score = score_prediction(prediction, load_season_results())
+
+    return {
+        "leaderboardName": profile["leaderboardName"],
+        "savedAt": prediction.get("savedAt"),
+        "divisionWinners": {
+            conference: {
+                division: division_winners.get(conference, {}).get(division, "")
+                for division in ("North", "South", "East", "West")
+            }
+            for conference in ("AFC", "NFC")
+        },
+        "seeds": {
+            conference: list(seeds.get(conference, []))[:7]
+            for conference in ("AFC", "NFC")
+        },
+        "picks": {
+            conference: {
+                game_id: picks.get(conference, {}).get(game_id, "")
+                for game_id in (
+                    "wc-2-7",
+                    "wc-3-6",
+                    "wc-4-5",
+                    "div-1",
+                    "div-2",
+                    "conf",
+                )
+            }
+            for conference in ("AFC", "NFC")
+        }
+        | {"superBowl": picks.get("superBowl", "")},
+        "bracketBuilt": bool(prediction.get("bracketBuilt")),
+        "score": {
+            "status": score["status"],
+            "regularSeason": score["regularSeason"],
+            "playoffs": score["playoffs"],
+            "total": score["total"],
+            "possible": score["possible"],
+            "maximum": score["maximum"],
+        },
+    }
+
+
+def get_public_bracket(leaderboard_name: str) -> dict | None:
+    try:
+        _, normalized_name = normalize_leaderboard_name(leaderboard_name)
+    except ValueError:
+        return None
+
+    reservation = profiles_table().get_item(
+        Key={"profileKey": name_item_key(normalized_name)}
+    ).get("Item")
+    if not reservation or reservation.get("recordType") != "leaderboardName":
+        return None
+
+    owner_id = reservation.get("ownerId")
+    profile = get_profile(owner_id) if isinstance(owner_id, str) else None
+    prediction = get_prediction(owner_id) if isinstance(owner_id, str) else None
+    if not profile or not prediction:
+        return None
+    if profile.get("leaderboardName", "").casefold() != normalized_name:
+        return None
+    return public_bracket(profile, prediction)
 
 
 def load_season_results() -> dict:
@@ -827,6 +897,17 @@ def handler(event, context):
 
     if method == "GET" and path == "/api/leaderboard":
         return response(200, get_leaderboard())
+
+    public_bracket_match = re.fullmatch(
+        r"/api/leaderboard/(.+)/bracket", path or ""
+    )
+    if public_bracket_match:
+        if method != "GET":
+            return response(404, {"message": "Not found"})
+        bracket = get_public_bracket(unquote(public_bracket_match.group(1)))
+        if not bracket:
+            return response(404, {"message": "Bracket not found"})
+        return response(200, bracket)
 
     group_leaderboard_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/leaderboard", path or ""

@@ -292,9 +292,12 @@ class PrivateGroupTests(unittest.TestCase):
             "updatedAt": "2026-12-01",
         }
         lambda_app.score_prediction = lambda prediction, _results: {
+            "status": "In progress",
             "regularSeason": prediction["testScore"],
             "playoffs": 0,
             "total": prediction["testScore"],
+            "possible": 25,
+            "maximum": lambda_app.MAX_SCORE,
         }
 
     def tearDown(self):
@@ -446,9 +449,12 @@ class PublicLeaderboardTests(unittest.TestCase):
             "updatedAt": "2026-12-01",
         }
         lambda_app.score_prediction = lambda prediction, _results: {
+            "status": "In progress",
             "regularSeason": prediction["testScore"],
             "playoffs": 0,
             "total": prediction["testScore"],
+            "possible": 25,
+            "maximum": lambda_app.MAX_SCORE,
         }
 
     def tearDown(self):
@@ -470,6 +476,63 @@ class PublicLeaderboardTests(unittest.TestCase):
         self.assertEqual([entry["rank"] for entry in payload["entries"]], [1, 2])
         self.assertNotIn("profileKey", payload["entries"][0])
         self.assertNotIn("picks", payload["entries"][0])
+
+    def test_saved_bracket_is_public_by_leaderboard_name_and_sanitized(self):
+        self.profiles.items["user#user-123"]["leaderboardName"] = "Jake Picks"
+        self.profiles.items.pop("name#jake")
+        self.profiles.items["name#jake picks"] = {
+            "profileKey": "name#jake picks",
+            "recordType": "leaderboardName",
+            "ownerId": "user-123",
+        }
+        self.predictions.items["user-123"].update(
+            {
+                "divisionWinners": {
+                    "AFC": {"North": "Baltimore Ravens"},
+                    "NFC": {"North": "Detroit Lions"},
+                },
+                "seeds": {
+                    "AFC": ["Baltimore Ravens"] * 7,
+                    "NFC": ["Detroit Lions"] * 7,
+                },
+                "picks": {
+                    "AFC": {"conf": "Baltimore Ravens"},
+                    "NFC": {"conf": "Detroit Lions"},
+                    "superBowl": "Detroit Lions",
+                },
+                "bracketBuilt": True,
+                "savedAt": 1_788_000_000_000,
+                "privateNote": "do not expose",
+            }
+        )
+
+        result = lambda_app.handler(
+            event(
+                "GET",
+                user_id=None,
+                path="/api/leaderboard/Jake%20Picks/bracket",
+            ),
+            None,
+        )
+        payload = json.loads(result["body"])
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(payload["leaderboardName"], "Jake Picks")
+        self.assertEqual(payload["picks"]["superBowl"], "Detroit Lions")
+        self.assertEqual(payload["score"]["total"], 25)
+        self.assertNotIn("profileKey", payload)
+        self.assertNotIn("ownerId", payload)
+        self.assertNotIn("privateNote", payload)
+
+        missing = lambda_app.handler(
+            event(
+                "GET",
+                user_id=None,
+                path="/api/leaderboard/Unknown/bracket",
+            ),
+            None,
+        )
+        self.assertEqual(missing["statusCode"], 404)
 
 
 if __name__ == "__main__":

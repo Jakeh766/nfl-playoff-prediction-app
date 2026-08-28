@@ -290,6 +290,11 @@ const elements = {
   leaderboardTableShell: document.querySelector("#leaderboard-table-shell"),
   leaderboardBody: document.querySelector("#leaderboard-body"),
   emptyLeaderboard: document.querySelector("#empty-leaderboard"),
+  publicBracketDialog: document.querySelector("#public-bracket-dialog"),
+  publicBracketTitle: document.querySelector("#public-bracket-title"),
+  publicBracketStatus: document.querySelector("#public-bracket-status"),
+  publicBracketContent: document.querySelector("#public-bracket-content"),
+  closePublicBracket: document.querySelector("#close-public-bracket"),
   toast: document.querySelector("#toast"),
 };
 
@@ -310,6 +315,7 @@ const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 let deleteAccountPending = false;
 let pendingPredictionSave = false;
+let publicBracketRequest = 0;
 let groupDialogMode = "create";
 
 function authConfig() {
@@ -901,6 +907,194 @@ async function refreshSavedPrediction() {
   renderSavedPrediction();
 }
 
+function publicSeedTeam(bracket, conference, seed) {
+  const name = bracket.seeds?.[conference]?.[seed - 1];
+  return name ? { name, seed } : null;
+}
+
+function getPublicConferenceGames(bracket, conference) {
+  const picks = bracket.picks?.[conference] || {};
+  const seed = (number) => publicSeedTeam(bracket, conference, number);
+  const wildCard = [
+    { id: "wc-2-7", title: "Wild Card · 2 vs 7", teams: [seed(2), seed(7)] },
+    { id: "wc-3-6", title: "Wild Card · 3 vs 6", teams: [seed(3), seed(6)] },
+    { id: "wc-4-5", title: "Wild Card · 4 vs 5", teams: [seed(4), seed(5)] },
+  ];
+  const wildCardWinners = wildCard.map((game) =>
+    game.teams.find((team) => team?.name === picks[game.id]) || null,
+  );
+  const remaining = [seed(1), ...wildCardWinners]
+    .filter(Boolean)
+    .sort((a, b) => a.seed - b.seed);
+  const divisional = remaining.length === 4
+    ? [
+        {
+          id: "div-1",
+          title: "Divisional · High vs Low",
+          teams: [remaining[0], remaining[3]],
+        },
+        {
+          id: "div-2",
+          title: "Divisional",
+          teams: [remaining[1], remaining[2]],
+        },
+      ]
+    : [
+        { id: "div-1", title: "Divisional · High vs Low", teams: [seed(1), null] },
+        { id: "div-2", title: "Divisional", teams: [null, null] },
+      ];
+  const divisionalWinners = divisional.map((game) =>
+    game.teams.find((team) => team?.name === picks[game.id]) || null,
+  );
+  const championship = [
+    {
+      id: "conf",
+      title: `${conference} Championship`,
+      teams: divisionalWinners,
+    },
+  ];
+  return { wildCard, divisional, championship };
+}
+
+function createPublicTeamPick(team, selected) {
+  const row = document.createElement("div");
+  row.className = "public-team-pick";
+  row.classList.toggle("selected", Boolean(team && team.name === selected));
+
+  const seed = document.createElement("span");
+  seed.className = "team-seed";
+  seed.textContent = team?.seed || "—";
+
+  const logo = team
+    ? createTeamLogo(team.name, "bracket-team-logo")
+    : document.createElement("span");
+  if (!team) logo.className = "bracket-logo-placeholder";
+
+  const name = document.createElement("strong");
+  name.className = "team-name";
+  name.textContent = team?.name || "TBD";
+
+  const check = document.createElement("span");
+  check.className = "pick-check";
+  check.textContent = team?.name === selected ? "✓" : "";
+  row.append(seed, logo, name, check);
+  return row;
+}
+
+function createPublicGameCard(conference, game, bracket) {
+  const card = document.createElement("article");
+  card.className = "game-card public-game-card";
+  const title = document.createElement("div");
+  title.className = "game-title";
+  title.textContent = game.title;
+  card.appendChild(title);
+  const selected = bracket.picks?.[conference]?.[game.id] || "";
+  game.teams.forEach((team) => {
+    card.appendChild(createPublicTeamPick(team, selected));
+  });
+  return card;
+}
+
+function createPublicConferenceBracket(conference, bracket) {
+  const section = document.createElement("section");
+  section.className = "public-bracket-conference";
+
+  const heading = document.createElement("div");
+  heading.className = `bracket-conference-label ${conference.toLowerCase()}-label`;
+  const logo = document.createElement("img");
+  logo.className = "bracket-conference-logo";
+  logo.src = `https://a.espncdn.com/i/teamlogos/nfl/500/${conference.toLowerCase()}.png`;
+  logo.alt = `${conference} logo`;
+  const label = document.createElement("span");
+  label.textContent = conference;
+  heading.append(logo, label);
+
+  const rounds = document.createElement("div");
+  rounds.className = "public-bracket-rounds";
+  const games = getPublicConferenceGames(bracket, conference);
+  [
+    { key: "wildCard", label: "Wild Card" },
+    { key: "divisional", label: "Divisional" },
+    { key: "championship", label: `${conference} Champion` },
+  ].forEach(({ key, label: roundLabel }) => {
+    const round = document.createElement("div");
+    round.className = "public-bracket-round";
+    const title = document.createElement("div");
+    title.className = "round-label";
+    title.textContent = roundLabel;
+    round.appendChild(title);
+    games[key].forEach((game) => {
+      round.appendChild(createPublicGameCard(conference, game, bracket));
+    });
+    rounds.appendChild(round);
+  });
+
+  section.append(heading, rounds);
+  return section;
+}
+
+function renderPublicBracket(bracket) {
+  elements.publicBracketContent.innerHTML = "";
+  const score = bracket.score || {};
+  const savedAt = bracket.savedAt
+    ? ` · Saved ${new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(bracket.savedAt))}`
+    : "";
+  elements.publicBracketStatus.textContent =
+    `${score.total ?? 0} / ${score.maximum ?? 302} points${savedAt}`;
+
+  const conferences = document.createElement("div");
+  conferences.className = "public-bracket-grid";
+  conferences.append(
+    createPublicConferenceBracket("AFC", bracket),
+    createPublicConferenceBracket("NFC", bracket),
+  );
+
+  const champion = document.createElement("section");
+  champion.className = "public-champion";
+  const kicker = document.createElement("p");
+  kicker.className = "card-kicker";
+  kicker.textContent = "SUPER BOWL CHAMPION";
+  const championName = bracket.picks?.superBowl || "No champion selected";
+  champion.appendChild(kicker);
+  if (bracket.picks?.superBowl) {
+    champion.appendChild(createTeamLogo(championName, "champion-logo"));
+  }
+  const name = document.createElement("strong");
+  name.textContent = championName;
+  champion.appendChild(name);
+  elements.publicBracketContent.append(conferences, champion);
+}
+
+async function openPublicBracket(entry) {
+  const requestId = ++publicBracketRequest;
+  elements.publicBracketTitle.textContent = `${entry.leaderboardName}'s bracket.`;
+  elements.publicBracketStatus.textContent = "Loading saved bracket…";
+  elements.publicBracketContent.innerHTML = "";
+  elements.publicBracketDialog.showModal();
+
+  try {
+    const bracket = entry.bracket || await apiRequest(
+      `/api/leaderboard/${encodeURIComponent(entry.leaderboardName)}/bracket`,
+    );
+    if (
+      !elements.publicBracketDialog.open ||
+      requestId !== publicBracketRequest
+    ) {
+      return;
+    }
+    renderPublicBracket(bracket);
+  } catch (error) {
+    if (requestId !== publicBracketRequest) return;
+    elements.publicBracketStatus.textContent =
+      "This bracket could not be loaded. Please try again.";
+    elements.publicBracketStatus.title = error.message;
+  }
+}
+
 function renderLeaderboardRows(body, entries) {
   body.innerHTML = "";
   entries.forEach((entry) => {
@@ -914,7 +1108,16 @@ function renderLeaderboardRows(body, entries) {
 
     const player = document.createElement("th");
     player.scope = "row";
-    player.textContent = entry.leaderboardName;
+    const playerButton = document.createElement("button");
+    playerButton.className = "leaderboard-player-button";
+    playerButton.type = "button";
+    const playerName = document.createElement("strong");
+    playerName.textContent = entry.leaderboardName;
+    const viewLabel = document.createElement("span");
+    viewLabel.textContent = "View bracket";
+    playerButton.append(playerName, viewLabel);
+    playerButton.addEventListener("click", () => openPublicBracket(entry));
+    player.appendChild(playerButton);
 
     const regularSeason = document.createElement("td");
     regularSeason.textContent = entry.regularSeason;
@@ -939,6 +1142,58 @@ function renderLeaderboard() {
   if (leaderboard) elements.leaderboardStatus.textContent = leaderboard.status;
 }
 
+function createPreviewPublicBracket(leaderboardName, variant = 0) {
+  const rotate = (teams, amount) => {
+    const shift = amount % teams.length;
+    return [...teams.slice(shift), ...teams.slice(0, shift)];
+  };
+  const afc = rotate([
+    "Kansas City Chiefs",
+    "Buffalo Bills",
+    "Baltimore Ravens",
+    "Houston Texans",
+    "Los Angeles Chargers",
+    "Cincinnati Bengals",
+    "Miami Dolphins",
+  ], variant);
+  const nfc = rotate([
+    "Philadelphia Eagles",
+    "Detroit Lions",
+    "Los Angeles Rams",
+    "Tampa Bay Buccaneers",
+    "Green Bay Packers",
+    "Minnesota Vikings",
+    "Seattle Seahawks",
+  ], variant * 2);
+  const conferencePicks = (seeds) => ({
+    "wc-2-7": seeds[1],
+    "wc-3-6": seeds[2],
+    "wc-4-5": seeds[3],
+    "div-1": seeds[0],
+    "div-2": seeds[1],
+    conf: seeds[0],
+  });
+  return {
+    leaderboardName,
+    savedAt: Date.UTC(2026, 7, 28, 12) - variant * 60_000,
+    seeds: { AFC: afc, NFC: nfc },
+    picks: {
+      AFC: conferencePicks(afc),
+      NFC: conferencePicks(nfc),
+      superBowl: variant % 2 ? nfc[0] : afc[0],
+    },
+    bracketBuilt: true,
+    score: {
+      status: "Preseason — scoring has not started",
+      regularSeason: 0,
+      playoffs: 0,
+      total: 0,
+      possible: 0,
+      maximum: 302,
+    },
+  };
+}
+
 async function loadLeaderboard() {
   try {
     state.leaderboard = await apiRequest("/api/leaderboard");
@@ -952,6 +1207,9 @@ async function loadLeaderboard() {
           { rank: 1, leaderboardName: "Fourth Down Alex", regularSeason: 0, playoffs: 0, total: 0 },
         ],
       };
+      state.leaderboard.entries.forEach((entry, index) => {
+        entry.bracket = createPreviewPublicBracket(entry.leaderboardName, index);
+      });
     } else {
       state.leaderboard = null;
       elements.leaderboardStatus.textContent =
@@ -2073,6 +2331,15 @@ elements.forgotPasswordBack.addEventListener("click", () => showAuthPanel("signI
 elements.resetPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
 elements.resendConfirmation.addEventListener("click", resendConfirmationCode);
 elements.openPrediction.addEventListener("click", () => openPrediction());
+elements.closePublicBracket.addEventListener("click", () => {
+  elements.publicBracketDialog.close();
+});
+elements.publicBracketDialog.addEventListener("close", () => {
+  publicBracketRequest += 1;
+  elements.publicBracketStatus.textContent = "";
+  elements.publicBracketStatus.title = "";
+  elements.publicBracketContent.innerHTML = "";
+});
 elements.headerAccount.addEventListener("click", () => {
   elements.accountDialog.showModal();
 });

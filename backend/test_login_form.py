@@ -150,13 +150,24 @@ class LoginFormTests(unittest.TestCase):
 
         self.assertIn('id="leaderboard-section"', html)
         self.assertIn('id="leaderboard-body"', html)
+        self.assertIn('id="public-bracket-dialog"', html)
         self.assertIn('apiRequest("/api/leaderboard")', app_javascript)
+        self.assertIn("View bracket", app_javascript)
+        self.assertIn("encodeURIComponent(entry.leaderboardName)", app_javascript)
         leaderboard_renderer = app_javascript[
             app_javascript.index("function renderLeaderboard()") :
             app_javascript.index("async function loadLeaderboard()")
         ]
         self.assertNotIn("userEmail", leaderboard_renderer)
         self.assertNotIn("profileKey", leaderboard_renderer)
+
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'route_key = "GET /api/leaderboard/{leaderboardName}/bracket"',
+            terraform,
+        )
 
     def test_private_groups_can_be_created_joined_and_viewed(self):
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
