@@ -58,6 +58,26 @@ class FakeTable:
         return {"Items": list(self.items.values())}
 
 
+class FakeGroupTable:
+    def __init__(self, items=None):
+        self.items = dict(items or {})
+
+    def get_item(self, *, Key):
+        item = self.items.get(Key["groupKey"])
+        return {"Item": item} if item else {}
+
+    def put_item(self, *, Item, ConditionExpression=None):
+        if ConditionExpression and Item["groupKey"] in self.items:
+            raise ConditionalCheckFailed()
+        self.items[Item["groupKey"]] = Item
+
+    def delete_item(self, *, Key):
+        self.items.pop(Key["groupKey"], None)
+
+    def scan(self, **_arguments):
+        return {"Items": list(self.items.values())}
+
+
 class ConditionalCheckFailed(Exception):
     response = {"Error": {"Code": "ConditionalCheckFailedException"}}
 
@@ -150,7 +170,9 @@ class PredictionAuthorizationTests(unittest.TestCase):
 class LeaderboardProfileTests(unittest.TestCase):
     def setUp(self):
         self.profiles = FakeTable()
+        self.groups = FakeGroupTable()
         lambda_app.profiles_table = lambda: self.profiles
+        lambda_app.groups_table = lambda: self.groups
 
     def profile_event(self, method, user_id="user-123", name=None):
         body = {"leaderboardName": name} if name is not None else None
@@ -211,6 +233,176 @@ class LeaderboardProfileTests(unittest.TestCase):
         )
 
         self.assertEqual(result["statusCode"], 400)
+
+    def test_deleting_profile_removes_private_group_memberships(self):
+        self.groups.items = {
+            "membership#group-1#user#user-123": {
+                "groupKey": "membership#group-1#user#user-123",
+                "recordType": "membership",
+                "groupId": "group-1",
+                "userId": "user-123",
+            },
+            "membership#group-1#user#user-456": {
+                "groupKey": "membership#group-1#user#user-456",
+                "recordType": "membership",
+                "groupId": "group-1",
+                "userId": "user-456",
+            },
+        }
+
+        lambda_app.handler(self.profile_event("DELETE"), None)
+
+        self.assertNotIn("membership#group-1#user#user-123", self.groups.items)
+        self.assertIn("membership#group-1#user#user-456", self.groups.items)
+
+
+class PrivateGroupTests(unittest.TestCase):
+    def setUp(self):
+        self.groups = FakeGroupTable()
+        self.profiles = FakeTable(
+            {
+                "user#user-123": {
+                    "profileKey": "user#user-123",
+                    "recordType": "profile",
+                    "leaderboardName": "Jake",
+                },
+                "user#user-456": {
+                    "profileKey": "user#user-456",
+                    "recordType": "profile",
+                    "leaderboardName": "Sam",
+                },
+            }
+        )
+        self.predictions = FakeTable(
+            {
+                "user-123": {"profileKey": "user-123", "testScore": 10},
+                "user-456": {"profileKey": "user-456", "testScore": 25},
+            }
+        )
+        self.original_iterations = lambda_app.GROUP_PASSWORD_ITERATIONS
+        self.original_results_loader = lambda_app.load_season_results
+        self.original_scorer = lambda_app.score_prediction
+        lambda_app.GROUP_PASSWORD_ITERATIONS = 10
+        lambda_app.groups_table = lambda: self.groups
+        lambda_app.profiles_table = lambda: self.profiles
+        lambda_app.predictions_table = lambda: self.predictions
+        lambda_app.load_season_results = lambda: {
+            "season": 2026,
+            "status": "In progress",
+            "updatedAt": "2026-12-01",
+        }
+        lambda_app.score_prediction = lambda prediction, _results: {
+            "regularSeason": prediction["testScore"],
+            "playoffs": 0,
+            "total": prediction["testScore"],
+        }
+
+    def tearDown(self):
+        lambda_app.GROUP_PASSWORD_ITERATIONS = self.original_iterations
+        lambda_app.load_season_results = self.original_results_loader
+        lambda_app.score_prediction = self.original_scorer
+
+    def create(self, user_id="user-123", name="Sunday Crew", password="secret1"):
+        return lambda_app.handler(
+            event(
+                "POST",
+                user_id=user_id,
+                body={"groupName": name, "password": password},
+                path="/api/groups",
+            ),
+            None,
+        )
+
+    def join(self, user_id="user-456", name="Sunday Crew", password="secret1"):
+        return lambda_app.handler(
+            event(
+                "POST",
+                user_id=user_id,
+                body={"groupName": name, "password": password},
+                path="/api/groups/join",
+            ),
+            None,
+        )
+
+    def test_group_routes_require_authentication(self):
+        result = lambda_app.handler(
+            event("GET", user_id=None, path="/api/groups"),
+            None,
+        )
+
+        self.assertEqual(result["statusCode"], 401)
+
+    def test_create_hashes_password_and_reserves_unique_name(self):
+        created = self.create()
+        payload = json.loads(created["body"])
+        group = self.groups.items[f"group#{payload['groupId']}"]
+
+        self.assertEqual(created["statusCode"], 201)
+        self.assertNotIn("password", payload)
+        self.assertNotEqual(group["passwordHash"], "secret1")
+        self.assertNotIn("password", group)
+        self.assertIn(
+            f"membership#{payload['groupId']}#user#user-123",
+            self.groups.items,
+        )
+
+        duplicate = self.create(user_id="user-456", name="  sunday crew  ")
+        self.assertEqual(duplicate["statusCode"], 400)
+
+    def test_join_requires_the_correct_password(self):
+        created = json.loads(self.create()["body"])
+        rejected = self.join(password="wrong-password")
+
+        self.assertEqual(rejected["statusCode"], 400)
+        self.assertNotIn(
+            f"membership#{created['groupId']}#user#user-456",
+            self.groups.items,
+        )
+
+        joined = self.join(name="sUNDAY cREW")
+        self.assertEqual(joined["statusCode"], 200)
+        self.assertIn(
+            f"membership#{created['groupId']}#user#user-456",
+            self.groups.items,
+        )
+
+    def test_group_list_only_returns_the_current_users_public_groups(self):
+        self.create()
+
+        creator_list = lambda_app.handler(
+            event("GET", path="/api/groups"),
+            None,
+        )
+        outsider_list = lambda_app.handler(
+            event("GET", user_id="user-456", path="/api/groups"),
+            None,
+        )
+        creator_payload = json.loads(creator_list["body"])
+
+        self.assertEqual(len(creator_payload["groups"]), 1)
+        self.assertEqual(creator_payload["groups"][0]["groupName"], "Sunday Crew")
+        self.assertNotIn("passwordHash", creator_payload["groups"][0])
+        self.assertEqual(json.loads(outsider_list["body"])["groups"], [])
+
+    def test_group_leaderboard_is_member_only_and_group_scoped(self):
+        created = json.loads(self.create()["body"])
+        group_path = f"/api/groups/{created['groupId']}/leaderboard"
+
+        forbidden = lambda_app.handler(
+            event("GET", user_id="user-456", path=group_path),
+            None,
+        )
+        allowed = lambda_app.handler(event("GET", path=group_path), None)
+        payload = json.loads(allowed["body"])
+
+        self.assertEqual(forbidden["statusCode"], 403)
+        self.assertEqual(allowed["statusCode"], 200)
+        self.assertEqual(payload["groupName"], "Sunday Crew")
+        self.assertEqual(
+            [entry["leaderboardName"] for entry in payload["entries"]],
+            ["Jake"],
+        )
+        self.assertNotIn("passwordHash", payload)
 
 
 class PublicLeaderboardTests(unittest.TestCase):

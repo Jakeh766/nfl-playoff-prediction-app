@@ -489,6 +489,10 @@ select:focus {
   font-weight: 700;
 }
 
+.account-dialog .input-hint + label {
+  margin-top: 18px;
+}
+
 .dialog-message {
   min-height: 18px;
   margin: 12px 0 0;
@@ -511,6 +515,7 @@ select:focus {
 
 .predictor,
 .saved-section,
+.groups-section,
 .leaderboard-section,
 .scoring-section {
   max-width: 1440px;
@@ -1151,6 +1156,86 @@ select:focus {
   border-top: 1px solid rgba(16, 34, 58, 0.12);
 }
 
+.groups-section {
+  border-top: 1px solid rgba(16, 34, 58, 0.12);
+}
+
+.groups-heading {
+  align-items: center;
+}
+
+.group-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.group-tabs {
+  display: flex;
+  gap: 9px;
+  margin-bottom: 18px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.group-tab {
+  min-height: 40px;
+  padding: 0 16px;
+  color: var(--blue-dark);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(24, 89, 169, 0.25);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.group-tab:hover,
+.group-tab.active {
+  color: white;
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.group-leaderboard {
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.group-leaderboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.group-leaderboard-heading .card-kicker {
+  margin-bottom: 5px;
+}
+
+.group-leaderboard-heading h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 27px;
+  text-transform: uppercase;
+}
+
+.group-leaderboard-heading .leaderboard-status {
+  margin: 0 !important;
+}
+
+.empty-groups {
+  padding: 30px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px dashed #c8c7c1;
+  border-radius: 7px;
+  text-align: center;
+}
+
 .scoring-section {
   border-top: 1px solid rgba(16, 34, 58, 0.12);
 }
@@ -1576,6 +1661,7 @@ footer p {
 
   .predictor,
   .saved-section,
+  .groups-section,
   .leaderboard-section,
   .scoring-section {
     padding-top: 68px;
@@ -1645,6 +1731,21 @@ footer p {
 
   .saved-grid {
     grid-template-columns: 1fr;
+  }
+
+  .group-actions,
+  .group-leaderboard-heading {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .group-actions .button {
+    width: 100%;
+  }
+
+  .group-leaderboard {
+    padding: 16px;
   }
 
   .scoring-table th,

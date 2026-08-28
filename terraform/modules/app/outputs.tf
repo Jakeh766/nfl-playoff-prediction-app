@@ -28,6 +28,11 @@ output "profiles_table" {
   value       = aws_dynamodb_table.profiles.name
 }
 
+output "groups_table" {
+  description = "DynamoDB table containing private groups and memberships."
+  value       = aws_dynamodb_table.groups.name
+}
+
 output "cognito_user_pool_id" {
   description = "Cognito user pool that owns application accounts."
   value       = aws_cognito_user_pool.users.id

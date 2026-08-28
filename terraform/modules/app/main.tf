@@ -52,6 +52,17 @@ resource "aws_dynamodb_table" "profiles" {
   }
 }
 
+resource "aws_dynamodb_table" "groups" {
+  name         = "${local.resource_prefix}-groups"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "groupKey"
+
+  attribute {
+    name = "groupKey"
+    type = "S"
+  }
+}
+
 resource "aws_cognito_user_pool" "users" {
   name                     = "${local.resource_prefix}-users"
   username_attributes      = ["email"]
@@ -143,6 +154,16 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:Scan"
         ]
         Resource = aws_dynamodb_table.profiles.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DeleteItem",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:Scan"
+        ]
+        Resource = aws_dynamodb_table.groups.arn
       }
     ]
   })
@@ -165,6 +186,7 @@ resource "aws_lambda_function" "backend" {
       CACHE_TABLE       = aws_dynamodb_table.win_totals_cache.name
       CACHE_TTL_SECONDS = tostring(var.cache_ttl_seconds)
       ENVIRONMENT       = var.environment
+      GROUPS_TABLE      = aws_dynamodb_table.groups.name
       PREDICTIONS_TABLE = aws_dynamodb_table.predictions.name
       PROFILES_TABLE    = aws_dynamodb_table.profiles.name
     }
@@ -275,6 +297,38 @@ resource "aws_apigatewayv2_route" "profile_put" {
 resource "aws_apigatewayv2_route" "profile_delete" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "DELETE /api/profile"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "groups_get" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /api/groups"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "groups_create" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "POST /api/groups"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "groups_join" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "POST /api/groups/join"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_leaderboard_get" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /api/groups/{groupId}/leaderboard"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

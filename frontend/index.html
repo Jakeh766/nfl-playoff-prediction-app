@@ -363,10 +363,57 @@
         </p>
       </section>
 
+      <section class="groups-section hidden" id="groups-section">
+        <div class="section-heading compact groups-heading">
+          <div>
+            <p class="eyebrow">03 · PRIVATE COMPETITION</p>
+            <h2>Your groups.</h2>
+            <p>
+              Create or join a password-protected group, then compare scores on
+              a leaderboard that only includes that group's members.
+            </p>
+          </div>
+          <div class="group-actions">
+            <button class="button button-secondary" id="join-group" type="button">Join group</button>
+            <button class="button button-primary" id="create-group" type="button">Create group</button>
+          </div>
+        </div>
+        <div class="group-tabs" id="group-tabs" aria-label="Your groups"></div>
+        <p class="empty-groups" id="empty-groups">
+          You have not joined a group yet. Create one for friends or join one with its name and password.
+        </p>
+        <div class="group-leaderboard hidden" id="group-leaderboard">
+          <div class="group-leaderboard-heading">
+            <div>
+              <p class="card-kicker">GROUP LEADERBOARD</p>
+              <h3 id="active-group-name"></h3>
+            </div>
+            <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
+          </div>
+          <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Player</th>
+                  <th scope="col">Field + seeding</th>
+                  <th scope="col">Playoffs</th>
+                  <th scope="col">Total</th>
+                </tr>
+              </thead>
+              <tbody id="group-leaderboard-body"></tbody>
+            </table>
+          </div>
+          <p class="empty-leaderboard hidden" id="empty-group-leaderboard">
+            No group member has a saved prediction yet.
+          </p>
+        </div>
+      </section>
+
       <section class="leaderboard-section" id="leaderboard-section">
         <div class="section-heading compact">
           <div>
-            <p class="eyebrow">03 · THE STANDINGS</p>
+            <p class="eyebrow">04 · THE STANDINGS</p>
             <h2>Public leaderboard.</h2>
             <p>
               Compare every saved preseason prediction. Only leaderboard names
@@ -399,7 +446,7 @@
       <section class="scoring-section" id="scoring-section">
         <div class="section-heading compact">
           <div>
-            <p class="eyebrow">04 · FOLLOW THE SEASON</p>
+            <p class="eyebrow">05 · FOLLOW THE SEASON</p>
             <h2>Score the whole journey.</h2>
             <p>
               Earn points for building the right playoff field, nailing the seeds,
@@ -490,6 +537,53 @@
           <button class="button button-primary" id="save-leaderboard-name" type="submit">
             Save and continue
           </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      class="account-dialog"
+      id="group-dialog"
+      aria-labelledby="group-dialog-title"
+      aria-describedby="group-dialog-description"
+    >
+      <form id="group-form" method="post">
+        <p class="card-kicker" id="group-dialog-kicker">PRIVATE GROUP</p>
+        <h2 id="group-dialog-title">Create a group.</h2>
+        <p id="group-dialog-description">
+          Pick a unique group name and share its password with the people you invite.
+        </p>
+        <label for="group-name">Group name</label>
+        <input
+          id="group-name"
+          name="group-name"
+          type="text"
+          minlength="3"
+          maxlength="40"
+          pattern="[A-Za-z0-9][A-Za-z0-9 ._\-]*[A-Za-z0-9]"
+          autocomplete="off"
+          autocapitalize="words"
+          spellcheck="false"
+          required
+        />
+        <p class="input-hint">
+          3–40 characters. Letters, numbers, spaces, periods, underscores, and hyphens.
+        </p>
+        <label for="group-password">Group password</label>
+        <input
+          id="group-password"
+          name="group-password"
+          type="password"
+          minlength="6"
+          maxlength="128"
+          autocomplete="current-password"
+          required
+        />
+        <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
+        <p class="dialog-message" id="group-dialog-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" id="cancel-group" type="button">Cancel</button>
+          <button class="button button-primary" id="submit-group" type="submit">Create group</button>
         </div>
       </form>
     </dialog>

@@ -189,6 +189,9 @@ const state = {
   savedAt: null,
   savedPrediction: null,
   leaderboard: null,
+  groups: [],
+  activeGroupId: "",
+  groupLeaderboard: null,
 };
 
 const elements = {
@@ -262,6 +265,27 @@ const elements = {
   savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
   emptyLocker: document.querySelector("#empty-locker"),
+  groupsSection: document.querySelector("#groups-section"),
+  groupTabs: document.querySelector("#group-tabs"),
+  emptyGroups: document.querySelector("#empty-groups"),
+  groupLeaderboard: document.querySelector("#group-leaderboard"),
+  activeGroupName: document.querySelector("#active-group-name"),
+  groupLeaderboardStatus: document.querySelector("#group-leaderboard-status"),
+  groupLeaderboardTableShell: document.querySelector("#group-leaderboard-table-shell"),
+  groupLeaderboardBody: document.querySelector("#group-leaderboard-body"),
+  emptyGroupLeaderboard: document.querySelector("#empty-group-leaderboard"),
+  createGroup: document.querySelector("#create-group"),
+  joinGroup: document.querySelector("#join-group"),
+  groupDialog: document.querySelector("#group-dialog"),
+  groupForm: document.querySelector("#group-form"),
+  groupDialogKicker: document.querySelector("#group-dialog-kicker"),
+  groupDialogTitle: document.querySelector("#group-dialog-title"),
+  groupDialogDescription: document.querySelector("#group-dialog-description"),
+  groupName: document.querySelector("#group-name"),
+  groupPassword: document.querySelector("#group-password"),
+  groupDialogMessage: document.querySelector("#group-dialog-message"),
+  cancelGroup: document.querySelector("#cancel-group"),
+  submitGroup: document.querySelector("#submit-group"),
   leaderboardStatus: document.querySelector("#leaderboard-status"),
   leaderboardTableShell: document.querySelector("#leaderboard-table-shell"),
   leaderboardBody: document.querySelector("#leaderboard-body"),
@@ -286,6 +310,7 @@ const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 let deleteAccountPending = false;
 let pendingPredictionSave = false;
+let groupDialogMode = "create";
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
@@ -640,6 +665,7 @@ function renderLeaderboardProfile() {
   elements.headerAccountEmail.textContent = state.leaderboardName || state.userEmail;
   elements.accountEmail.textContent = state.leaderboardName || state.userEmail;
   elements.savedSection.classList.toggle("hidden", !state.signedIn);
+  elements.groupsSection.classList.toggle("hidden", !state.signedIn);
 }
 
 function renderAuthentication(signedIn) {
@@ -660,8 +686,12 @@ function renderAuthentication(signedIn) {
     state.leaderboardName = "";
     pendingPredictionSave = false;
     state.savedPrediction = null;
+    state.groups = [];
+    state.activeGroupId = "";
+    state.groupLeaderboard = null;
     elements.predictor.classList.add("hidden");
     elements.savedSection.classList.add("hidden");
+    elements.groupsSection.classList.add("hidden");
   }
   renderLeaderboardProfile();
 }
@@ -712,6 +742,7 @@ async function submitLeaderboardName(event) {
           : `Leaderboard name set to ${state.leaderboardName}.`,
       );
       await loadLeaderboard();
+      if (state.activeGroupId) await loadGroupLeaderboard();
     }
   } catch (error) {
     elements.leaderboardNameMessage.textContent = error.message;
@@ -789,7 +820,7 @@ async function submitDeleteAccount(event) {
   elements.confirmDeleteAccount.setAttribute("aria-busy", "true");
   elements.confirmDeleteAccount.textContent = "Deleting…";
   elements.deleteAccountMessage.textContent =
-    "Deleting your saved bracket, leaderboard profile, and account…";
+    "Deleting your saved bracket, group memberships, leaderboard profile, and account…";
 
   try {
     const accessToken = await getValidAccessToken();
@@ -806,7 +837,7 @@ async function submitDeleteAccount(event) {
     renderAuthentication(false);
     showAuthPanel(
       "signIn",
-      "Your account, leaderboard name, and saved bracket were permanently deleted.",
+      "Your account, group memberships, leaderboard name, and saved bracket were permanently deleted.",
     );
   } catch (error) {
     elements.deleteAccountMessage.textContent = `Could not delete your account: ${error.message}`;
@@ -819,7 +850,9 @@ async function submitDeleteAccount(event) {
 }
 
 async function apiRequest(path, options = {}) {
-  const protectedRequest = ["/api/prediction", "/api/profile"].includes(path);
+  const protectedRequest =
+    ["/api/prediction", "/api/profile"].includes(path) ||
+    path.startsWith("/api/groups");
   const accessToken = protectedRequest ? await getValidAccessToken() : null;
   if (protectedRequest && !accessToken) {
     renderAuthentication(false);
@@ -869,16 +902,8 @@ async function refreshSavedPrediction() {
   renderSavedPrediction();
 }
 
-function renderLeaderboard() {
-  const leaderboard = state.leaderboard;
-  const entries = leaderboard?.entries || [];
-  elements.leaderboardBody.innerHTML = "";
-  elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
-  elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
-
-  if (!leaderboard) return;
-  elements.leaderboardStatus.textContent = leaderboard.status;
-
+function renderLeaderboardRows(body, entries) {
+  body.innerHTML = "";
   entries.forEach((entry) => {
     const row = document.createElement("tr");
     const rank = document.createElement("td");
@@ -901,8 +926,18 @@ function renderLeaderboard() {
     total.textContent = entry.total;
 
     row.append(rank, player, regularSeason, playoffs, total);
-    elements.leaderboardBody.appendChild(row);
+    body.appendChild(row);
   });
+}
+
+function renderLeaderboard() {
+  const leaderboard = state.leaderboard;
+  const entries = leaderboard?.entries || [];
+  elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
+  elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
+  renderLeaderboardRows(elements.leaderboardBody, entries);
+
+  if (leaderboard) elements.leaderboardStatus.textContent = leaderboard.status;
 }
 
 async function loadLeaderboard() {
@@ -929,6 +964,145 @@ async function loadLeaderboard() {
     }
   }
   renderLeaderboard();
+}
+
+function renderGroups() {
+  const activeGroup = state.groups.find(
+    (group) => group.groupId === state.activeGroupId,
+  );
+  elements.groupTabs.innerHTML = "";
+  elements.emptyGroups.classList.toggle("hidden", Boolean(state.groups.length));
+  elements.groupLeaderboard.classList.toggle("hidden", !activeGroup);
+
+  state.groups.forEach((group) => {
+    const button = document.createElement("button");
+    button.className = "group-tab";
+    button.type = "button";
+    button.textContent = group.groupName;
+    button.classList.toggle("active", group.groupId === state.activeGroupId);
+    button.setAttribute(
+      "aria-pressed",
+      String(group.groupId === state.activeGroupId),
+    );
+    button.addEventListener("click", () => {
+      if (state.activeGroupId === group.groupId) return;
+      state.activeGroupId = group.groupId;
+      state.groupLeaderboard = null;
+      renderGroups();
+      loadGroupLeaderboard(group.groupId);
+    });
+    elements.groupTabs.appendChild(button);
+  });
+
+  if (activeGroup) elements.activeGroupName.textContent = activeGroup.groupName;
+}
+
+function renderGroupLeaderboard() {
+  const leaderboard = state.groupLeaderboard;
+  const entries = leaderboard?.entries || [];
+  elements.groupLeaderboardTableShell.classList.toggle("hidden", !entries.length);
+  elements.emptyGroupLeaderboard.classList.toggle("hidden", Boolean(entries.length));
+  renderLeaderboardRows(elements.groupLeaderboardBody, entries);
+  if (leaderboard) {
+    elements.activeGroupName.textContent = leaderboard.groupName;
+    elements.groupLeaderboardStatus.textContent = leaderboard.status;
+    elements.groupLeaderboardStatus.title = "";
+  }
+}
+
+async function loadGroupLeaderboard(groupId = state.activeGroupId) {
+  if (!groupId) return;
+  elements.groupLeaderboardStatus.textContent = "Loading group leaderboard…";
+  try {
+    const leaderboard = await apiRequest(
+      `/api/groups/${encodeURIComponent(groupId)}/leaderboard`,
+    );
+    if (state.activeGroupId !== groupId) return;
+    state.groupLeaderboard = leaderboard;
+    renderGroupLeaderboard();
+  } catch (error) {
+    if (state.activeGroupId !== groupId) return;
+    state.groupLeaderboard = null;
+    elements.groupLeaderboardBody.innerHTML = "";
+    elements.groupLeaderboardTableShell.classList.add("hidden");
+    elements.emptyGroupLeaderboard.classList.add("hidden");
+    elements.groupLeaderboardStatus.textContent =
+      "The group leaderboard could not be loaded.";
+    elements.groupLeaderboardStatus.title = error.message;
+  }
+}
+
+async function refreshGroups(preferredGroupId = state.activeGroupId) {
+  try {
+    const payload = await apiRequest("/api/groups");
+    elements.emptyGroups.textContent =
+      "You have not joined a group yet. Create one for friends or join one with its name and password.";
+    elements.emptyGroups.title = "";
+    state.groups = payload.groups || [];
+    state.activeGroupId = state.groups.some(
+      (group) => group.groupId === preferredGroupId,
+    )
+      ? preferredGroupId
+      : state.groups[0]?.groupId || "";
+    state.groupLeaderboard = null;
+    renderGroups();
+    if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
+  } catch (error) {
+    state.groups = [];
+    state.activeGroupId = "";
+    state.groupLeaderboard = null;
+    renderGroups();
+    elements.emptyGroups.textContent =
+      "Your groups could not be loaded. Please refresh and try again.";
+    elements.emptyGroups.title = error.message;
+  }
+}
+
+function openGroupDialog(mode) {
+  groupDialogMode = mode;
+  const creating = mode === "create";
+  elements.groupForm.reset();
+  elements.groupDialogKicker.textContent = creating ? "NEW PRIVATE GROUP" : "JOIN PRIVATE GROUP";
+  elements.groupDialogTitle.textContent = creating ? "Create a group." : "Join a group.";
+  elements.groupDialogDescription.textContent = creating
+    ? "Pick a unique group name and share its password with the people you invite."
+    : "Enter the exact group name and the password shared by its creator.";
+  elements.submitGroup.textContent = creating ? "Create group" : "Join group";
+  elements.groupDialogMessage.textContent = "";
+  elements.groupDialog.showModal();
+  elements.groupName.focus();
+}
+
+async function submitGroup(event) {
+  event.preventDefault();
+  const creating = groupDialogMode === "create";
+  elements.submitGroup.disabled = true;
+  elements.submitGroup.setAttribute("aria-busy", "true");
+  elements.submitGroup.textContent = creating ? "Creating…" : "Joining…";
+  elements.groupDialogMessage.textContent = creating
+    ? "Creating your private group…"
+    : "Checking the group password…";
+
+  try {
+    const group = await apiRequest(creating ? "/api/groups" : "/api/groups/join", {
+      method: "POST",
+      body: JSON.stringify({
+        groupName: elements.groupName.value,
+        password: elements.groupPassword.value,
+      }),
+    });
+    elements.groupDialog.close();
+    await refreshGroups(group.groupId);
+    showToast(creating ? `Created ${group.groupName}.` : `Joined ${group.groupName}.`);
+  } catch (error) {
+    elements.groupDialogMessage.textContent = error.message;
+    elements.groupPassword.value = "";
+    elements.groupPassword.focus();
+  } finally {
+    elements.submitGroup.disabled = false;
+    elements.submitGroup.removeAttribute("aria-busy");
+    elements.submitGroup.textContent = creating ? "Create group" : "Join group";
+  }
 }
 
 function shuffled(values) {
@@ -1663,6 +1837,7 @@ async function savePrediction() {
     updateSaveState(true);
     renderSavedPrediction();
     await loadLeaderboard();
+    if (state.activeGroupId) await loadGroupLeaderboard();
     showToast("Prediction saved.");
   } catch (error) {
     updateSaveState(false);
@@ -1832,6 +2007,8 @@ async function deletePrediction() {
     state.savedAt = null;
     renderSavedPrediction();
     updateSaveState(false);
+    await loadLeaderboard();
+    if (state.activeGroupId) await loadGroupLeaderboard();
     showToast("Deleted your saved prediction.");
   } catch (error) {
     showToast(`Could not delete: ${error.message}`);
@@ -1859,6 +2036,14 @@ elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
 elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
 elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
 elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
+elements.createGroup.addEventListener("click", () => openGroupDialog("create"));
+elements.joinGroup.addEventListener("click", () => openGroupDialog("join"));
+elements.groupForm.addEventListener("submit", submitGroup);
+elements.cancelGroup.addEventListener("click", () => elements.groupDialog.close());
+elements.groupDialog.addEventListener("close", () => {
+  elements.groupForm.reset();
+  elements.groupDialogMessage.textContent = "";
+});
 elements.changeLeaderboardName.addEventListener("click", () => {
   openLeaderboardNameDialog(false);
 });
@@ -1939,6 +2124,7 @@ async function initializeAuthentication() {
 
     await refreshProfile();
     await refreshSavedPrediction();
+    await refreshGroups();
     if (!loadAuthSession()) return;
     openPrediction(false);
   } catch (error) {

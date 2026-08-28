@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import statistics
 import time
+import uuid
 from decimal import Decimal
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -84,6 +88,10 @@ def predictions_table():
 
 def profiles_table():
     return boto3.resource("dynamodb").Table(os.environ["PROFILES_TABLE"])
+
+
+def groups_table():
+    return boto3.resource("dynamodb").Table(os.environ["GROUPS_TABLE"])
 
 
 def normalize_leaderboard_name(value) -> tuple[str, str]:
@@ -203,7 +211,7 @@ def scan_all(table) -> list[dict]:
         scan_arguments["ExclusiveStartKey"] = last_key
 
 
-def get_leaderboard() -> dict:
+def build_leaderboard(member_ids: set[str] | None = None) -> dict:
     results = load_season_results()
     profiles = {
         item["profileKey"].removeprefix("user#"): item
@@ -213,6 +221,8 @@ def get_leaderboard() -> dict:
     }
     entries = []
     for prediction in scan_all(predictions_table()):
+        if member_ids is not None and prediction.get("profileKey") not in member_ids:
+            continue
         profile = profiles.get(prediction.get("profileKey"))
         if not profile:
             continue
@@ -249,6 +259,10 @@ def get_leaderboard() -> dict:
         "maximum": MAX_SCORE,
         "entries": entries,
     }
+
+
+def get_leaderboard() -> dict:
+    return build_leaderboard()
 
 
 def load_season_results() -> dict:
@@ -583,6 +597,215 @@ def delete_prediction(user_id: str) -> None:
     predictions_table().delete_item(Key={"profileKey": user_id})
 
 
+GROUP_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
+GROUP_PASSWORD_ITERATIONS = 310_000
+
+
+def normalize_group_name(value) -> tuple[str, str]:
+    if not isinstance(value, str):
+        raise ValueError("groupName must be a string")
+
+    display_name = re.sub(r"\s+", " ", value.strip())
+    if not 3 <= len(display_name) <= 40:
+        raise ValueError("Group name must be between 3 and 40 characters")
+    if not GROUP_NAME_PATTERN.fullmatch(display_name):
+        raise ValueError(
+            "Group name may use letters, numbers, spaces, periods, underscores, and hyphens"
+        )
+    return display_name, display_name.casefold()
+
+
+def validate_group_password(value) -> str:
+    if not isinstance(value, str):
+        raise ValueError("password must be a string")
+    if not 6 <= len(value) <= 128:
+        raise ValueError("Group password must be between 6 and 128 characters")
+    return value
+
+
+def hash_group_password(
+    password: str,
+    salt: str | None = None,
+    iterations: int | None = None,
+) -> tuple[str, str]:
+    iteration_count = iterations or GROUP_PASSWORD_ITERATIONS
+    password_salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(password_salt),
+        iteration_count,
+    ).hex()
+    return password_salt, digest
+
+
+def group_item_key(group_id: str) -> str:
+    return f"group#{group_id}"
+
+
+def group_name_item_key(normalized_name: str) -> str:
+    return f"name#{normalized_name}"
+
+
+def membership_item_key(group_id: str, user_id: str) -> str:
+    return f"membership#{group_id}#user#{user_id}"
+
+
+def public_group(group: dict) -> dict:
+    return {
+        "groupId": group["groupId"],
+        "groupName": group["groupName"],
+        "createdAt": group["createdAt"],
+    }
+
+
+def get_group(group_id: str) -> dict | None:
+    result = groups_table().get_item(Key={"groupKey": group_item_key(group_id)})
+    item = result.get("Item")
+    return item if item and item.get("recordType") == "group" else None
+
+
+def is_group_member(group_id: str, user_id: str) -> bool:
+    result = groups_table().get_item(
+        Key={"groupKey": membership_item_key(group_id, user_id)}
+    )
+    return bool(result.get("Item"))
+
+
+def list_groups(user_id: str) -> dict:
+    table = groups_table()
+    memberships = [
+        item
+        for item in scan_all(table)
+        if item.get("recordType") == "membership" and item.get("userId") == user_id
+    ]
+    groups = []
+    for membership in memberships:
+        group = table.get_item(
+            Key={"groupKey": group_item_key(membership["groupId"])}
+        ).get("Item")
+        if group and group.get("recordType") == "group":
+            groups.append(public_group(group))
+    groups.sort(key=lambda group: group["groupName"].casefold())
+    return {"groups": groups}
+
+
+def create_group(user_id: str, event: dict) -> dict:
+    body = parse_body(event)
+    group_name, normalized_name = normalize_group_name(body.get("groupName"))
+    password = validate_group_password(body.get("password"))
+    group_id = str(uuid.uuid4())
+    created_at = int(time.time() * 1000)
+    salt, digest = hash_group_password(password)
+    table = groups_table()
+    name_key = group_name_item_key(normalized_name)
+    group_key = group_item_key(group_id)
+
+    try:
+        table.put_item(
+            Item={
+                "groupKey": name_key,
+                "recordType": "groupName",
+                "normalizedName": normalized_name,
+                "groupId": group_id,
+            },
+            ConditionExpression="attribute_not_exists(groupKey)",
+        )
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise ValueError("That group name is already taken") from error
+        raise
+
+    group = {
+        "groupKey": group_key,
+        "recordType": "group",
+        "groupId": group_id,
+        "groupName": group_name,
+        "normalizedName": normalized_name,
+        "passwordSalt": salt,
+        "passwordHash": digest,
+        "passwordIterations": GROUP_PASSWORD_ITERATIONS,
+        "createdAt": created_at,
+    }
+    try:
+        table.put_item(Item=group, ConditionExpression="attribute_not_exists(groupKey)")
+        table.put_item(
+            Item={
+                "groupKey": membership_item_key(group_id, user_id),
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": user_id,
+                "joinedAt": created_at,
+            },
+            ConditionExpression="attribute_not_exists(groupKey)",
+        )
+    except Exception:
+        table.delete_item(Key={"groupKey": group_key})
+        table.delete_item(Key={"groupKey": name_key})
+        raise
+    return public_group(group)
+
+
+def join_group(user_id: str, event: dict) -> dict:
+    body = parse_body(event)
+    _group_name, normalized_name = normalize_group_name(body.get("groupName"))
+    password = validate_group_password(body.get("password"))
+    table = groups_table()
+    reservation = table.get_item(
+        Key={"groupKey": group_name_item_key(normalized_name)}
+    ).get("Item")
+    group = get_group(reservation.get("groupId")) if reservation else None
+    if not group:
+        raise ValueError("Group name or password is incorrect")
+
+    _salt, digest = hash_group_password(
+        password,
+        group["passwordSalt"],
+        int(group.get("passwordIterations", GROUP_PASSWORD_ITERATIONS)),
+    )
+    if not hmac.compare_digest(digest, group["passwordHash"]):
+        raise ValueError("Group name or password is incorrect")
+
+    if is_group_member(group["groupId"], user_id):
+        return public_group(group)
+
+    table.put_item(
+        Item={
+            "groupKey": membership_item_key(group["groupId"], user_id),
+            "recordType": "membership",
+            "groupId": group["groupId"],
+            "userId": user_id,
+            "joinedAt": int(time.time() * 1000),
+        },
+        ConditionExpression="attribute_not_exists(groupKey)",
+    )
+    return public_group(group)
+
+
+def get_group_leaderboard(group_id: str, user_id: str) -> dict:
+    group = get_group(group_id)
+    if not group or not is_group_member(group_id, user_id):
+        raise PermissionError("Group membership required")
+    member_ids = {
+        item["userId"]
+        for item in scan_all(groups_table())
+        if item.get("recordType") == "membership"
+        and item.get("groupId") == group_id
+    }
+    return {
+        **build_leaderboard(member_ids),
+        "groupId": group_id,
+        "groupName": group["groupName"],
+    }
+
+
+def delete_group_memberships(user_id: str) -> None:
+    table = groups_table()
+    for item in scan_all(table):
+        if item.get("recordType") == "membership" and item.get("userId") == user_id:
+            table.delete_item(Key={"groupKey": item["groupKey"]})
+
+
 def authenticated_user_id(event: dict) -> str | None:
     claims = (
         event.get("requestContext", {})
@@ -605,12 +828,49 @@ def handler(event, context):
     if method == "GET" and path == "/api/leaderboard":
         return response(200, get_leaderboard())
 
-    if path not in ("/api/prediction", "/api/profile"):
+    group_leaderboard_match = re.fullmatch(
+        r"/api/groups/([0-9a-f-]{36})/leaderboard", path or ""
+    )
+    if path not in (
+        "/api/prediction",
+        "/api/profile",
+        "/api/groups",
+        "/api/groups/join",
+    ) and not group_leaderboard_match:
         return response(404, {"message": "Not found"})
 
     user_id = authenticated_user_id(event)
     if not user_id:
         return response(401, {"message": "Authentication required"})
+
+    if path == "/api/groups":
+        if method == "GET":
+            return response(200, list_groups(user_id))
+        if method == "POST":
+            try:
+                return response(201, create_group(user_id, event))
+            except ValueError as error:
+                return response(400, {"message": str(error)})
+        return response(404, {"message": "Not found"})
+
+    if path == "/api/groups/join":
+        if method == "POST":
+            try:
+                return response(200, join_group(user_id, event))
+            except ValueError as error:
+                return response(400, {"message": str(error)})
+        return response(404, {"message": "Not found"})
+
+    if group_leaderboard_match:
+        if method != "GET":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(
+                200,
+                get_group_leaderboard(group_leaderboard_match.group(1), user_id),
+            )
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
 
     if path == "/api/profile":
         if method == "GET":
@@ -626,6 +886,7 @@ def handler(event, context):
                 return response(400, {"message": str(error)})
 
         if method == "DELETE":
+            delete_group_memberships(user_id)
             delete_profile(user_id)
             return response(200, {"deleted": True})
 

@@ -141,6 +141,20 @@ class LoginFormTests(unittest.TestCase):
         self.assertNotIn("userEmail", leaderboard_renderer)
         self.assertNotIn("profileKey", leaderboard_renderer)
 
+    def test_private_groups_can_be_created_joined_and_viewed(self):
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="groups-section"', html)
+        self.assertIn('id="create-group"', html)
+        self.assertIn('id="join-group"', html)
+        self.assertIn('id="group-password"', html)
+        self.assertIn('type="password"', html)
+        self.assertIn('apiRequest("/api/groups")', app_javascript)
+        self.assertIn('"/api/groups/join"', app_javascript)
+        self.assertIn("/leaderboard`", app_javascript)
+        self.assertIn('path.startsWith("/api/groups")', app_javascript)
+
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
