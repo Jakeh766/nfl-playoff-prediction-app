@@ -119,7 +119,13 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="leaderboard-name"', html)
         self.assertIn('maxlength="24"', html)
         self.assertIn('apiRequest("/api/profile", {', app_javascript)
-        self.assertIn("if (!state.leaderboardName) return;", app_javascript)
+        self.assertIn("openLeaderboardNameDialog(true);", app_javascript)
+
+        save_flow = app_javascript[app_javascript.index("async function savePrediction") :]
+        self.assertLess(
+            save_flow.index("if (!allGamesPicked())"),
+            save_flow.index("if (!state.leaderboardName)"),
+        )
 
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (

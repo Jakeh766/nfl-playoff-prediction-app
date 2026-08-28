@@ -293,14 +293,6 @@ h1 {
   font-size: 15px;
 }
 
-.profile-links {
-  justify-content: flex-end;
-}
-
-.profile-links:has(#cancel-leaderboard-name:not(.hidden)) {
-  justify-content: space-between;
-}
-
 .signed-in-email {
   margin-bottom: 24px;
   overflow-wrap: anywhere;

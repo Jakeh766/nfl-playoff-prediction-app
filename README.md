@@ -3,7 +3,7 @@
 A self-contained NFL preseason playoff predictor. Users can:
 
 - Create an email/password account through Amazon Cognito.
-- Claim a unique public leaderboard name after signing in.
+- Claim a unique public leaderboard name when saving a prediction.
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
 - Track a private 302-point score as official results become available.

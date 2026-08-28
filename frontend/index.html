@@ -197,39 +197,6 @@
             </form>
             <button class="auth-back" id="reset-password-back" type="button">Back to sign in</button>
           </div>
-          <div class="hidden" id="leaderboard-name-panel">
-            <p class="card-kicker">LEADERBOARD PROFILE</p>
-            <h2>Choose your name.</h2>
-            <p class="auth-description">
-              This is the public name that will identify your picks on the leaderboard.
-              Every name is unique, ignoring capitalization.
-            </p>
-            <form class="auth-form" id="leaderboard-name-form" method="post">
-              <label for="leaderboard-name">Leaderboard name</label>
-              <input
-                id="leaderboard-name"
-                name="leaderboard-name"
-                type="text"
-                minlength="3"
-                maxlength="24"
-                pattern="[A-Za-z0-9][A-Za-z0-9 ._\-]*[A-Za-z0-9]"
-                autocomplete="nickname"
-                autocapitalize="words"
-                spellcheck="false"
-                required
-              />
-              <p class="input-hint">
-                3–24 characters. Letters, numbers, spaces, periods, underscores, and hyphens.
-              </p>
-              <button class="button button-primary auth-button" id="save-leaderboard-name" type="submit">
-                Save leaderboard name
-              </button>
-            </form>
-            <div class="auth-links profile-links">
-              <button class="hidden" id="cancel-leaderboard-name" type="button">Cancel</button>
-              <button id="leaderboard-name-sign-out" type="button">Sign out</button>
-            </div>
-          </div>
           <div class="hidden" id="signed-in-panel">
             <p class="card-kicker">SIGNED IN</p>
             <h2>Your bracket is ready.</h2>
@@ -455,6 +422,47 @@
 
     <dialog
       class="account-dialog"
+      id="leaderboard-name-dialog"
+      aria-labelledby="leaderboard-name-title"
+      aria-describedby="leaderboard-name-description"
+    >
+      <form id="leaderboard-name-form" method="post">
+        <p class="card-kicker">LEADERBOARD PROFILE</p>
+        <h2 id="leaderboard-name-title">Choose your name.</h2>
+        <p id="leaderboard-name-description">
+          Choose the public name that will identify your saved prediction. Every
+          name is unique, ignoring capitalization.
+        </p>
+        <label for="leaderboard-name">Leaderboard name</label>
+        <input
+          id="leaderboard-name"
+          name="leaderboard-name"
+          type="text"
+          minlength="3"
+          maxlength="24"
+          pattern="[A-Za-z0-9][A-Za-z0-9 ._\-]*[A-Za-z0-9]"
+          autocomplete="nickname"
+          autocapitalize="words"
+          spellcheck="false"
+          required
+        />
+        <p class="input-hint">
+          3–24 characters. Letters, numbers, spaces, periods, underscores, and hyphens.
+        </p>
+        <p class="dialog-message" id="leaderboard-name-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" id="cancel-leaderboard-name" type="button">
+            Cancel
+          </button>
+          <button class="button button-primary" id="save-leaderboard-name" type="submit">
+            Save and continue
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      class="account-dialog"
       id="delete-account-dialog"
       aria-labelledby="delete-account-title"
       aria-describedby="delete-account-description"
@@ -493,6 +501,6 @@
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=16"></script>
   </body>
 </html>
