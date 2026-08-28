@@ -230,7 +230,6 @@ const elements = {
   saveLeaderboardName: document.querySelector("#save-leaderboard-name"),
   cancelLeaderboardName: document.querySelector("#cancel-leaderboard-name"),
   leaderboardNameMessage: document.querySelector("#leaderboard-name-message"),
-  signedInLeaderboardName: document.querySelector("#signed-in-leaderboard-name"),
   changeLeaderboardName: document.querySelector("#change-leaderboard-name"),
   openPrediction: document.querySelector("#open-prediction"),
   deleteAccount: document.querySelector("#delete-account"),
@@ -240,12 +239,14 @@ const elements = {
   deleteAccountMessage: document.querySelector("#delete-account-message"),
   cancelDeleteAccount: document.querySelector("#cancel-delete-account"),
   confirmDeleteAccount: document.querySelector("#confirm-delete-account"),
-  signedInEmail: document.querySelector("#signed-in-email"),
   authMessage: document.querySelector("#auth-message"),
-  headerAccountEmail: document.querySelector("#header-account-email"),
-  headerSignOut: document.querySelector("#header-sign-out"),
-  predictor: document.querySelector("#predictor"),
+  headerAccount: document.querySelector("#header-account"),
+  accountDialog: document.querySelector("#account-dialog"),
+  accountLeaderboardName: document.querySelector("#account-leaderboard-name"),
   accountEmail: document.querySelector("#account-email"),
+  closeAccountDialog: document.querySelector("#close-account-dialog"),
+  accountSignOut: document.querySelector("#account-sign-out"),
+  predictor: document.querySelector("#predictor"),
   oddsStatus: document.querySelector("#odds-status"),
   afcSeeds: document.querySelector("#afc-seeds"),
   nfcSeeds: document.querySelector("#nfc-seeds"),
@@ -260,7 +261,6 @@ const elements = {
   championDisplay: document.querySelector("#champion-display"),
   savePrediction: document.querySelector("#save-prediction"),
   resetPicks: document.querySelector("#reset-picks"),
-  predictorSignOut: document.querySelector("#predictor-sign-out"),
   saveState: document.querySelector("#save-state"),
   savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
@@ -657,13 +657,11 @@ function currentUserEmail() {
 
 function renderLeaderboardProfile() {
   elements.signedInPanel.classList.toggle("hidden", !state.signedIn);
-  elements.signedInLeaderboardName.textContent =
+  elements.accountLeaderboardName.textContent =
     state.leaderboardName || "Not set yet";
   elements.changeLeaderboardName.textContent = state.leaderboardName
     ? "Change leaderboard name"
     : "Choose leaderboard name";
-  elements.headerAccountEmail.textContent = state.leaderboardName || state.userEmail;
-  elements.accountEmail.textContent = state.leaderboardName || state.userEmail;
   elements.savedSection.classList.toggle("hidden", !state.signedIn);
   elements.groupsSection.classList.toggle("hidden", !state.signedIn);
 }
@@ -678,9 +676,9 @@ function renderAuthentication(signedIn) {
   ) {
     elements.signedOutPanel.classList.remove("hidden");
   }
-  elements.headerSignOut.classList.toggle("hidden", !signedIn);
-  elements.headerAccountEmail.classList.toggle("hidden", !signedIn);
-  elements.signedInEmail.textContent = state.userEmail;
+  elements.headerAccount.classList.toggle("hidden", !signedIn);
+  elements.accountEmail.textContent = state.userEmail;
+  document.body.classList.toggle("signed-in", signedIn);
 
   if (!signedIn) {
     state.leaderboardName = "";
@@ -774,6 +772,7 @@ function closeLeaderboardNameDialog() {
 
 async function signOut() {
   const session = loadAuthSession();
+  if (elements.accountDialog.open) elements.accountDialog.close();
   clearAuthSession();
   renderAuthentication(false);
   showAuthPanel("signIn");
@@ -2045,6 +2044,7 @@ elements.groupDialog.addEventListener("close", () => {
   elements.groupDialogMessage.textContent = "";
 });
 elements.changeLeaderboardName.addEventListener("click", () => {
+  elements.accountDialog.close();
   openLeaderboardNameDialog(false);
 });
 elements.cancelLeaderboardName.addEventListener("click", closeLeaderboardNameDialog);
@@ -2073,7 +2073,17 @@ elements.forgotPasswordBack.addEventListener("click", () => showAuthPanel("signI
 elements.resetPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
 elements.resendConfirmation.addEventListener("click", resendConfirmationCode);
 elements.openPrediction.addEventListener("click", () => openPrediction());
-elements.deleteAccount.addEventListener("click", openDeleteAccountDialog);
+elements.headerAccount.addEventListener("click", () => {
+  elements.accountDialog.showModal();
+});
+elements.closeAccountDialog.addEventListener("click", () => {
+  elements.accountDialog.close();
+});
+elements.accountSignOut.addEventListener("click", signOut);
+elements.deleteAccount.addEventListener("click", () => {
+  elements.accountDialog.close();
+  openDeleteAccountDialog();
+});
 elements.deleteAccountForm.addEventListener("submit", submitDeleteAccount);
 elements.deleteAccountConfirmation.addEventListener(
   "input",
@@ -2086,8 +2096,6 @@ elements.deleteAccountDialog.addEventListener("cancel", (event) => {
   if (deleteAccountPending) event.preventDefault();
 });
 elements.deleteAccountDialog.addEventListener("close", resetDeleteAccountDialog);
-elements.headerSignOut.addEventListener("click", signOut);
-elements.predictorSignOut.addEventListener("click", signOut);
 window.addEventListener("pageshow", resetSignInButton);
 
 async function initializeAuthentication() {
@@ -2095,8 +2103,6 @@ async function initializeAuthentication() {
     if (LEADERBOARD_PROFILE_PREVIEW) {
       renderAuthentication(true);
       state.userEmail = "preview@example.com";
-      elements.signedInEmail.textContent = state.userEmail;
-      elements.headerAccountEmail.textContent = state.userEmail;
       elements.accountEmail.textContent = state.userEmail;
       renderLeaderboardProfile();
       openLeaderboardNameDialog(true);

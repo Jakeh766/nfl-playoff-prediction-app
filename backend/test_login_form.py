@@ -111,6 +111,23 @@ class LoginFormTests(unittest.TestCase):
         self.assertLess(prediction_delete, profile_delete)
         self.assertLess(profile_delete, account_delete)
 
+    def test_signed_in_card_keeps_account_details_in_account_dialog(self):
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+
+        signed_in_panel = html[
+            html.index('id="signed-in-panel"') : html.index('id="auth-message"')
+        ]
+        account_dialog = html[
+            html.index('id="account-dialog"') : html.index('id="leaderboard-name-dialog"')
+        ]
+
+        self.assertIn('id="open-prediction"', signed_in_panel)
+        self.assertNotIn('id="account-email"', signed_in_panel)
+        self.assertNotIn('id="change-leaderboard-name"', signed_in_panel)
+        self.assertIn('id="account-email"', account_dialog)
+        self.assertIn('id="change-leaderboard-name"', account_dialog)
+        self.assertIn('id="delete-account"', account_dialog)
+
     def test_leaderboard_name_is_required_and_sent_to_the_profile_api(self):
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")

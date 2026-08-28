@@ -104,17 +104,7 @@ button {
   gap: 12px;
 }
 
-.account-email {
-  max-width: 240px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.header-sign-out {
+.header-account {
   min-height: 36px;
   padding: 0 14px;
   font-size: 11px;
@@ -263,41 +253,6 @@ h1 {
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.profile-name-button {
-  display: block;
-  margin: 18px auto 0;
-  padding: 0;
-  color: var(--blue-dark);
-  background: none;
-  border: 0;
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.leaderboard-identity {
-  margin: 0 0 8px;
-  padding: 10px 12px;
-  color: var(--blue-dark);
-  background: rgba(24, 89, 169, 0.08);
-  border-left: 3px solid var(--blue);
-  font-size: 12px;
-}
-
-.leaderboard-identity strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 15px;
-}
-
-.signed-in-email {
-  margin-bottom: 24px;
-  overflow-wrap: anywhere;
-  color: var(--muted);
-  font-weight: 700;
 }
 
 .auth-message {
@@ -474,6 +429,78 @@ select:focus {
   font-family: var(--display);
   font-size: 2rem;
   text-transform: uppercase;
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.dialog-close {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  color: var(--ink);
+  border-color: rgba(16, 34, 58, 0.35);
+}
+
+.account-details {
+  margin: 20px 0;
+  overflow: hidden;
+  background: rgba(24, 89, 169, 0.06);
+  border: 1px solid rgba(24, 89, 169, 0.14);
+  border-radius: 6px;
+}
+
+.account-details p {
+  margin: 0;
+  padding: 13px 15px;
+}
+
+.account-details p + p {
+  border-top: 1px solid rgba(24, 89, 169, 0.14);
+}
+
+.account-details span,
+.account-details strong {
+  display: block;
+}
+
+.account-details span {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-details strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.account-settings-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.account-settings-actions .button {
+  width: 100%;
 }
 
 .account-dialog > form > p:not(.card-kicker):not(.dialog-message) {
@@ -1623,14 +1650,19 @@ footer p {
     display: none;
   }
 
-  .account-email {
-    display: none;
-  }
-
   .hero {
     min-height: auto;
     padding-top: 65px;
     padding-bottom: 75px;
+  }
+
+  body.signed-in .hero {
+    padding-top: 38px;
+    padding-bottom: 60px;
+  }
+
+  body.signed-in .hero-copy {
+    display: none;
   }
 
   .profile-card {
@@ -1639,6 +1671,10 @@ footer p {
 
   .account-dialog {
     padding: 25px;
+  }
+
+  .account-settings-actions {
+    grid-template-columns: 1fr;
   }
 
   .dialog-actions {

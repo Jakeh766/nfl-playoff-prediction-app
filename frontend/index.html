@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=11" />
+    <link rel="stylesheet" href="styles.css?v=12" />
   </head>
   <body>
     <header class="site-header">
@@ -23,9 +23,8 @@
         <span>ROAD TO THE BOWL</span>
       </a>
       <div class="header-actions">
-        <span class="account-email hidden" id="header-account-email"></span>
-        <button class="button button-ghost header-sign-out hidden" id="header-sign-out" type="button">
-          Sign out
+        <button class="button button-ghost header-account hidden" id="header-account" type="button">
+          Account
         </button>
         <div class="season-badge">PRESEASON PICKS</div>
       </div>
@@ -200,18 +199,9 @@
           <div class="hidden" id="signed-in-panel">
             <p class="card-kicker">SIGNED IN</p>
             <h2>Your bracket is ready.</h2>
-            <p class="leaderboard-identity">
-              Leaderboard name <strong id="signed-in-leaderboard-name"></strong>
-            </p>
-            <p class="signed-in-email" id="signed-in-email"></p>
+            <p class="auth-description">Continue your picks or review your saved bracket.</p>
             <button class="button button-primary auth-button" id="open-prediction" type="button">
               Open my bracket
-            </button>
-            <button class="profile-name-button" id="change-leaderboard-name" type="button">
-              Change leaderboard name
-            </button>
-            <button class="delete-account-button" id="delete-account" type="button">
-              Delete account
             </button>
           </div>
           <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
@@ -223,9 +213,6 @@
           <div>
             <p class="eyebrow">01 · SET THE FIELD</p>
             <h2>Seed your playoff teams.</h2>
-            <p class="active-profile">
-              Signed in as <strong id="account-email"></strong>
-            </p>
             <p>
               Pick each North, South, East, and West winner first. Then rank
               those four teams as seeds 1–4 before choosing the three wild
@@ -235,9 +222,6 @@
               Loading projected season win totals…
             </p>
           </div>
-          <button class="button button-ghost" id="predictor-sign-out" type="button">
-            Sign out
-          </button>
         </div>
 
         <div class="conference-grid">
@@ -502,6 +486,48 @@
 
     <dialog
       class="account-dialog"
+      id="account-dialog"
+      aria-labelledby="account-dialog-title"
+    >
+      <div class="dialog-heading">
+        <div>
+          <p class="card-kicker">ACCOUNT</p>
+          <h2 id="account-dialog-title">Account settings.</h2>
+        </div>
+        <button
+          class="dialog-close"
+          id="close-account-dialog"
+          type="button"
+          aria-label="Close account settings"
+        >
+          ×
+        </button>
+      </div>
+      <div class="account-details">
+        <p>
+          <span>Leaderboard name</span>
+          <strong id="account-leaderboard-name"></strong>
+        </p>
+        <p>
+          <span>Email address</span>
+          <strong id="account-email"></strong>
+        </p>
+      </div>
+      <div class="account-settings-actions">
+        <button class="button button-secondary" id="change-leaderboard-name" type="button">
+          Change leaderboard name
+        </button>
+        <button class="button button-ghost" id="account-sign-out" type="button">
+          Sign out
+        </button>
+      </div>
+      <button class="delete-account-button" id="delete-account" type="button">
+        Delete account
+      </button>
+    </dialog>
+
+    <dialog
+      class="account-dialog"
       id="leaderboard-name-dialog"
       aria-labelledby="leaderboard-name-title"
       aria-describedby="leaderboard-name-description"
@@ -628,6 +654,6 @@
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
   </body>
 </html>
