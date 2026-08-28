@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=13" />
+    <link rel="stylesheet" href="styles.css?v=14" />
   </head>
   <body>
     <header class="site-header">
@@ -347,34 +347,47 @@
         </p>
       </section>
 
-      <section class="groups-section hidden" id="groups-section">
-        <div class="section-heading compact groups-heading">
+      <section class="leaderboard-section" id="leaderboard-section">
+        <div class="section-heading compact leaderboard-heading">
           <div>
-            <p class="eyebrow">03 · PRIVATE COMPETITION</p>
-            <h2>Your groups.</h2>
+            <p class="eyebrow">03 · THE STANDINGS</p>
+            <h2>Leaderboards.</h2>
             <p>
-              Create or join a password-protected group, then compare scores on
-              a leaderboard that only includes that group's members.
+              Compare saved predictions publicly or switch to a private group.
+              Select any player to view their bracket; account details stay private.
             </p>
           </div>
-          <div class="group-actions">
-            <button class="button button-secondary" id="join-group" type="button">Join group</button>
-            <button class="button button-primary" id="create-group" type="button">Create group</button>
+          <div class="leaderboard-view-tabs" role="tablist" aria-label="Leaderboard view">
+            <button
+              class="leaderboard-view-tab active"
+              id="public-leaderboard-tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="public-leaderboard-panel"
+            >Public</button>
+            <button
+              class="leaderboard-view-tab hidden"
+              id="groups-leaderboard-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="groups-leaderboard-panel"
+              tabindex="-1"
+            >Groups</button>
           </div>
         </div>
-        <div class="group-tabs" id="group-tabs" aria-label="Your groups"></div>
-        <p class="empty-groups" id="empty-groups">
-          You have not joined a group yet. Create one for friends or join one with its name and password.
-        </p>
-        <div class="group-leaderboard hidden" id="group-leaderboard">
-          <div class="group-leaderboard-heading">
-            <div>
-              <p class="card-kicker">GROUP LEADERBOARD</p>
-              <h3 id="active-group-name"></h3>
-            </div>
-            <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
-          </div>
-          <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
+
+        <div
+          class="leaderboard-view-panel"
+          id="public-leaderboard-panel"
+          role="tabpanel"
+          aria-labelledby="public-leaderboard-tab"
+        >
+          <p class="leaderboard-status" id="leaderboard-status" role="status">
+            Loading leaderboard…
+          </p>
+          <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
             <table class="leaderboard-table">
               <thead>
                 <tr>
@@ -385,52 +398,66 @@
                   <th scope="col">Total</th>
                 </tr>
               </thead>
-              <tbody id="group-leaderboard-body"></tbody>
+              <tbody id="leaderboard-body"></tbody>
             </table>
           </div>
-          <p class="empty-leaderboard hidden" id="empty-group-leaderboard">
-            No group member has a saved prediction yet.
+          <p class="empty-leaderboard hidden" id="empty-leaderboard">
+            No scored predictions yet. The first saved prediction will take the top spot.
           </p>
         </div>
-      </section>
 
-      <section class="leaderboard-section" id="leaderboard-section">
-        <div class="section-heading compact">
-          <div>
-            <p class="eyebrow">04 · THE STANDINGS</p>
-            <h2>Public leaderboard.</h2>
+        <div
+          class="leaderboard-view-panel hidden"
+          id="groups-leaderboard-panel"
+          role="tabpanel"
+          aria-labelledby="groups-leaderboard-tab"
+        >
+          <div class="groups-toolbar">
             <p>
-              Compare every saved preseason prediction. Select a player to view
-              their bracket; account details stay private.
+              Create or join a password-protected group to compare only its members.
             </p>
-            <p class="leaderboard-status" id="leaderboard-status" role="status">
-              Loading leaderboard…
+            <div class="group-actions">
+              <button class="button button-secondary" id="join-group" type="button">Join group</button>
+              <button class="button button-primary" id="create-group" type="button">Create group</button>
+            </div>
+          </div>
+          <div class="group-tabs" id="group-tabs" aria-label="Your groups"></div>
+          <p class="empty-groups" id="empty-groups">
+            You have not joined a group yet. Create one for friends or join one with its name and password.
+          </p>
+          <div class="group-leaderboard hidden" id="group-leaderboard">
+            <div class="group-leaderboard-heading">
+              <div>
+                <p class="card-kicker">GROUP LEADERBOARD</p>
+                <h3 id="active-group-name"></h3>
+              </div>
+              <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
+            </div>
+            <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
+              <table class="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Rank</th>
+                    <th scope="col">Player</th>
+                    <th scope="col">Field + seeding</th>
+                    <th scope="col">Playoffs</th>
+                    <th scope="col">Total</th>
+                  </tr>
+                </thead>
+                <tbody id="group-leaderboard-body"></tbody>
+              </table>
+            </div>
+            <p class="empty-leaderboard hidden" id="empty-group-leaderboard">
+              No group member has a saved prediction yet.
             </p>
           </div>
         </div>
-        <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
-          <table class="leaderboard-table">
-            <thead>
-              <tr>
-                <th scope="col">Rank</th>
-                <th scope="col">Player</th>
-                <th scope="col">Field + seeding</th>
-                <th scope="col">Playoffs</th>
-                <th scope="col">Total</th>
-              </tr>
-            </thead>
-            <tbody id="leaderboard-body"></tbody>
-          </table>
-        </div>
-        <p class="empty-leaderboard hidden" id="empty-leaderboard">
-          No scored predictions yet. The first saved prediction will take the top spot.
-        </p>
       </section>
 
       <section class="scoring-section" id="scoring-section">
         <div class="section-heading compact">
           <div>
-            <p class="eyebrow">05 · FOLLOW THE SEASON</p>
+            <p class="eyebrow">04 · FOLLOW THE SEASON</p>
             <h2>Score the whole journey.</h2>
             <p>
               Earn points for building the right playoff field, nailing the seeds,
@@ -677,6 +704,6 @@
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=18"></script>
+    <script src="app.js?v=19"></script>
   </body>
 </html>

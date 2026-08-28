@@ -634,7 +634,6 @@ select:focus {
 
 .predictor,
 .saved-section,
-.groups-section,
 .leaderboard-section,
 .scoring-section {
   max-width: 1440px;
@@ -1275,12 +1274,71 @@ select:focus {
   border-top: 1px solid rgba(16, 34, 58, 0.12);
 }
 
-.groups-section {
-  border-top: 1px solid rgba(16, 34, 58, 0.12);
+.leaderboard-heading {
+  align-items: center;
 }
 
-.groups-heading {
+.leaderboard-view-tabs {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(16, 34, 58, 0.07);
+  border: 1px solid rgba(16, 34, 58, 0.11);
+  border-radius: 7px;
+}
+
+.leaderboard-view-tab {
+  min-width: 110px;
+  min-height: 42px;
+  padding: 0 20px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: background 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.leaderboard-view-tab:hover {
+  color: var(--blue-dark);
+}
+
+.leaderboard-view-tab.active {
+  color: var(--blue-dark);
+  background: var(--card);
+  box-shadow: 0 2px 8px rgba(16, 34, 58, 0.1);
+}
+
+.leaderboard-view-tab:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.3);
+  outline-offset: 2px;
+}
+
+.leaderboard-view-panel > .leaderboard-status {
+  margin: 0 0 18px !important;
+}
+
+.groups-toolbar {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 22px;
+  padding: 18px 20px;
+  background: rgba(24, 89, 169, 0.055);
+  border-left: 3px solid var(--blue);
+}
+
+.groups-toolbar > p {
+  max-width: 660px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .group-actions {
@@ -1833,7 +1891,6 @@ footer p {
 
   .predictor,
   .saved-section,
-  .groups-section,
   .leaderboard-section,
   .scoring-section {
     padding-top: 68px;
@@ -1843,6 +1900,15 @@ footer p {
   .section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .leaderboard-view-tabs {
+    width: 100%;
+  }
+
+  .leaderboard-view-tab {
+    flex: 1;
+    min-width: 0;
   }
 
   .conference-grid {
@@ -1905,11 +1971,20 @@ footer p {
     grid-template-columns: 1fr;
   }
 
-  .group-actions,
+  .groups-toolbar,
   .group-leaderboard-heading {
     width: 100%;
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .groups-toolbar {
+    gap: 16px;
+  }
+
+  .group-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .group-actions .button {

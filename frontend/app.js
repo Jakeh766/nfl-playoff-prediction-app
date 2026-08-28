@@ -189,6 +189,7 @@ const state = {
   savedAt: null,
   savedPrediction: null,
   leaderboard: null,
+  leaderboardView: "public",
   groups: [],
   activeGroupId: "",
   groupLeaderboard: null,
@@ -265,7 +266,10 @@ const elements = {
   savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
   emptyLocker: document.querySelector("#empty-locker"),
-  groupsSection: document.querySelector("#groups-section"),
+  publicLeaderboardTab: document.querySelector("#public-leaderboard-tab"),
+  groupsLeaderboardTab: document.querySelector("#groups-leaderboard-tab"),
+  publicLeaderboardPanel: document.querySelector("#public-leaderboard-panel"),
+  groupsLeaderboardPanel: document.querySelector("#groups-leaderboard-panel"),
   groupTabs: document.querySelector("#group-tabs"),
   emptyGroups: document.querySelector("#empty-groups"),
   groupLeaderboard: document.querySelector("#group-leaderboard"),
@@ -661,6 +665,33 @@ function currentUserEmail() {
   return String(decodeJwtPayload(session?.idToken || "").email || "");
 }
 
+function renderLeaderboardView(view = state.leaderboardView) {
+  const nextView = view === "groups" && state.signedIn ? "groups" : "public";
+  const publicActive = nextView === "public";
+  state.leaderboardView = nextView;
+
+  elements.groupsLeaderboardTab.classList.toggle("hidden", !state.signedIn);
+  elements.publicLeaderboardTab.classList.toggle("active", publicActive);
+  elements.publicLeaderboardTab.setAttribute("aria-selected", String(publicActive));
+  elements.publicLeaderboardTab.tabIndex = publicActive ? 0 : -1;
+  elements.groupsLeaderboardTab.classList.toggle("active", !publicActive);
+  elements.groupsLeaderboardTab.setAttribute("aria-selected", String(!publicActive));
+  elements.groupsLeaderboardTab.tabIndex = publicActive ? -1 : 0;
+  elements.publicLeaderboardPanel.classList.toggle("hidden", !publicActive);
+  elements.groupsLeaderboardPanel.classList.toggle("hidden", publicActive);
+}
+
+function handleLeaderboardViewKeydown(event) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const view = event.key === "ArrowLeft" || event.key === "Home" ? "public" : "groups";
+  renderLeaderboardView(view);
+  (state.leaderboardView === "public"
+    ? elements.publicLeaderboardTab
+    : elements.groupsLeaderboardTab
+  ).focus();
+}
+
 function renderLeaderboardProfile() {
   elements.signedInPanel.classList.toggle("hidden", !state.signedIn);
   elements.accountLeaderboardName.textContent =
@@ -669,7 +700,7 @@ function renderLeaderboardProfile() {
     ? "Change leaderboard name"
     : "Choose leaderboard name";
   elements.savedSection.classList.toggle("hidden", !state.signedIn);
-  elements.groupsSection.classList.toggle("hidden", !state.signedIn);
+  renderLeaderboardView();
 }
 
 function renderAuthentication(signedIn) {
@@ -690,12 +721,12 @@ function renderAuthentication(signedIn) {
     state.leaderboardName = "";
     pendingPredictionSave = false;
     state.savedPrediction = null;
+    state.leaderboardView = "public";
     state.groups = [];
     state.activeGroupId = "";
     state.groupLeaderboard = null;
     elements.predictor.classList.add("hidden");
     elements.savedSection.classList.add("hidden");
-    elements.groupsSection.classList.add("hidden");
   }
   renderLeaderboardProfile();
 }
@@ -2293,6 +2324,14 @@ elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
 elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
 elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
 elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
+elements.publicLeaderboardTab.addEventListener("click", () => {
+  renderLeaderboardView("public");
+});
+elements.groupsLeaderboardTab.addEventListener("click", () => {
+  renderLeaderboardView("groups");
+});
+elements.publicLeaderboardTab.addEventListener("keydown", handleLeaderboardViewKeydown);
+elements.groupsLeaderboardTab.addEventListener("keydown", handleLeaderboardViewKeydown);
 elements.createGroup.addEventListener("click", () => openGroupDialog("create"));
 elements.joinGroup.addEventListener("click", () => openGroupDialog("join"));
 elements.groupForm.addEventListener("submit", submitGroup);

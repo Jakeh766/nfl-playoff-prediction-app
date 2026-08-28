@@ -169,11 +169,17 @@ class LoginFormTests(unittest.TestCase):
             terraform,
         )
 
-    def test_private_groups_can_be_created_joined_and_viewed(self):
+    def test_public_and_group_leaderboards_share_a_toggleable_section(self):
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
 
-        self.assertIn('id="groups-section"', html)
+        self.assertIn('id="leaderboard-section"', html)
+        self.assertIn('id="public-leaderboard-tab"', html)
+        self.assertIn('id="groups-leaderboard-tab"', html)
+        self.assertIn('id="public-leaderboard-panel"', html)
+        self.assertIn('id="groups-leaderboard-panel"', html)
+        self.assertNotIn('id="groups-section"', html)
+        self.assertIn('renderLeaderboardView("groups")', app_javascript)
         self.assertIn('id="create-group"', html)
         self.assertIn('id="join-group"', html)
         self.assertIn('id="group-password"', html)
