@@ -295,6 +295,7 @@ resource "aws_s3_object" "frontend" {
 
 locals {
   auth_config_javascript = "window.AUTH_CONFIG = ${jsonencode({
+    environment = var.environment
     domain      = "https://${aws_cognito_user_pool_domain.login.domain}.auth.${var.aws_region}.amazoncognito.com"
     clientId    = aws_cognito_user_pool_client.browser.id
     region      = var.aws_region

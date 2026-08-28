@@ -40,6 +40,8 @@ const TEAMS = {
 const LOCAL_PREVIEW =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
+const TEST_MODE =
+  window.AUTH_CONFIG?.environment === "dev" || LOCAL_PREVIEW;
 
 const TEAM_DIVISIONS = {
   "Baltimore Ravens": "AFC North",
@@ -220,7 +222,7 @@ const elements = {
   toast: document.querySelector("#toast"),
 };
 
-if (!LOCAL_PREVIEW) {
+if (!TEST_MODE) {
   elements.randomizeBracket.classList.add("hidden");
 }
 
@@ -1000,7 +1002,7 @@ function buildBracket() {
 }
 
 function randomizeBracket() {
-  if (!LOCAL_PREVIEW) return;
+  if (!TEST_MODE) return;
 
   state.divisionWinners = createEmptyDivisionWinners();
   state.seeds = { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
