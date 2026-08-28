@@ -64,8 +64,8 @@ def rotated(values: tuple[str, ...], amount: int) -> list[str]:
 def demo_prediction(player_index: int, saved_at: int) -> dict:
     afc = rotated(AFC_SEEDS, player_index % 4)
     nfc = rotated(NFC_SEEDS, (player_index * 2) % 4)
-    afc_champion = afc[player_index % 3]
-    nfc_champion = nfc[(player_index + 1) % 3]
+    afc_champion = afc[player_index % 2]
+    nfc_champion = nfc[(player_index + 1) % 2]
     champion = afc_champion if player_index % 2 == 0 else nfc_champion
 
     return {
@@ -91,7 +91,7 @@ def demo_prediction(player_index: int, saved_at: int) -> dict:
                 "wc-3-6": afc[2],
                 "wc-4-5": afc[4],
                 "div-1": afc[0],
-                "div-2": afc_champion,
+                "div-2": afc[1],
                 "conf": afc_champion,
             },
             "NFC": {
@@ -99,7 +99,7 @@ def demo_prediction(player_index: int, saved_at: int) -> dict:
                 "wc-3-6": nfc[2],
                 "wc-4-5": nfc[4],
                 "div-1": nfc[0],
-                "div-2": nfc_champion,
+                "div-2": nfc[1],
                 "conf": nfc_champion,
             },
             "superBowl": champion,

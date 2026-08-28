@@ -53,6 +53,40 @@ class DevSeedTests(unittest.TestCase):
             self.assertEqual(len(group["passwordSalt"]), 32)
             self.assertEqual(len(group["passwordHash"]), 64)
 
+    def test_demo_downstream_picks_follow_their_generated_matchups(self):
+        for prediction in self.data["predictions"]:
+            conference_champions = []
+            for conference in ("AFC", "NFC"):
+                seeds = prediction["seeds"][conference]
+                picks = prediction["picks"][conference]
+                wild_card_games = {
+                    "wc-2-7": (seeds[1], seeds[6]),
+                    "wc-3-6": (seeds[2], seeds[5]),
+                    "wc-4-5": (seeds[3], seeds[4]),
+                }
+                wild_card_winners = []
+                for game_id, teams in wild_card_games.items():
+                    self.assertIn(picks[game_id], teams)
+                    wild_card_winners.append(picks[game_id])
+
+                remaining = sorted(
+                    [seeds[0], *wild_card_winners],
+                    key=seeds.index,
+                )
+                divisional_games = {
+                    "div-1": (remaining[0], remaining[3]),
+                    "div-2": (remaining[1], remaining[2]),
+                }
+                divisional_winners = []
+                for game_id, teams in divisional_games.items():
+                    self.assertIn(picks[game_id], teams)
+                    divisional_winners.append(picks[game_id])
+
+                self.assertIn(picks["conf"], divisional_winners)
+                conference_champions.append(picks["conf"])
+
+            self.assertIn(prediction["picks"]["superBowl"], conference_champions)
+
     def test_all_seed_values_convert_to_dynamodb_attribute_values(self):
         for items in self.data.values():
             for item in items:
