@@ -72,12 +72,6 @@ resource "aws_cognito_user_pool" "users" {
   }
 }
 
-resource "aws_cognito_user_pool_domain" "login" {
-  domain                = "${local.resource_prefix}-${data.aws_caller_identity.current.account_id}"
-  managed_login_version = 2
-  user_pool_id          = aws_cognito_user_pool.users.id
-}
-
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = var.lambda_source_dir
@@ -170,13 +164,7 @@ resource "aws_cognito_user_pool_client" "browser" {
 
   generate_secret                      = false
   explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH"]
-  allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["email", "openid"]
-  supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = ["https://${aws_cloudfront_distribution.app.domain_name}"]
-  logout_urls                          = ["https://${aws_cloudfront_distribution.app.domain_name}"]
-  default_redirect_uri                 = "https://${aws_cloudfront_distribution.app.domain_name}"
+  allowed_oauth_flows_user_pool_client = false
   enable_token_revocation              = true
   prevent_user_existence_errors        = "ENABLED"
   access_token_validity                = 1
@@ -188,14 +176,6 @@ resource "aws_cognito_user_pool_client" "browser" {
     id_token      = "hours"
     refresh_token = "days"
   }
-}
-
-resource "aws_cognito_managed_login_branding" "browser" {
-  client_id                   = aws_cognito_user_pool_client.browser.id
-  user_pool_id                = aws_cognito_user_pool.users.id
-  use_cognito_provided_values = true
-
-  depends_on = [aws_cognito_user_pool_domain.login]
 }
 
 resource "aws_apigatewayv2_authorizer" "cognito" {
@@ -224,30 +204,27 @@ resource "aws_apigatewayv2_route" "win_totals" {
 }
 
 resource "aws_apigatewayv2_route" "prediction_get" {
-  api_id               = aws_apigatewayv2_api.api.id
-  route_key            = "GET /api/prediction"
-  target               = "integrations/${aws_apigatewayv2_integration.lambda.id}"
-  authorization_type   = "JWT"
-  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["openid"]
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /api/prediction"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
 resource "aws_apigatewayv2_route" "prediction_put" {
-  api_id               = aws_apigatewayv2_api.api.id
-  route_key            = "PUT /api/prediction"
-  target               = "integrations/${aws_apigatewayv2_integration.lambda.id}"
-  authorization_type   = "JWT"
-  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["openid"]
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "PUT /api/prediction"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
 resource "aws_apigatewayv2_route" "prediction_delete" {
-  api_id               = aws_apigatewayv2_api.api.id
-  route_key            = "DELETE /api/prediction"
-  target               = "integrations/${aws_apigatewayv2_integration.lambda.id}"
-  authorization_type   = "JWT"
-  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
-  authorization_scopes = ["openid"]
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "DELETE /api/prediction"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -296,11 +273,8 @@ resource "aws_s3_object" "frontend" {
 locals {
   auth_config_javascript = "window.AUTH_CONFIG = ${jsonencode({
     environment = var.environment
-    domain      = "https://${aws_cognito_user_pool_domain.login.domain}.auth.${var.aws_region}.amazoncognito.com"
     clientId    = aws_cognito_user_pool_client.browser.id
     region      = var.aws_region
-    redirectUri = "https://${aws_cloudfront_distribution.app.domain_name}"
-    logoutUri   = "https://${aws_cloudfront_distribution.app.domain_name}"
   })};\n"
 }
 

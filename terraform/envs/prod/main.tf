@@ -76,10 +76,6 @@ output "cognito_client_id" {
   value = module.nfl_app.cognito_client_id
 }
 
-output "cognito_domain" {
-  value = module.nfl_app.cognito_domain
-}
-
 # These moves preserve the existing production resources as they enter the module.
 moved {
   from = data.archive_file.lambda_zip

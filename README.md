@@ -16,11 +16,13 @@ consensus projection for each team.
 
 The deployed app signs existing users in with a password-manager-friendly form
 on the application origin. The form sends credentials directly to Cognito over
-TLS with Cognito's `USER_PASSWORD_AUTH` flow. Account creation and password
-recovery continue to use Cognito managed login with the OAuth 2.0 authorization
-code flow and PKCE. Email verification is required and MFA is off. API Gateway
-validates Cognito access tokens before invoking the prediction routes, and the
-Lambda function uses the verified Cognito `sub` claim as the DynamoDB key.
+TLS with Cognito's `USER_PASSWORD_AUTH` flow. Account creation, email
+confirmation, and password recovery also happen in the app through Cognito's
+public identity-provider API. The deployment does not create or use a Cognito
+managed-login domain. Email verification is required and MFA is off. API
+Gateway validates Cognito access tokens before invoking the prediction routes,
+and the Lambda function uses the verified Cognito `sub` claim as the DynamoDB
+key.
 
 Win-total projections remain public. Prediction reads and writes require a
 signed-in account.

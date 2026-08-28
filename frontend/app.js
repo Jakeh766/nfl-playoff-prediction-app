@@ -193,6 +193,27 @@ const elements = {
   loginPassword: document.querySelector("#login-password"),
   forgotPassword: document.querySelector("#forgot-password"),
   createAccount: document.querySelector("#create-account"),
+  createAccountPanel: document.querySelector("#create-account-panel"),
+  createAccountForm: document.querySelector("#create-account-form"),
+  createEmail: document.querySelector("#create-email"),
+  createPassword: document.querySelector("#create-password"),
+  createAccountBack: document.querySelector("#create-account-back"),
+  confirmAccountPanel: document.querySelector("#confirm-account-panel"),
+  confirmAccountForm: document.querySelector("#confirm-account-form"),
+  confirmEmail: document.querySelector("#confirm-email"),
+  confirmationCode: document.querySelector("#confirmation-code"),
+  resendConfirmation: document.querySelector("#resend-confirmation"),
+  confirmAccountBack: document.querySelector("#confirm-account-back"),
+  forgotPasswordPanel: document.querySelector("#forgot-password-panel"),
+  forgotPasswordForm: document.querySelector("#forgot-password-form"),
+  forgotEmail: document.querySelector("#forgot-email"),
+  forgotPasswordBack: document.querySelector("#forgot-password-back"),
+  resetPasswordPanel: document.querySelector("#reset-password-panel"),
+  resetPasswordForm: document.querySelector("#reset-password-form"),
+  resetEmail: document.querySelector("#reset-email"),
+  resetCode: document.querySelector("#reset-code"),
+  resetPassword: document.querySelector("#reset-password"),
+  resetPasswordBack: document.querySelector("#reset-password-back"),
   openPrediction: document.querySelector("#open-prediction"),
   signedInEmail: document.querySelector("#signed-in-email"),
   authMessage: document.querySelector("#auth-message"),
@@ -235,29 +256,23 @@ function clone(value) {
 }
 
 const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
-const AUTH_TRANSACTION_KEY = "road-to-bowl.auth.transaction";
 const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
-  const domain = String(config.domain || "").replace(/\/$/, "");
-  const domainRegion = domain.match(/\.auth\.([a-z0-9-]+)\.amazoncognito\.com$/)?.[1];
-  const region = String(config.region || domainRegion || "");
+  const region = String(config.region || "");
   return {
-    domain,
     clientId: String(config.clientId || ""),
     cognitoEndpoint: region
       ? `https://cognito-idp.${region}.amazonaws.com`
       : "",
-    redirectUri: String(config.redirectUri || window.location.origin),
-    logoutUri: String(config.logoutUri || window.location.origin),
   };
 }
 
 function authIsConfigured() {
   const config = authConfig();
-  return Boolean(config.domain && config.clientId && config.cognitoEndpoint);
+  return Boolean(config.clientId && config.cognitoEndpoint);
 }
 
 function resetSignInButton() {
@@ -265,29 +280,6 @@ function resetSignInButton() {
   elements.signIn.disabled = !authIsConfigured();
   elements.signIn.removeAttribute("aria-busy");
   elements.signIn.textContent = SIGN_IN_LABEL;
-}
-
-function encodeBase64Url(bytes) {
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-function randomBase64Url(byteLength = 48) {
-  return encodeBase64Url(crypto.getRandomValues(new Uint8Array(byteLength)));
-}
-
-async function pkceChallenge(verifier) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(verifier),
-  );
-  return encodeBase64Url(new Uint8Array(digest));
 }
 
 function loadAuthSession() {
@@ -314,7 +306,6 @@ function saveAuthSession(tokenResponse, previousSession = null) {
 
 function clearAuthSession() {
   sessionStorage.removeItem(AUTH_SESSION_KEY);
-  sessionStorage.removeItem(AUTH_TRANSACTION_KEY);
 }
 
 function decodeJwtPayload(token) {
@@ -328,43 +319,38 @@ function decodeJwtPayload(token) {
   }
 }
 
-async function requestTokens(parameters) {
+async function requestCognito(operation, parameters) {
   const config = authConfig();
-  const response = await fetch(`${config.domain}/oauth2/token`, {
+  if (!config.cognitoEndpoint || !config.clientId) {
+    throw new Error("Authentication is not configured for this environment.");
+  }
+  const response = await fetch(config.cognitoEndpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(parameters),
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": `AWSCognitoIdentityProviderService.${operation}`,
+    },
+    body: JSON.stringify(parameters),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error_description || "Cognito rejected the login request.");
+    const error = new Error(payload.message || "Cognito rejected the request.");
+    error.code = String(payload.__type || "").split("#").at(-1);
+    throw error;
   }
   return payload;
 }
 
 async function requestPasswordSignIn(username, password) {
   const config = authConfig();
-  const response = await fetch(config.cognitoEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-amz-json-1.1",
-      "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+  const payload = await requestCognito("InitiateAuth", {
+    AuthFlow: "USER_PASSWORD_AUTH",
+    ClientId: config.clientId,
+    AuthParameters: {
+      USERNAME: username,
+      PASSWORD: password,
     },
-    body: JSON.stringify({
-      AuthFlow: "USER_PASSWORD_AUTH",
-      ClientId: config.clientId,
-      AuthParameters: {
-        USERNAME: username,
-        PASSWORD: password,
-      },
-    }),
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload.message || "Cognito rejected the login request.");
-    error.code = String(payload.__type || "").split("#").at(-1);
-    throw error;
-  }
   if (!payload.AuthenticationResult) {
     throw new Error("This account requires an additional sign-in step.");
   }
@@ -415,73 +401,165 @@ async function submitSignIn(event) {
       expires_in: authentication.ExpiresIn,
     });
     elements.loginPassword.value = "";
+    elements.authMessage.textContent = "";
     renderAuthentication(true);
     await refreshSavedPrediction();
     if (loadAuthSession()) openPrediction();
   } catch (error) {
     console.error("Could not sign in with Cognito.", error);
-    elements.authMessage.textContent = signInErrorMessage(error);
+    if (error.code === "UserNotConfirmedException") {
+      elements.confirmEmail.value = elements.loginEmail.value.trim();
+      showAuthPanel("confirmAccount", "Confirm your email before signing in.");
+    } else {
+      elements.authMessage.textContent = signInErrorMessage(error);
+    }
   } finally {
     resetSignInButton();
   }
 }
 
-async function beginManagedFlow(path) {
-  if (!authIsConfigured()) return;
+const authPanels = {
+  signIn: elements.signedOutPanel,
+  createAccount: elements.createAccountPanel,
+  confirmAccount: elements.confirmAccountPanel,
+  forgotPassword: elements.forgotPasswordPanel,
+  resetPassword: elements.resetPasswordPanel,
+};
 
-  const config = authConfig();
-  const verifier = randomBase64Url();
-  const oauthState = randomBase64Url(24);
-  sessionStorage.setItem(
-    AUTH_TRANSACTION_KEY,
-    JSON.stringify({ verifier, oauthState }),
-  );
-
-  const parameters = new URLSearchParams({
-    response_type: "code",
-    client_id: config.clientId,
-    redirect_uri: config.redirectUri,
-    scope: "openid email",
-    state: oauthState,
-    code_challenge_method: "S256",
-    code_challenge: await pkceChallenge(verifier),
-    prompt: "login",
+function showAuthPanel(name, message = "") {
+  Object.entries(authPanels).forEach(([panelName, panel]) => {
+    panel.classList.toggle("hidden", panelName !== name);
   });
-  window.location.assign(`${config.domain}${path}?${parameters}`);
+  elements.authMessage.textContent = message;
 }
 
-async function handleOAuthCallback() {
-  const parameters = new URLSearchParams(window.location.search);
-  const oauthError = parameters.get("error");
-  if (oauthError) {
-    history.replaceState({}, document.title, window.location.pathname);
-    throw new Error(
-      parameters.get("error_description") || "Cognito could not complete sign-in.",
-    );
+function cognitoErrorMessage(error) {
+  if (error.code === "UsernameExistsException") {
+    return "An account already exists for that email.";
+  }
+  if (error.code === "CodeMismatchException") {
+    return "That verification code is incorrect.";
+  }
+  if (error.code === "ExpiredCodeException") {
+    return "That verification code expired. Request a new one.";
+  }
+  if (error.code === "InvalidPasswordException") {
+    return "Choose a password that meets the requirements.";
+  }
+  if (["LimitExceededException", "TooManyRequestsException"].includes(error.code)) {
+    return "Too many attempts. Wait a moment and try again.";
+  }
+  return error.message;
+}
+
+async function submitCreateAccount(event) {
+  event.preventDefault();
+  const email = elements.createEmail.value.trim();
+  elements.authMessage.textContent = "Creating your account…";
+
+  try {
+    const config = authConfig();
+    const result = await requestCognito("SignUp", {
+      ClientId: config.clientId,
+      Username: email,
+      Password: elements.createPassword.value,
+      UserAttributes: [{ Name: "email", Value: email }],
+    });
+    elements.createPassword.value = "";
+    elements.confirmEmail.value = email;
+    if (result.UserConfirmed) {
+      elements.loginEmail.value = email;
+      showAuthPanel("signIn", "Account created. You can sign in now.");
+      return;
+    }
+    showAuthPanel("confirmAccount", "Enter the verification code we emailed you.");
+    elements.confirmationCode.focus();
+  } catch (error) {
+    elements.authMessage.textContent = cognitoErrorMessage(error);
+  }
+}
+
+async function submitConfirmAccount(event) {
+  event.preventDefault();
+  const email = elements.confirmEmail.value.trim();
+  elements.authMessage.textContent = "Confirming your account…";
+
+  try {
+    const config = authConfig();
+    await requestCognito("ConfirmSignUp", {
+      ClientId: config.clientId,
+      Username: email,
+      ConfirmationCode: elements.confirmationCode.value.trim(),
+    });
+    elements.confirmationCode.value = "";
+    elements.loginEmail.value = email;
+    showAuthPanel("signIn", "Email confirmed. You can sign in now.");
+    elements.loginPassword.focus();
+  } catch (error) {
+    elements.authMessage.textContent = cognitoErrorMessage(error);
+  }
+}
+
+async function resendConfirmationCode() {
+  const email = elements.confirmEmail.value.trim();
+  if (!email) {
+    elements.authMessage.textContent = "Enter your email address first.";
+    elements.confirmEmail.focus();
+    return;
   }
 
-  const code = parameters.get("code");
-  if (!code) return false;
-
-  const transaction = JSON.parse(
-    sessionStorage.getItem(AUTH_TRANSACTION_KEY) || "null",
-  );
-  sessionStorage.removeItem(AUTH_TRANSACTION_KEY);
-  if (!transaction || transaction.oauthState !== parameters.get("state")) {
-    throw new Error("The sign-in response could not be verified. Please try again.");
+  try {
+    const config = authConfig();
+    await requestCognito("ResendConfirmationCode", {
+      ClientId: config.clientId,
+      Username: email,
+    });
+    elements.authMessage.textContent = "A new verification code is on its way.";
+  } catch (error) {
+    elements.authMessage.textContent = cognitoErrorMessage(error);
   }
+}
 
-  const config = authConfig();
-  const tokenResponse = await requestTokens({
-    grant_type: "authorization_code",
-    client_id: config.clientId,
-    code,
-    redirect_uri: config.redirectUri,
-    code_verifier: transaction.verifier,
-  });
-  saveAuthSession(tokenResponse);
-  history.replaceState({}, document.title, window.location.pathname);
-  return true;
+async function submitForgotPassword(event) {
+  event.preventDefault();
+  const email = elements.forgotEmail.value.trim();
+  elements.authMessage.textContent = "Sending your reset code…";
+
+  try {
+    const config = authConfig();
+    await requestCognito("ForgotPassword", {
+      ClientId: config.clientId,
+      Username: email,
+    });
+    elements.resetEmail.value = email;
+    showAuthPanel("resetPassword", "Enter the verification code we emailed you.");
+    elements.resetCode.focus();
+  } catch (error) {
+    elements.authMessage.textContent = cognitoErrorMessage(error);
+  }
+}
+
+async function submitResetPassword(event) {
+  event.preventDefault();
+  const email = elements.resetEmail.value.trim();
+  elements.authMessage.textContent = "Saving your new password…";
+
+  try {
+    const config = authConfig();
+    await requestCognito("ConfirmForgotPassword", {
+      ClientId: config.clientId,
+      Username: email,
+      ConfirmationCode: elements.resetCode.value.trim(),
+      Password: elements.resetPassword.value,
+    });
+    elements.resetCode.value = "";
+    elements.resetPassword.value = "";
+    elements.loginEmail.value = email;
+    showAuthPanel("signIn", "Password updated. You can sign in now.");
+    elements.loginPassword.focus();
+  } catch (error) {
+    elements.authMessage.textContent = cognitoErrorMessage(error);
+  }
 }
 
 async function getValidAccessToken() {
@@ -495,12 +573,21 @@ async function getValidAccessToken() {
 
   try {
     const config = authConfig();
-    const tokenResponse = await requestTokens({
-      grant_type: "refresh_token",
-      client_id: config.clientId,
-      refresh_token: session.refreshToken,
+    const tokenResponse = await requestCognito("InitiateAuth", {
+      AuthFlow: "REFRESH_TOKEN_AUTH",
+      ClientId: config.clientId,
+      AuthParameters: { REFRESH_TOKEN: session.refreshToken },
     });
-    return saveAuthSession(tokenResponse, session).accessToken;
+    const authentication = tokenResponse.AuthenticationResult;
+    if (!authentication) throw new Error("Cognito did not refresh the session.");
+    return saveAuthSession(
+      {
+        access_token: authentication.AccessToken,
+        id_token: authentication.IdToken,
+        expires_in: authentication.ExpiresIn,
+      },
+      session,
+    ).accessToken;
   } catch (error) {
     console.warn("The Cognito session could not be refreshed.", error);
     clearAuthSession();
@@ -515,7 +602,13 @@ function currentUserEmail() {
 
 function renderAuthentication(signedIn) {
   state.userEmail = signedIn ? currentUserEmail() : "";
-  elements.signedOutPanel.classList.toggle("hidden", signedIn);
+  if (signedIn) {
+    Object.values(authPanels).forEach((panel) => panel.classList.add("hidden"));
+  } else if (
+    Object.values(authPanels).every((panel) => panel.classList.contains("hidden"))
+  ) {
+    elements.signedOutPanel.classList.remove("hidden");
+  }
   elements.signedInPanel.classList.toggle("hidden", !signedIn);
   elements.headerSignOut.classList.toggle("hidden", !signedIn);
   elements.headerAccountEmail.classList.toggle("hidden", !signedIn);
@@ -532,32 +625,20 @@ function renderAuthentication(signedIn) {
 }
 
 async function signOut() {
-  const config = authConfig();
   const session = loadAuthSession();
   clearAuthSession();
   renderAuthentication(false);
+  showAuthPanel("signIn");
 
-  if (session?.refreshToken) {
+  if (session?.accessToken) {
     try {
-      await fetch(`${config.domain}/oauth2/revoke`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          token: session.refreshToken,
-          client_id: config.clientId,
-        }),
-        keepalive: true,
+      await requestCognito("GlobalSignOut", {
+        AccessToken: session.accessToken,
       });
     } catch (error) {
-      console.warn("The Cognito refresh token could not be revoked.", error);
+      console.warn("The Cognito session could not be invalidated remotely.", error);
     }
   }
-
-  const parameters = new URLSearchParams({
-    client_id: config.clientId,
-    logout_uri: config.logoutUri,
-  });
-  window.location.assign(`${config.domain}/logout?${parameters}`);
 }
 
 async function apiRequest(path, options = {}) {
@@ -1486,14 +1567,27 @@ elements.randomizeBracket.addEventListener("click", randomizeBracket);
 elements.savePrediction.addEventListener("click", savePrediction);
 elements.resetPicks.addEventListener("click", resetGamePicks);
 elements.signInForm.addEventListener("submit", submitSignIn);
+elements.createAccountForm.addEventListener("submit", submitCreateAccount);
+elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
+elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
+elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
 elements.forgotPassword.addEventListener("click", (event) => {
   event.preventDefault();
-  beginManagedFlow("/forgotPassword");
+  elements.forgotEmail.value = elements.loginEmail.value.trim();
+  showAuthPanel("forgotPassword");
+  elements.forgotEmail.focus();
 });
 elements.createAccount.addEventListener("click", (event) => {
   event.preventDefault();
-  beginManagedFlow("/signup");
+  elements.createEmail.value = elements.loginEmail.value.trim();
+  showAuthPanel("createAccount");
+  elements.createEmail.focus();
 });
+elements.createAccountBack.addEventListener("click", () => showAuthPanel("signIn"));
+elements.confirmAccountBack.addEventListener("click", () => showAuthPanel("signIn"));
+elements.forgotPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
+elements.resetPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
+elements.resendConfirmation.addEventListener("click", resendConfirmationCode);
 elements.openPrediction.addEventListener("click", () => openPrediction());
 elements.headerSignOut.addEventListener("click", signOut);
 elements.predictorSignOut.addEventListener("click", signOut);
@@ -1512,19 +1606,20 @@ async function initializeAuthentication() {
   resetSignInButton();
 
   try {
-    const completedSignIn = await handleOAuthCallback();
     const accessToken = await getValidAccessToken();
     renderAuthentication(Boolean(accessToken));
-    if (!accessToken) return;
+    if (!accessToken) {
+      showAuthPanel("signIn");
+      return;
+    }
 
     await refreshSavedPrediction();
     if (!loadAuthSession()) return;
-    openPrediction(completedSignIn);
+    openPrediction(false);
   } catch (error) {
-    history.replaceState({}, document.title, window.location.pathname);
     clearAuthSession();
     renderAuthentication(false);
-    elements.authMessage.textContent = error.message;
+    showAuthPanel("signIn", error.message);
   }
 }
 

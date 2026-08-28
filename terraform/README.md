@@ -17,7 +17,7 @@ Both environments deploy the same architecture:
 Browser
   -> CloudFront
        -> private S3 bucket (index.html, app.js, styles.css, generated auth-config.js)
-       -> Cognito managed login (email/password, authorization code + PKCE)
+       -> Cognito user pool APIs (in-app email/password forms)
        -> API Gateway
             -> public /api/win-totals -> Lambda -> VegasInsider
                                                   -> DynamoDB scrape cache
@@ -104,11 +104,13 @@ terraform -chdir=terraform/envs/prod apply
 ```
 
 The authentication deployment creates a Cognito user pool, browser app client,
-managed-login domain and default branding, plus an API Gateway JWT authorizer.
-It replaces the public prediction routes with one protected `/api/prediction`
-resource while leaving the existing predictions table in place. Carefully
-review the production plan and do not apply if it proposes replacing the
-existing bucket, DynamoDB tables, API, Lambda, or CloudFront distribution.
+and an API Gateway JWT authorizer. Account creation, confirmation, sign-in, and
+password recovery use the Cognito identity-provider API through forms hosted by
+the application; no managed-login domain or OAuth redirect is used. It replaces
+the public prediction routes with one protected `/api/prediction` resource
+while leaving the existing predictions table in place. Carefully review the
+production plan and do not apply if it proposes replacing the existing bucket,
+DynamoDB tables, API, Lambda, or CloudFront distribution.
 
 ## Configuration
 
@@ -122,10 +124,8 @@ DynamoDB key. Each account can access one private prediction. Existing
 anonymous name-keyed rows remain in the table but are not returned or modified
 by the authenticated API.
 
-The module also publishes `cognito_user_pool_id`, `cognito_client_id`, and
-`cognito_domain` outputs. Both environments accept only their own CloudFront
-URL for Cognito callbacks and logout. Email verification is required and MFA is
-explicitly `OFF`.
+The module also publishes `cognito_user_pool_id` and `cognito_client_id`
+outputs. Email verification is required and MFA is explicitly `OFF`.
 
 Review AWS pricing and the target site's automated-access policy before
 deploying. These resources are not guaranteed to remain free.

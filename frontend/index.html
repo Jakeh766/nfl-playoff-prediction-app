@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=7" />
   </head>
   <body>
     <header class="site-header">
@@ -77,6 +77,125 @@
               <a href="#" id="forgot-password">Forgot password?</a>
               <a href="#" id="create-account">Create account</a>
             </div>
+          </div>
+          <div class="hidden" id="create-account-panel">
+            <p class="card-kicker">NEW ACCOUNT</p>
+            <h2>Create your account.</h2>
+            <p class="auth-description">Use your email and a password with at least six characters.</p>
+            <form class="auth-form" id="create-account-form" method="post">
+              <label for="create-email">Email address</label>
+              <input
+                id="create-email"
+                name="username"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <label for="create-password">Password</label>
+              <input
+                id="create-password"
+                name="new-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="6"
+                required
+              />
+              <button class="button button-primary auth-button" type="submit">Create account</button>
+            </form>
+            <button class="auth-back" id="create-account-back" type="button">Back to sign in</button>
+          </div>
+          <div class="hidden" id="confirm-account-panel">
+            <p class="card-kicker">CHECK YOUR EMAIL</p>
+            <h2>Confirm your account.</h2>
+            <p class="auth-description">Enter the verification code sent to your email.</p>
+            <form class="auth-form" id="confirm-account-form" method="post">
+              <label for="confirm-email">Email address</label>
+              <input
+                id="confirm-email"
+                name="username"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <label for="confirmation-code">Verification code</label>
+              <input
+                id="confirmation-code"
+                name="one-time-code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                required
+              />
+              <button class="button button-primary auth-button" type="submit">Confirm account</button>
+            </form>
+            <div class="auth-links">
+              <button id="resend-confirmation" type="button">Resend code</button>
+              <button id="confirm-account-back" type="button">Back to sign in</button>
+            </div>
+          </div>
+          <div class="hidden" id="forgot-password-panel">
+            <p class="card-kicker">PASSWORD RESET</p>
+            <h2>Reset your password.</h2>
+            <p class="auth-description">We will email you a verification code.</p>
+            <form class="auth-form" id="forgot-password-form" method="post">
+              <label for="forgot-email">Email address</label>
+              <input
+                id="forgot-email"
+                name="username"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <button class="button button-primary auth-button" type="submit">Send reset code</button>
+            </form>
+            <button class="auth-back" id="forgot-password-back" type="button">Back to sign in</button>
+          </div>
+          <div class="hidden" id="reset-password-panel">
+            <p class="card-kicker">CHECK YOUR EMAIL</p>
+            <h2>Choose a new password.</h2>
+            <p class="auth-description">Enter your verification code and new password.</p>
+            <form class="auth-form" id="reset-password-form" method="post">
+              <label for="reset-email">Email address</label>
+              <input
+                id="reset-email"
+                name="username"
+                type="email"
+                inputmode="email"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+              <label for="reset-code">Verification code</label>
+              <input
+                id="reset-code"
+                name="one-time-code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                required
+              />
+              <label for="reset-password">New password</label>
+              <input
+                id="reset-password"
+                name="new-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="6"
+                required
+              />
+              <button class="button button-primary auth-button" type="submit">Save new password</button>
+            </form>
+            <button class="auth-back" id="reset-password-back" type="button">Back to sign in</button>
           </div>
           <div class="hidden" id="signed-in-panel">
             <p class="card-kicker">SIGNED IN</p>
@@ -244,6 +363,6 @@
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
   </body>
 </html>

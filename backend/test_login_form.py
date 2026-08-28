@@ -71,6 +71,26 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('AuthFlow: "USER_PASSWORD_AUTH"', app_javascript)
         self.assertIn('"ALLOW_USER_PASSWORD_AUTH"', terraform)
 
+    def test_all_account_flows_stay_in_the_application(self):
+        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+
+        for operation in (
+            "SignUp",
+            "ConfirmSignUp",
+            "ResendConfirmationCode",
+            "ForgotPassword",
+            "ConfirmForgotPassword",
+        ):
+            self.assertIn(f'requestCognito("{operation}"', app_javascript)
+
+        self.assertNotIn("aws_cognito_user_pool_domain", terraform)
+        self.assertNotIn("aws_cognito_managed_login_branding", terraform)
+        self.assertNotIn("allowed_oauth_flows                  =", terraform)
+        self.assertNotIn("/oauth2/", app_javascript)
+
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"

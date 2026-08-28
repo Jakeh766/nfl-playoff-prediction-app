@@ -9,8 +9,9 @@ use Terraform:
 - an inline policy scoped to the existing dev stack and dev state object.
 
 The deployment policy also permits Terraform to create a dev-tagged Cognito
-user pool and manage the app client, domain, and managed-login branding inside
-dev-tagged user pools. Cognito inventory access is read-only and creation is
+user pool and manage its app client. It retains delete and describe access for
+the retired managed-login resources until existing environments have removed
+them. Cognito inventory access is read-only and creation is
 restricted by the `Project` and `Environment` request tags.
 
 The initial apply used local state because the S3 backend did not exist yet.

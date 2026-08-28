@@ -203,9 +203,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
   statement {
     sid = "ManageDevCognitoUserPool"
     actions = [
-      "cognito-idp:CreateManagedLoginBranding",
       "cognito-idp:CreateUserPoolClient",
-      "cognito-idp:CreateUserPoolDomain",
       "cognito-idp:DeleteManagedLoginBranding",
       "cognito-idp:DeleteUserPool",
       "cognito-idp:DeleteUserPoolClient",
@@ -219,10 +217,8 @@ data "aws_iam_policy_document" "github_dev_deploy" {
       "cognito-idp:ListUserPoolClients",
       "cognito-idp:TagResource",
       "cognito-idp:UntagResource",
-      "cognito-idp:UpdateManagedLoginBranding",
       "cognito-idp:UpdateUserPool",
       "cognito-idp:UpdateUserPoolClient",
-      "cognito-idp:UpdateUserPoolDomain",
     ]
     resources = ["arn:aws:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*"]
 

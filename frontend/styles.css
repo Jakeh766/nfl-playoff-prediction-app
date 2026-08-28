@@ -207,12 +207,14 @@ h1 {
   line-height: 1.65;
 }
 
-.sign-in-form {
+.sign-in-form,
+.auth-form {
   display: grid;
   gap: 10px;
 }
 
-.sign-in-form label:not(:first-child) {
+.sign-in-form label:not(:first-child),
+.auth-form label:not(:first-child) {
   margin-top: 6px;
 }
 
@@ -231,9 +233,23 @@ h1 {
   font-weight: 700;
 }
 
-.auth-links a {
+.auth-links a,
+.auth-links button,
+.auth-back {
+  padding: 0;
   color: var(--blue-dark);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.auth-back {
+  margin-top: 18px;
+  font-size: 13px;
 }
 
 .signed-in-email {

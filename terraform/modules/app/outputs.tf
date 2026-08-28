@@ -29,11 +29,6 @@ output "cognito_user_pool_id" {
 }
 
 output "cognito_client_id" {
-  description = "Public browser app client ID used by the OAuth PKCE flow."
+  description = "Public browser app client ID used by the in-app authentication forms."
   value       = aws_cognito_user_pool_client.browser.id
-}
-
-output "cognito_domain" {
-  description = "Base URL for the Cognito managed login and OAuth endpoints."
-  value       = "https://${aws_cognito_user_pool_domain.login.domain}.auth.${var.aws_region}.amazoncognito.com"
 }
