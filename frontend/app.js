@@ -215,6 +215,13 @@ const elements = {
   resetPassword: document.querySelector("#reset-password"),
   resetPasswordBack: document.querySelector("#reset-password-back"),
   openPrediction: document.querySelector("#open-prediction"),
+  deleteAccount: document.querySelector("#delete-account"),
+  deleteAccountDialog: document.querySelector("#delete-account-dialog"),
+  deleteAccountForm: document.querySelector("#delete-account-form"),
+  deleteAccountConfirmation: document.querySelector("#delete-account-confirmation"),
+  deleteAccountMessage: document.querySelector("#delete-account-message"),
+  cancelDeleteAccount: document.querySelector("#cancel-delete-account"),
+  confirmDeleteAccount: document.querySelector("#confirm-delete-account"),
   signedInEmail: document.querySelector("#signed-in-email"),
   authMessage: document.querySelector("#auth-message"),
   headerAccountEmail: document.querySelector("#header-account-email"),
@@ -258,6 +265,7 @@ function clone(value) {
 const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
 const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
+let deleteAccountPending = false;
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
@@ -638,6 +646,61 @@ async function signOut() {
     } catch (error) {
       console.warn("The Cognito session could not be invalidated remotely.", error);
     }
+  }
+}
+
+function resetDeleteAccountDialog() {
+  deleteAccountPending = false;
+  elements.deleteAccountConfirmation.value = "";
+  elements.deleteAccountMessage.textContent = "";
+  elements.confirmDeleteAccount.disabled = true;
+  elements.confirmDeleteAccount.removeAttribute("aria-busy");
+  elements.confirmDeleteAccount.textContent = "Permanently delete";
+}
+
+function openDeleteAccountDialog() {
+  resetDeleteAccountDialog();
+  elements.deleteAccountDialog.showModal();
+  elements.deleteAccountConfirmation.focus();
+}
+
+function updateDeleteAccountConfirmation() {
+  elements.confirmDeleteAccount.disabled =
+    deleteAccountPending || elements.deleteAccountConfirmation.value !== "DELETE";
+}
+
+async function submitDeleteAccount(event) {
+  event.preventDefault();
+  if (deleteAccountPending || elements.deleteAccountConfirmation.value !== "DELETE") {
+    return;
+  }
+
+  deleteAccountPending = true;
+  elements.confirmDeleteAccount.disabled = true;
+  elements.confirmDeleteAccount.setAttribute("aria-busy", "true");
+  elements.confirmDeleteAccount.textContent = "Deleting…";
+  elements.deleteAccountMessage.textContent = "Deleting your saved bracket and account…";
+
+  try {
+    const accessToken = await getValidAccessToken();
+    if (!accessToken) throw new Error("Your session expired. Please sign in again.");
+
+    await apiRequest("/api/prediction", { method: "DELETE" });
+    await requestCognito("DeleteUser", { AccessToken: accessToken });
+
+    clearAuthSession();
+    state.savedPrediction = null;
+    state.savedAt = null;
+    elements.deleteAccountDialog.close();
+    renderAuthentication(false);
+    showAuthPanel("signIn", "Your account and saved bracket were permanently deleted.");
+  } catch (error) {
+    elements.deleteAccountMessage.textContent = `Could not delete your account: ${error.message}`;
+  } finally {
+    deleteAccountPending = false;
+    elements.confirmDeleteAccount.removeAttribute("aria-busy");
+    elements.confirmDeleteAccount.textContent = "Permanently delete";
+    updateDeleteAccountConfirmation();
   }
 }
 
@@ -1589,6 +1652,19 @@ elements.forgotPasswordBack.addEventListener("click", () => showAuthPanel("signI
 elements.resetPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
 elements.resendConfirmation.addEventListener("click", resendConfirmationCode);
 elements.openPrediction.addEventListener("click", () => openPrediction());
+elements.deleteAccount.addEventListener("click", openDeleteAccountDialog);
+elements.deleteAccountForm.addEventListener("submit", submitDeleteAccount);
+elements.deleteAccountConfirmation.addEventListener(
+  "input",
+  updateDeleteAccountConfirmation,
+);
+elements.cancelDeleteAccount.addEventListener("click", () => {
+  if (!deleteAccountPending) elements.deleteAccountDialog.close();
+});
+elements.deleteAccountDialog.addEventListener("cancel", (event) => {
+  if (deleteAccountPending) event.preventDefault();
+});
+elements.deleteAccountDialog.addEventListener("close", resetDeleteAccountDialog);
 elements.headerSignOut.addEventListener("click", signOut);
 elements.predictorSignOut.addEventListener("click", signOut);
 window.addEventListener("pageshow", resetSignInButton);

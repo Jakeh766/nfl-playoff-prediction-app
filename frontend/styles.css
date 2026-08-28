@@ -252,6 +252,19 @@ h1 {
   font-size: 13px;
 }
 
+.delete-account-button {
+  display: block;
+  margin: 20px auto 0;
+  padding: 0;
+  color: var(--red-dark);
+  background: none;
+  border: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .signed-in-email {
   margin-bottom: 24px;
   overflow-wrap: anywhere;
@@ -385,6 +398,16 @@ select:focus {
   background: var(--red-dark);
 }
 
+.button-danger {
+  color: white;
+  background: var(--red-dark);
+  box-shadow: 0 8px 18px rgba(183, 32, 45, 0.2);
+}
+
+.button-danger:hover {
+  background: #8e1420;
+}
+
 .button-secondary {
   color: var(--ink);
   background: white;
@@ -400,6 +423,56 @@ select:focus {
 .button-large {
   min-height: 52px;
   padding: 0 28px;
+}
+
+.account-dialog {
+  width: min(520px, calc(100% - 32px));
+  padding: 32px;
+  color: var(--ink);
+  background: var(--card);
+  border: 0;
+  border-top: 5px solid var(--red-dark);
+  border-radius: 9px;
+  box-shadow: 0 24px 80px rgba(16, 34, 58, 0.3);
+}
+
+.account-dialog::backdrop {
+  background: rgba(16, 34, 58, 0.64);
+  backdrop-filter: blur(3px);
+}
+
+.account-dialog h2 {
+  margin: 0 0 14px;
+  font-family: var(--display);
+  font-size: 2rem;
+  text-transform: uppercase;
+}
+
+.account-dialog > form > p:not(.card-kicker):not(.dialog-message) {
+  margin-bottom: 22px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.account-dialog label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dialog-message {
+  min-height: 18px;
+  margin: 12px 0 0;
+  color: var(--red-dark);
+  font-size: 12px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .name-row .button {
@@ -1212,6 +1285,19 @@ footer p {
 
   .profile-card {
     padding: 25px;
+  }
+
+  .account-dialog {
+    padding: 25px;
+  }
+
+  .dialog-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .dialog-actions .button {
+    width: 100%;
   }
 
   .name-row {

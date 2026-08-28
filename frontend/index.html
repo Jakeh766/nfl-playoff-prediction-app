@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=7" />
+    <link rel="stylesheet" href="styles.css?v=8" />
   </head>
   <body>
     <header class="site-header">
@@ -204,6 +204,9 @@
             <button class="button button-primary auth-button" id="open-prediction" type="button">
               Open my bracket
             </button>
+            <button class="delete-account-button" id="delete-account" type="button">
+              Delete account
+            </button>
           </div>
           <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
         </section>
@@ -357,12 +360,46 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+    <dialog
+      class="account-dialog"
+      id="delete-account-dialog"
+      aria-labelledby="delete-account-title"
+      aria-describedby="delete-account-description"
+    >
+      <form id="delete-account-form" method="post">
+        <p class="card-kicker">PERMANENT ACTION</p>
+        <h2 id="delete-account-title">Delete your account?</h2>
+        <p id="delete-account-description">
+          This permanently deletes your account and saved bracket. This cannot be undone.
+        </p>
+        <label for="delete-account-confirmation">Type <strong>DELETE</strong> to confirm</label>
+        <input
+          id="delete-account-confirmation"
+          name="confirmation"
+          type="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          required
+        />
+        <p class="dialog-message" id="delete-account-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" id="cancel-delete-account" type="button">
+            Keep my account
+          </button>
+          <button class="button button-danger" id="confirm-delete-account" type="submit" disabled>
+            Permanently delete
+          </button>
+        </div>
+      </form>
+    </dialog>
+
     <footer>
       <span>ROAD TO THE BOWL</span>
       <p>Your prediction is private and stored online.</p>
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=13"></script>
   </body>
 </html>

@@ -91,6 +91,21 @@ class LoginFormTests(unittest.TestCase):
         self.assertNotIn("allowed_oauth_flows                  =", terraform)
         self.assertNotIn("/oauth2/", app_javascript)
 
+    def test_account_deletion_requires_confirmation_and_removes_saved_data_first(self):
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="delete-account-dialog"', html)
+        self.assertIn('id="delete-account-confirmation"', html)
+        self.assertIn('value !== "DELETE"', app_javascript)
+
+        delete_flow = app_javascript[app_javascript.index("async function submitDeleteAccount") :]
+        prediction_delete = delete_flow.index(
+            'apiRequest("/api/prediction", { method: "DELETE" })'
+        )
+        account_delete = delete_flow.index('requestCognito("DeleteUser"')
+        self.assertLess(prediction_delete, account_delete)
+
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"

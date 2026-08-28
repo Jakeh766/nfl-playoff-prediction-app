@@ -6,6 +6,7 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
 - Privately save, reopen, update, and delete one prediction per account.
+- Permanently delete their saved prediction and account from the signed-in view.
 
 Predictions are stored in DynamoDB and are available across devices. The Lambda
 backend refreshes projected season win totals when the app loads, reading
@@ -22,7 +23,8 @@ public identity-provider API. The deployment does not create or use a Cognito
 managed-login domain. Email verification is required and MFA is off. API
 Gateway validates Cognito access tokens before invoking the prediction routes,
 and the Lambda function uses the verified Cognito `sub` claim as the DynamoDB
-key.
+key. Signed-in users can permanently delete their prediction and Cognito user
+through an in-app confirmation dialog.
 
 Win-total projections remain public. Prediction reads and writes require a
 signed-in account.
