@@ -102,6 +102,17 @@ Use `http://localhost:8000/?preview=leaderboard-name` to visually inspect the
 leaderboard-name dialog that opens from **Save prediction** without an
 authenticated backend. The static preview also shows sample leaderboard rows.
 
+Every successful `dev` deployment idempotently seeds seven demo leaderboard
+participants with completed brackets and two password-protected groups. Join
+the groups from a normal dev account with these shared demo credentials:
+
+- **Demo Sunday Huddle** — `HuddleDemo26!`
+- **Demo Gridiron Rivals** — `RivalsDemo26!`
+
+These are DynamoDB-only demo participants rather than Cognito login accounts.
+They exist to populate global and group standings without requiring disposable
+email inboxes or verification codes. Production is never seeded.
+
 ## Repository layout
 
 ```text

@@ -113,6 +113,14 @@ jobs:
       - name: Apply dev deployment
         run: terraform -chdir=terraform/envs/dev apply tfplan
 
+      - name: Seed demo participants and private groups
+        run: |
+          python3 backend/seed_dev.py \
+            --profiles-table "$(terraform -chdir=terraform/envs/dev output -raw profiles_table)" \
+            --predictions-table "$(terraform -chdir=terraform/envs/dev output -raw predictions_table)" \
+            --groups-table "$(terraform -chdir=terraform/envs/dev output -raw groups_table)" \
+            --region "$AWS_REGION"
+
       - name: Publish deployment URLs
         shell: bash
         run: |
