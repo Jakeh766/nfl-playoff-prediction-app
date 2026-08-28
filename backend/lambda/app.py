@@ -82,6 +82,115 @@ def predictions_table():
     return boto3.resource("dynamodb").Table(os.environ["PREDICTIONS_TABLE"])
 
 
+def profiles_table():
+    return boto3.resource("dynamodb").Table(os.environ["PROFILES_TABLE"])
+
+
+def normalize_leaderboard_name(value) -> tuple[str, str]:
+    if not isinstance(value, str):
+        raise ValueError("leaderboardName must be a string")
+
+    display_name = re.sub(r"\s+", " ", value.strip())
+    if not 3 <= len(display_name) <= 24:
+        raise ValueError("Leaderboard name must be between 3 and 24 characters")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]", display_name):
+        raise ValueError(
+            "Leaderboard name may use letters, numbers, spaces, periods, underscores, and hyphens"
+        )
+    return display_name, display_name.casefold()
+
+
+def profile_item_key(user_id: str) -> str:
+    return f"user#{user_id}"
+
+
+def name_item_key(normalized_name: str) -> str:
+    return f"name#{normalized_name}"
+
+
+def get_profile(user_id: str) -> dict | None:
+    result = profiles_table().get_item(Key={"profileKey": profile_item_key(user_id)})
+    return result.get("Item")
+
+
+def is_conditional_failure(error: Exception) -> bool:
+    return (
+        getattr(error, "response", {}).get("Error", {}).get("Code")
+        == "ConditionalCheckFailedException"
+    )
+
+
+def delete_name_reservation(table, user_id: str, normalized_name: str) -> None:
+    try:
+        table.delete_item(
+            Key={"profileKey": name_item_key(normalized_name)},
+            ConditionExpression="ownerId = :owner",
+            ExpressionAttributeValues={":owner": user_id},
+        )
+    except Exception as error:
+        if not is_conditional_failure(error):
+            raise
+
+
+def put_profile(user_id: str, event: dict) -> dict:
+    display_name, normalized_name = normalize_leaderboard_name(
+        parse_body(event).get("leaderboardName")
+    )
+    table = profiles_table()
+    existing = get_profile(user_id)
+    previous_name = existing.get("normalizedName") if existing else None
+
+    try:
+        table.put_item(
+            Item={
+                "profileKey": name_item_key(normalized_name),
+                "recordType": "leaderboardName",
+                "normalizedName": normalized_name,
+                "displayName": display_name,
+                "ownerId": user_id,
+            },
+            ConditionExpression="attribute_not_exists(profileKey) OR ownerId = :owner",
+            ExpressionAttributeValues={":owner": user_id},
+        )
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise ValueError("That leaderboard name is already taken") from error
+        raise
+
+    profile = {
+        "profileKey": profile_item_key(user_id),
+        "recordType": "profile",
+        "leaderboardName": display_name,
+        "normalizedName": normalized_name,
+        "updatedAt": int(time.time() * 1000),
+    }
+    try:
+        table.put_item(Item=profile)
+    except Exception:
+        if previous_name != normalized_name:
+            delete_name_reservation(table, user_id, normalized_name)
+        raise
+
+    if previous_name and previous_name != normalized_name:
+        delete_name_reservation(table, user_id, previous_name)
+    return profile
+
+
+def delete_profile(user_id: str) -> None:
+    table = profiles_table()
+    existing = get_profile(user_id)
+    table.delete_item(Key={"profileKey": profile_item_key(user_id)})
+    if existing and existing.get("normalizedName"):
+        delete_name_reservation(table, user_id, existing["normalizedName"])
+
+
+def public_profile(profile: dict) -> dict:
+    return {
+        "leaderboardName": profile["leaderboardName"],
+        "updatedAt": profile["updatedAt"],
+    }
+
+
 def load_season_results() -> dict:
     with RESULTS_PATH.open(encoding="utf-8") as results_file:
         return json.load(results_file)
@@ -433,12 +542,31 @@ def handler(event, context):
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())
 
-    if path != "/api/prediction":
+    if path not in ("/api/prediction", "/api/profile"):
         return response(404, {"message": "Not found"})
 
     user_id = authenticated_user_id(event)
     if not user_id:
         return response(401, {"message": "Authentication required"})
+
+    if path == "/api/profile":
+        if method == "GET":
+            profile = get_profile(user_id)
+            if not profile:
+                return response(404, {"message": "Leaderboard name not found"})
+            return response(200, public_profile(profile))
+
+        if method == "PUT":
+            try:
+                return response(200, public_profile(put_profile(user_id, event)))
+            except ValueError as error:
+                return response(400, {"message": str(error)})
+
+        if method == "DELETE":
+            delete_profile(user_id)
+            return response(200, {"deleted": True})
+
+        return response(404, {"message": "Not found"})
 
     if method == "GET":
         prediction = get_prediction(user_id)
@@ -448,6 +576,8 @@ def handler(event, context):
 
     if method == "PUT":
         try:
+            if not get_profile(user_id):
+                raise ValueError("Choose a leaderboard name before saving a prediction")
             prediction = put_prediction(user_id, event)
             return response(200, {**prediction, "score": score_prediction(prediction)})
         except ValueError as error:

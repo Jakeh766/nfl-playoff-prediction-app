@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=9" />
+    <link rel="stylesheet" href="styles.css?v=10" />
   </head>
   <body>
     <header class="site-header">
@@ -197,12 +197,51 @@
             </form>
             <button class="auth-back" id="reset-password-back" type="button">Back to sign in</button>
           </div>
+          <div class="hidden" id="leaderboard-name-panel">
+            <p class="card-kicker">LEADERBOARD PROFILE</p>
+            <h2>Choose your name.</h2>
+            <p class="auth-description">
+              This is the public name that will identify your picks on the leaderboard.
+              Every name is unique, ignoring capitalization.
+            </p>
+            <form class="auth-form" id="leaderboard-name-form" method="post">
+              <label for="leaderboard-name">Leaderboard name</label>
+              <input
+                id="leaderboard-name"
+                name="leaderboard-name"
+                type="text"
+                minlength="3"
+                maxlength="24"
+                pattern="[A-Za-z0-9][A-Za-z0-9 ._\-]*[A-Za-z0-9]"
+                autocomplete="nickname"
+                autocapitalize="words"
+                spellcheck="false"
+                required
+              />
+              <p class="input-hint">
+                3–24 characters. Letters, numbers, spaces, periods, underscores, and hyphens.
+              </p>
+              <button class="button button-primary auth-button" id="save-leaderboard-name" type="submit">
+                Save leaderboard name
+              </button>
+            </form>
+            <div class="auth-links profile-links">
+              <button class="hidden" id="cancel-leaderboard-name" type="button">Cancel</button>
+              <button id="leaderboard-name-sign-out" type="button">Sign out</button>
+            </div>
+          </div>
           <div class="hidden" id="signed-in-panel">
             <p class="card-kicker">SIGNED IN</p>
             <h2>Your bracket is ready.</h2>
+            <p class="leaderboard-identity">
+              Leaderboard name <strong id="signed-in-leaderboard-name"></strong>
+            </p>
             <p class="signed-in-email" id="signed-in-email"></p>
             <button class="button button-primary auth-button" id="open-prediction" type="button">
               Open my bracket
+            </button>
+            <button class="profile-name-button" id="change-leaderboard-name" type="button">
+              Change leaderboard name
             </button>
             <button class="delete-account-button" id="delete-account" type="button">
               Delete account
@@ -424,7 +463,7 @@
         <p class="card-kicker">PERMANENT ACTION</p>
         <h2 id="delete-account-title">Delete your account?</h2>
         <p id="delete-account-description">
-          This permanently deletes your account and saved bracket. This cannot be undone.
+          This permanently deletes your account, leaderboard name, and saved bracket. This cannot be undone.
         </p>
         <label for="delete-account-confirmation">Type <strong>DELETE</strong> to confirm</label>
         <input
@@ -454,6 +493,6 @@
     </footer>
 
     <script src="auth-config.js"></script>
-    <script src="app.js?v=14"></script>
+    <script src="app.js?v=15"></script>
   </body>
 </html>

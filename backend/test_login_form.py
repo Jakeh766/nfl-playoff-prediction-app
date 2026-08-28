@@ -103,8 +103,23 @@ class LoginFormTests(unittest.TestCase):
         prediction_delete = delete_flow.index(
             'apiRequest("/api/prediction", { method: "DELETE" })'
         )
+        profile_delete = delete_flow.index(
+            'apiRequest("/api/profile", { method: "DELETE" })'
+        )
         account_delete = delete_flow.index('requestCognito("DeleteUser"')
         self.assertLess(prediction_delete, account_delete)
+        self.assertLess(prediction_delete, profile_delete)
+        self.assertLess(profile_delete, account_delete)
+
+    def test_leaderboard_name_is_required_and_sent_to_the_profile_api(self):
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="leaderboard-name-form"', html)
+        self.assertIn('id="leaderboard-name"', html)
+        self.assertIn('maxlength="24"', html)
+        self.assertIn('apiRequest("/api/profile", {', app_javascript)
+        self.assertIn("if (!state.leaderboardName) return;", app_javascript)
 
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (

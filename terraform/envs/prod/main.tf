@@ -68,6 +68,10 @@ output "predictions_table" {
   value = module.nfl_app.predictions_table
 }
 
+output "profiles_table" {
+  value = module.nfl_app.profiles_table
+}
+
 output "cognito_user_pool_id" {
   value = module.nfl_app.cognito_user_pool_id
 }

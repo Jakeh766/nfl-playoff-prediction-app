@@ -3,6 +3,7 @@
 A self-contained NFL preseason playoff predictor. Users can:
 
 - Create an email/password account through Amazon Cognito.
+- Claim a unique public leaderboard name after signing in.
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
 - Track a private 302-point score as official results become available.
@@ -26,6 +27,12 @@ Gateway validates Cognito access tokens before invoking the prediction routes,
 and the Lambda function uses the verified Cognito `sub` claim as the DynamoDB
 key. Signed-in users can permanently delete their prediction and Cognito user
 through an in-app confirmation dialog.
+
+Leaderboard profiles are stored separately from private predictions. Names are
+trimmed and reserved case-insensitively, so capitalization cannot be used to
+duplicate another account's name. New and existing accounts must claim a
+leaderboard name before saving a prediction. Deleting an account releases its
+name for someone else to use.
 
 Win-total projections remain public. Prediction reads and writes require a
 signed-in account.
@@ -79,6 +86,9 @@ Then visit `http://localhost:8000`. The preview uses bundled win totals and
 exposes the bracket randomizer, but authentication, saved predictions, and live
 odds are intentionally unavailable. Test those behaviors in the deployed dev
 environment.
+
+Use `http://localhost:8000/?preview=leaderboard-name` to visually inspect the
+required first-sign-in leaderboard-name form without an authenticated backend.
 
 ## Repository layout
 

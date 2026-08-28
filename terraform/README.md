@@ -23,6 +23,8 @@ Browser
                                                   -> DynamoDB scrape cache
             -> JWT-protected /api/prediction -> Lambda
                                                 -> DynamoDB saved predictions
+            -> JWT-protected /api/profile    -> Lambda
+                                                -> DynamoDB unique leaderboard profiles
 ```
 
 ## Environment isolation

@@ -23,6 +23,11 @@ output "predictions_table" {
   value       = aws_dynamodb_table.predictions.name
 }
 
+output "profiles_table" {
+  description = "DynamoDB table containing leaderboard profiles and unique name reservations."
+  value       = aws_dynamodb_table.profiles.name
+}
+
 output "cognito_user_pool_id" {
   description = "Cognito user pool that owns application accounts."
   value       = aws_cognito_user_pool.users.id

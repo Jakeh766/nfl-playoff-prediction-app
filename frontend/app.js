@@ -42,6 +42,10 @@ const LOCAL_PREVIEW =
   window.location.hostname === "127.0.0.1";
 const TEST_MODE =
   window.AUTH_CONFIG?.environment === "dev" || LOCAL_PREVIEW;
+const LEADERBOARD_PROFILE_PREVIEW =
+  LOCAL_PREVIEW &&
+  new URLSearchParams(window.location.search).get("preview") ===
+    "leaderboard-name";
 
 const TEAM_DIVISIONS = {
   "Baltimore Ravens": "AFC North",
@@ -173,7 +177,9 @@ function createEmptyDivisionWinners() {
 }
 
 const state = {
+  signedIn: false,
   userEmail: "",
+  leaderboardName: "",
   winTotals: { ...FALLBACK_WIN_TOTALS },
   oddsSource: "2026 sportsbook snapshot",
   divisionWinners: createEmptyDivisionWinners(),
@@ -214,6 +220,14 @@ const elements = {
   resetCode: document.querySelector("#reset-code"),
   resetPassword: document.querySelector("#reset-password"),
   resetPasswordBack: document.querySelector("#reset-password-back"),
+  leaderboardNamePanel: document.querySelector("#leaderboard-name-panel"),
+  leaderboardNameForm: document.querySelector("#leaderboard-name-form"),
+  leaderboardNameInput: document.querySelector("#leaderboard-name"),
+  saveLeaderboardName: document.querySelector("#save-leaderboard-name"),
+  cancelLeaderboardName: document.querySelector("#cancel-leaderboard-name"),
+  leaderboardNameSignOut: document.querySelector("#leaderboard-name-sign-out"),
+  signedInLeaderboardName: document.querySelector("#signed-in-leaderboard-name"),
+  changeLeaderboardName: document.querySelector("#change-leaderboard-name"),
   openPrediction: document.querySelector("#open-prediction"),
   deleteAccount: document.querySelector("#delete-account"),
   deleteAccountDialog: document.querySelector("#delete-account-dialog"),
@@ -266,6 +280,7 @@ const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
 const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 let deleteAccountPending = false;
+let editingLeaderboardName = false;
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
@@ -317,6 +332,7 @@ function clearAuthSession() {
 }
 
 function decodeJwtPayload(token) {
+  if (!token) return {};
   try {
     const encoded = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
@@ -411,6 +427,8 @@ async function submitSignIn(event) {
     elements.loginPassword.value = "";
     elements.authMessage.textContent = "";
     renderAuthentication(true);
+    await refreshProfile();
+    if (!state.leaderboardName) return;
     await refreshSavedPrediction();
     if (loadAuthSession()) openPrediction();
   } catch (error) {
@@ -608,7 +626,23 @@ function currentUserEmail() {
   return String(decodeJwtPayload(session?.idToken || "").email || "");
 }
 
+function renderLeaderboardProfile() {
+  const needsName = state.signedIn && !state.leaderboardName;
+  const showEditor = state.signedIn && (needsName || editingLeaderboardName);
+  elements.leaderboardNamePanel.classList.toggle("hidden", !showEditor);
+  elements.signedInPanel.classList.toggle(
+    "hidden",
+    !state.signedIn || showEditor,
+  );
+  elements.cancelLeaderboardName.classList.toggle("hidden", needsName);
+  elements.signedInLeaderboardName.textContent = state.leaderboardName;
+  elements.headerAccountEmail.textContent = state.leaderboardName || state.userEmail;
+  elements.accountEmail.textContent = state.leaderboardName || state.userEmail;
+  elements.savedSection.classList.toggle("hidden", !state.signedIn || needsName);
+}
+
 function renderAuthentication(signedIn) {
+  state.signedIn = signedIn;
   state.userEmail = signedIn ? currentUserEmail() : "";
   if (signedIn) {
     Object.values(authPanels).forEach((panel) => panel.classList.add("hidden"));
@@ -617,19 +651,86 @@ function renderAuthentication(signedIn) {
   ) {
     elements.signedOutPanel.classList.remove("hidden");
   }
-  elements.signedInPanel.classList.toggle("hidden", !signedIn);
   elements.headerSignOut.classList.toggle("hidden", !signedIn);
   elements.headerAccountEmail.classList.toggle("hidden", !signedIn);
-  elements.savedSection.classList.toggle("hidden", !signedIn);
   elements.signedInEmail.textContent = state.userEmail;
-  elements.headerAccountEmail.textContent = state.userEmail;
-  elements.accountEmail.textContent = state.userEmail;
 
   if (!signedIn) {
+    state.leaderboardName = "";
+    editingLeaderboardName = false;
     state.savedPrediction = null;
     elements.predictor.classList.add("hidden");
     elements.savedSection.classList.add("hidden");
   }
+  renderLeaderboardProfile();
+}
+
+async function refreshProfile() {
+  try {
+    const profile = await apiRequest("/api/profile");
+    state.leaderboardName = profile.leaderboardName;
+  } catch (error) {
+    if (error.status === 404) {
+      state.leaderboardName = "";
+    } else {
+      throw error;
+    }
+  }
+  editingLeaderboardName = false;
+  renderLeaderboardProfile();
+  if (!state.leaderboardName) {
+    elements.leaderboardNameInput.value = "";
+    requestAnimationFrame(() => elements.leaderboardNameInput.focus());
+  }
+}
+
+async function submitLeaderboardName(event) {
+  event.preventDefault();
+  const previousName = state.leaderboardName;
+  elements.saveLeaderboardName.disabled = true;
+  elements.saveLeaderboardName.setAttribute("aria-busy", "true");
+  elements.saveLeaderboardName.textContent = "Saving…";
+  elements.authMessage.textContent = "Reserving your leaderboard name…";
+
+  try {
+    const profile = await apiRequest("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify({
+        leaderboardName: elements.leaderboardNameInput.value,
+      }),
+    });
+    state.leaderboardName = profile.leaderboardName;
+    editingLeaderboardName = false;
+    elements.authMessage.textContent = "";
+    renderLeaderboardProfile();
+
+    if (!previousName) {
+      await refreshSavedPrediction();
+      if (loadAuthSession()) openPrediction();
+    } else {
+      showToast(`Leaderboard name changed to ${state.leaderboardName}.`);
+    }
+  } catch (error) {
+    elements.authMessage.textContent = error.message;
+    elements.leaderboardNameInput.focus();
+  } finally {
+    elements.saveLeaderboardName.disabled = false;
+    elements.saveLeaderboardName.removeAttribute("aria-busy");
+    elements.saveLeaderboardName.textContent = "Save leaderboard name";
+  }
+}
+
+function editLeaderboardName() {
+  editingLeaderboardName = true;
+  elements.leaderboardNameInput.value = state.leaderboardName;
+  renderLeaderboardProfile();
+  requestAnimationFrame(() => elements.leaderboardNameInput.select());
+}
+
+function cancelLeaderboardNameEdit() {
+  editingLeaderboardName = false;
+  elements.authMessage.textContent = "";
+  renderLeaderboardProfile();
 }
 
 async function signOut() {
@@ -679,13 +780,15 @@ async function submitDeleteAccount(event) {
   elements.confirmDeleteAccount.disabled = true;
   elements.confirmDeleteAccount.setAttribute("aria-busy", "true");
   elements.confirmDeleteAccount.textContent = "Deleting…";
-  elements.deleteAccountMessage.textContent = "Deleting your saved bracket and account…";
+  elements.deleteAccountMessage.textContent =
+    "Deleting your saved bracket, leaderboard profile, and account…";
 
   try {
     const accessToken = await getValidAccessToken();
     if (!accessToken) throw new Error("Your session expired. Please sign in again.");
 
     await apiRequest("/api/prediction", { method: "DELETE" });
+    await apiRequest("/api/profile", { method: "DELETE" });
     await requestCognito("DeleteUser", { AccessToken: accessToken });
 
     clearAuthSession();
@@ -693,7 +796,10 @@ async function submitDeleteAccount(event) {
     state.savedAt = null;
     elements.deleteAccountDialog.close();
     renderAuthentication(false);
-    showAuthPanel("signIn", "Your account and saved bracket were permanently deleted.");
+    showAuthPanel(
+      "signIn",
+      "Your account, leaderboard name, and saved bracket were permanently deleted.",
+    );
   } catch (error) {
     elements.deleteAccountMessage.textContent = `Could not delete your account: ${error.message}`;
   } finally {
@@ -705,7 +811,7 @@ async function submitDeleteAccount(event) {
 }
 
 async function apiRequest(path, options = {}) {
-  const protectedRequest = path === "/api/prediction";
+  const protectedRequest = ["/api/prediction", "/api/profile"].includes(path);
   const accessToken = protectedRequest ? await getValidAccessToken() : null;
   if (protectedRequest && !accessToken) {
     renderAuthentication(false);
@@ -1455,6 +1561,10 @@ function allGamesPicked() {
 }
 
 async function savePrediction() {
+  if (!state.leaderboardName) {
+    showToast("Choose a leaderboard name before saving.");
+    return;
+  }
   if (!state.bracketBuilt) {
     showToast("Build your bracket before saving.");
     return;
@@ -1677,6 +1787,10 @@ elements.createAccountForm.addEventListener("submit", submitCreateAccount);
 elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
 elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
 elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
+elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
+elements.changeLeaderboardName.addEventListener("click", editLeaderboardName);
+elements.cancelLeaderboardName.addEventListener("click", cancelLeaderboardNameEdit);
+elements.leaderboardNameSignOut.addEventListener("click", signOut);
 elements.forgotPassword.addEventListener("click", (event) => {
   event.preventDefault();
   elements.forgotEmail.value = elements.loginEmail.value.trim();
@@ -1714,6 +1828,17 @@ window.addEventListener("pageshow", resetSignInButton);
 
 async function initializeAuthentication() {
   if (!authIsConfigured()) {
+    if (LEADERBOARD_PROFILE_PREVIEW) {
+      renderAuthentication(true);
+      state.userEmail = "preview@example.com";
+      elements.signedInEmail.textContent = state.userEmail;
+      elements.headerAccountEmail.textContent = state.userEmail;
+      elements.accountEmail.textContent = state.userEmail;
+      renderLeaderboardProfile();
+      elements.authMessage.textContent =
+        "Preview only — saving is unavailable on the local static server.";
+      return;
+    }
     renderAuthentication(false);
     elements.signIn.disabled = true;
     elements.authMessage.textContent = LOCAL_PREVIEW
@@ -1732,6 +1857,8 @@ async function initializeAuthentication() {
       return;
     }
 
+    await refreshProfile();
+    if (!state.leaderboardName) return;
     await refreshSavedPrediction();
     if (!loadAuthSession()) return;
     openPrediction(false);

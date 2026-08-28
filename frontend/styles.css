@@ -265,6 +265,42 @@ h1 {
   text-underline-offset: 3px;
 }
 
+.profile-name-button {
+  display: block;
+  margin: 18px auto 0;
+  padding: 0;
+  color: var(--blue-dark);
+  background: none;
+  border: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.leaderboard-identity {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  color: var(--blue-dark);
+  background: rgba(24, 89, 169, 0.08);
+  border-left: 3px solid var(--blue);
+  font-size: 12px;
+}
+
+.leaderboard-identity strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 15px;
+}
+
+.profile-links {
+  justify-content: flex-end;
+}
+
+.profile-links:has(#cancel-leaderboard-name:not(.hidden)) {
+  justify-content: space-between;
+}
+
 .signed-in-email {
   margin-bottom: 24px;
   overflow-wrap: anywhere;

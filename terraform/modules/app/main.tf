@@ -41,6 +41,17 @@ resource "aws_dynamodb_table" "predictions" {
   }
 }
 
+resource "aws_dynamodb_table" "profiles" {
+  name         = "${local.resource_prefix}-profiles"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "profileKey"
+
+  attribute {
+    name = "profileKey"
+    type = "S"
+  }
+}
+
 resource "aws_cognito_user_pool" "users" {
   name                     = "${local.resource_prefix}-users"
   username_attributes      = ["email"]
@@ -121,6 +132,15 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:PutItem"
         ]
         Resource = aws_dynamodb_table.predictions.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DeleteItem",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem"
+        ]
+        Resource = aws_dynamodb_table.profiles.arn
       }
     ]
   })
@@ -144,6 +164,7 @@ resource "aws_lambda_function" "backend" {
       CACHE_TTL_SECONDS = tostring(var.cache_ttl_seconds)
       ENVIRONMENT       = var.environment
       PREDICTIONS_TABLE = aws_dynamodb_table.predictions.name
+      PROFILES_TABLE    = aws_dynamodb_table.profiles.name
     }
   }
 
@@ -222,6 +243,30 @@ resource "aws_apigatewayv2_route" "prediction_put" {
 resource "aws_apigatewayv2_route" "prediction_delete" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "DELETE /api/prediction"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "profile_get" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "GET /api/profile"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "profile_put" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "PUT /api/profile"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "profile_delete" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "DELETE /api/profile"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
