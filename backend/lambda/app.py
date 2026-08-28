@@ -8,6 +8,7 @@ import re
 import statistics
 import time
 from decimal import Decimal
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 import boto3
@@ -16,6 +17,26 @@ API_VERSION = 2
 ODDS_URL = "https://www.vegasinsider.com/nfl/odds/win-totals/"
 CACHE_KEY = "current"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "21600"))
+RESULTS_PATH = Path(__file__).with_name("season_results.json")
+
+SCORING_RULES = {
+    "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 70},
+    "divisionWinners": {"label": "Correct division winner", "points": 5, "maximum": 40},
+    "exactSeeds": {"label": "Exact playoff seed", "points": 3, "maximum": 42},
+    "wildCard": {"label": "Correct Wild Card winner", "points": 5, "maximum": 30},
+    "divisional": {"label": "Correct Divisional winner", "points": 10, "maximum": 40},
+    "conferenceChampions": {
+        "label": "Correct conference champion",
+        "points": 20,
+        "maximum": 40,
+    },
+    "superBowlChampion": {
+        "label": "Correct Super Bowl champion",
+        "points": 40,
+        "maximum": 40,
+    },
+}
+MAX_SCORE = sum(rule["maximum"] for rule in SCORING_RULES.values())
 
 FALLBACK_TOTALS = {
     "Arizona Cardinals": 4.5,
@@ -59,6 +80,152 @@ def cache_table():
 
 def predictions_table():
     return boto3.resource("dynamodb").Table(os.environ["PREDICTIONS_TABLE"])
+
+
+def load_season_results() -> dict:
+    with RESULTS_PATH.open(encoding="utf-8") as results_file:
+        return json.load(results_file)
+
+
+def score_prediction(prediction: dict, results: dict | None = None) -> dict:
+    results = results or load_season_results()
+    actual_seeds = results.get("seeds", {})
+    actual_divisions = results.get("divisionWinners", {})
+    round_winners = results.get("roundWinners", {})
+    predicted_seeds = prediction.get("seeds", {})
+    predicted_divisions = prediction.get("divisionWinners", {})
+    predicted_picks = prediction.get("picks", {})
+
+    actual_playoff_teams = {
+        team
+        for conference in ("AFC", "NFC")
+        for team in actual_seeds.get(conference, [])
+        if team
+    }
+    predicted_playoff_teams = {
+        team
+        for conference in ("AFC", "NFC")
+        for team in predicted_seeds.get(conference, [])
+        if team
+    }
+    playoff_field_hits = len(actual_playoff_teams & predicted_playoff_teams)
+
+    division_hits = 0
+    for conference in ("AFC", "NFC"):
+        for division in ("North", "South", "East", "West"):
+            actual = actual_divisions.get(conference, {}).get(division)
+            predicted = predicted_divisions.get(conference, {}).get(division)
+            division_hits += int(bool(actual) and actual == predicted)
+
+    seed_hits = 0
+    settled_seed_slots = 0
+    for conference in ("AFC", "NFC"):
+        actual_conference_seeds = actual_seeds.get(conference, [])
+        predicted_conference_seeds = predicted_seeds.get(conference, [])
+        for index, actual in enumerate(actual_conference_seeds):
+            if not actual:
+                continue
+            settled_seed_slots += 1
+            if index < len(predicted_conference_seeds):
+                seed_hits += int(actual == predicted_conference_seeds[index])
+
+    predicted_wild_card = {
+        predicted_picks.get(conference, {}).get(game_id)
+        for conference in ("AFC", "NFC")
+        for game_id in ("wc-2-7", "wc-3-6", "wc-4-5")
+    } - {None, ""}
+    actual_wild_card = {team for team in round_winners.get("wildCard", []) if team}
+
+    predicted_divisional = {
+        predicted_picks.get(conference, {}).get(game_id)
+        for conference in ("AFC", "NFC")
+        for game_id in ("div-1", "div-2")
+    } - {None, ""}
+    actual_divisional = {
+        team for team in round_winners.get("divisional", []) if team
+    }
+
+    predicted_conference_champions = {
+        conference: predicted_picks.get(conference, {}).get("conf")
+        for conference in ("AFC", "NFC")
+    }
+    actual_conference_champions = round_winners.get("conferenceChampions", {})
+    conference_hits = sum(
+        1
+        for conference in ("AFC", "NFC")
+        if actual_conference_champions.get(conference)
+        and actual_conference_champions[conference]
+        == predicted_conference_champions[conference]
+    )
+
+    actual_super_bowl_champion = round_winners.get("superBowlChampion")
+    predicted_super_bowl_champion = predicted_picks.get("superBowl")
+
+    hit_counts = {
+        "playoffField": playoff_field_hits,
+        "divisionWinners": division_hits,
+        "exactSeeds": seed_hits,
+        "wildCard": len(actual_wild_card & predicted_wild_card),
+        "divisional": len(actual_divisional & predicted_divisional),
+        "conferenceChampions": conference_hits,
+        "superBowlChampion": int(
+            bool(actual_super_bowl_champion)
+            and actual_super_bowl_champion == predicted_super_bowl_champion
+        ),
+    }
+    settled_counts = {
+        "playoffField": len(actual_playoff_teams),
+        "divisionWinners": sum(
+            bool(team)
+            for conference in ("AFC", "NFC")
+            for team in actual_divisions.get(conference, {}).values()
+        ),
+        "exactSeeds": settled_seed_slots,
+        "wildCard": len(actual_wild_card),
+        "divisional": len(actual_divisional),
+        "conferenceChampions": sum(
+            bool(actual_conference_champions.get(conference))
+            for conference in ("AFC", "NFC")
+        ),
+        "superBowlChampion": int(bool(actual_super_bowl_champion)),
+    }
+
+    breakdown = {
+        key: {
+            "label": rule["label"],
+            "hits": hit_counts[key],
+            "settled": settled_counts[key],
+            "points": hit_counts[key] * rule["points"],
+            "possible": settled_counts[key] * rule["points"],
+            "maximum": rule["maximum"],
+        }
+        for key, rule in SCORING_RULES.items()
+    }
+    regular_season = sum(
+        breakdown[key]["points"]
+        for key in ("playoffField", "divisionWinners", "exactSeeds")
+    )
+    playoffs = sum(
+        breakdown[key]["points"]
+        for key in (
+            "wildCard",
+            "divisional",
+            "conferenceChampions",
+            "superBowlChampion",
+        )
+    )
+
+    return {
+        "season": results.get("season"),
+        "status": results.get("status", "Results unavailable"),
+        "updatedAt": results.get("updatedAt"),
+        "breakdown": breakdown,
+        "regularSeason": regular_season,
+        "playoffs": playoffs,
+        "total": regular_season + playoffs,
+        "possible": sum(category["possible"] for category in breakdown.values()),
+        "maximum": MAX_SCORE,
+    }
 
 
 def fetch_live_totals() -> dict[str, float]:
@@ -277,11 +444,12 @@ def handler(event, context):
         prediction = get_prediction(user_id)
         if not prediction:
             return response(404, {"message": "Prediction not found"})
-        return response(200, prediction)
+        return response(200, {**prediction, "score": score_prediction(prediction)})
 
     if method == "PUT":
         try:
-            return response(200, put_prediction(user_id, event))
+            prediction = put_prediction(user_id, event)
+            return response(200, {**prediction, "score": score_prediction(prediction)})
         except ValueError as error:
             return response(400, {"message": str(error)})
 

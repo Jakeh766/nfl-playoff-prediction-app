@@ -5,6 +5,7 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Create an email/password account through Amazon Cognito.
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
+- Track a private 302-point score as official results become available.
 - Privately save, reopen, update, and delete one prediction per account.
 - Permanently delete their saved prediction and account from the signed-in view.
 
@@ -28,6 +29,26 @@ through an in-app confirmation dialog.
 
 Win-total projections remain public. Prediction reads and writes require a
 signed-in account.
+
+## Scoring
+
+Saved predictions earn five points for each correct playoff team, five bonus
+points for each correct division winner, and three bonus points for each exact
+seed. Correct advancing teams earn five points in the Wild Card round, ten in
+the Divisional round, twenty for a conference championship, and forty for the
+Super Bowl championship. The maximum is 302 points.
+
+Playoff rounds are scored by advancement rather than exact matchup. A team that
+advances earns its round points even when its real opponent differs from the
+predicted bracket, and an earlier miss does not invalidate a correct later-round
+pick.
+
+The current source of truth is
+`backend/lambda/season_results.json`. Empty fields are treated as outcomes that
+are not yet scoreable. As the season progresses, add only known or currently
+published outcomes, update the status and timestamp, and deploy. Scores are
+calculated when a saved prediction is read; score data is not persisted in
+DynamoDB.
 
 ## Development workflow
 

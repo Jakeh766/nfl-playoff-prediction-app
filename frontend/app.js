@@ -1549,6 +1549,43 @@ function resetGamePicks() {
   showToast("Game picks reset. Your seeding is unchanged.");
 }
 
+function createScoreSummary(score) {
+  const summary = document.createElement("section");
+  summary.className = "score-summary";
+  summary.setAttribute("aria-label", "Prediction score");
+
+  const top = document.createElement("div");
+  top.className = "score-summary-top";
+
+  const label = document.createElement("p");
+  label.className = "score-summary-label";
+  label.textContent = score.possible
+    ? `${score.total} OF ${score.possible} AVAILABLE`
+    : "CURRENT SCORE";
+
+  const total = document.createElement("strong");
+  total.className = "score-summary-total";
+  total.textContent = `${score.total} / ${score.maximum}`;
+  top.append(label, total);
+
+  const status = document.createElement("p");
+  status.className = "score-summary-status";
+  status.textContent = score.status;
+
+  const splits = document.createElement("div");
+  splits.className = "score-splits";
+  const regularSeason = document.createElement("span");
+  regularSeason.append("PLAYOFF FIELD + SEEDS", document.createElement("strong"));
+  regularSeason.querySelector("strong").textContent = `${score.regularSeason} pts`;
+  const playoffs = document.createElement("span");
+  playoffs.append("PLAYOFF ROUNDS", document.createElement("strong"));
+  playoffs.querySelector("strong").textContent = `${score.playoffs} pts`;
+  splits.append(regularSeason, playoffs);
+
+  summary.append(top, status, splits);
+  return summary;
+}
+
 function renderSavedPrediction() {
   const prediction = state.savedPrediction;
   elements.savedGrid.innerHTML = "";
@@ -1578,6 +1615,10 @@ function renderSavedPrediction() {
   champion.className = "champion-chip";
   champion.textContent = `★ Champion: ${prediction.picks.superBowl}`;
 
+  const scoreSummary = prediction.score
+    ? createScoreSummary(prediction.score)
+    : null;
+
   const actions = document.createElement("div");
   actions.className = "saved-card-actions";
 
@@ -1595,7 +1636,9 @@ function renderSavedPrediction() {
   remove.addEventListener("click", deletePrediction);
 
   actions.append(load, remove);
-  card.append(top, champion, actions);
+  card.append(top, champion);
+  if (scoreSummary) card.appendChild(scoreSummary);
+  card.appendChild(actions);
   elements.savedGrid.appendChild(card);
 }
 

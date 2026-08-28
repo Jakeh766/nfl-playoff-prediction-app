@@ -1,0 +1,19 @@
+{
+  "season": 2026,
+  "status": "Preseason — scoring has not started",
+  "updatedAt": null,
+  "divisionWinners": {
+    "AFC": {},
+    "NFC": {}
+  },
+  "seeds": {
+    "AFC": [],
+    "NFC": []
+  },
+  "roundWinners": {
+    "wildCard": [],
+    "divisional": [],
+    "conferenceChampions": {},
+    "superBowlChampion": ""
+  }
+}
