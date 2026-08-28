@@ -174,20 +174,14 @@ resource "aws_cognito_user_pool_client" "browser" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["email", "openid"]
   supported_identity_providers         = ["COGNITO"]
-  callback_urls = concat(
-    ["https://${aws_cloudfront_distribution.app.domain_name}"],
-    var.environment == "dev" ? ["http://localhost:8000"] : []
-  )
-  logout_urls = concat(
-    ["https://${aws_cloudfront_distribution.app.domain_name}"],
-    var.environment == "dev" ? ["http://localhost:8000"] : []
-  )
-  default_redirect_uri          = "https://${aws_cloudfront_distribution.app.domain_name}"
-  enable_token_revocation       = true
-  prevent_user_existence_errors = "ENABLED"
-  access_token_validity         = 1
-  id_token_validity             = 1
-  refresh_token_validity        = 30
+  callback_urls                        = ["https://${aws_cloudfront_distribution.app.domain_name}"]
+  logout_urls                          = ["https://${aws_cloudfront_distribution.app.domain_name}"]
+  default_redirect_uri                 = "https://${aws_cloudfront_distribution.app.domain_name}"
+  enable_token_revocation              = true
+  prevent_user_existence_errors        = "ENABLED"
+  access_token_validity                = 1
+  id_token_validity                    = 1
+  refresh_token_validity               = 30
 
   token_validity_units {
     access_token  = "hours"

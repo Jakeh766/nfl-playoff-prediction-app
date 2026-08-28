@@ -7,11 +7,10 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Predict every playoff game, including conference championships and the Super Bowl.
 - Privately save, reopen, update, and delete one prediction per account.
 
-In the AWS deployment, predictions are stored in DynamoDB and are available
-across devices. The included local server stores development predictions in an
-ignored `backend/.data` directory. It also refreshes projected season win totals
-whenever the app loads, reading available sportsbook lines from VegasInsider
-and using the median as a consensus projection for each team.
+Predictions are stored in DynamoDB and are available across devices. The Lambda
+backend refreshes projected season win totals when the app loads, reading
+available sportsbook lines from VegasInsider and using the median as a
+consensus projection for each team.
 
 ## Authentication
 
@@ -26,40 +25,43 @@ Lambda function uses the verified Cognito `sub` claim as the DynamoDB key.
 Win-total projections remain public. Prediction reads and writes require a
 signed-in account.
 
-## Run locally
+## Development workflow
 
-Local sign-in uses the dev environment's deployed Cognito user pool. After
-applying the dev Terraform stack, configure the local server in PowerShell:
+The `dev` branch deploys automatically through GitHub Actions. Make changes
+locally, run the relevant fast checks, push to `dev`, and perform functional or
+integration testing in the deployed dev environment. This keeps Cognito, API
+Gateway, Lambda, and DynamoDB behavior identical to the architecture being
+tested.
+
+Run all local checks from the repository root:
 
 ```powershell
-$env:COGNITO_DOMAIN = terraform -chdir=terraform/envs/dev output -raw cognito_domain
-$env:COGNITO_CLIENT_ID = terraform -chdir=terraform/envs/dev output -raw cognito_client_id
-python backend/server.py
+node --check frontend/app.js
+python -m py_compile backend/lambda/app.py
+python -m unittest discover -s backend -p "test_*.py"
+terraform fmt -check -recursive terraform
+terraform -chdir=terraform/envs/dev init -backend=false
+terraform -chdir=terraform/envs/dev validate
 ```
 
-Then visit `http://localhost:8000`, which is registered as a dev-only Cognito
-callback and logout URL.
+For a quick visual-only frontend preview, run:
 
-The local server is bound to loopback and decodes Cognito access-token claims
-without independently checking their signature. Production signature and claim
-validation is performed by API Gateway's JWT authorizer. Do not expose the
-local development server to a network.
+```powershell
+python -m http.server 8000 --directory frontend
+```
 
-After updating `backend/server.py`, stop any copy already running with `Ctrl+C`, start it
-again, and refresh the browser. A running Python process does not reload changed
-server code automatically.
-
-If the live table cannot be reached, the server uses the most recent successful
-cache, then a bundled 2026 market snapshot as a final fallback. The app labels
-which source is active.
+Then visit `http://localhost:8000`. The preview uses bundled win totals and
+exposes the bracket randomizer, but authentication, saved predictions, and live
+odds are intentionally unavailable. Test those behaviors in the deployed dev
+environment.
 
 ## Repository layout
 
 ```text
 frontend/          Browser application
-backend/           Local development server and Lambda handler
+backend/           Lambda handler and backend tests
 terraform/         AWS infrastructure, state, and deployment guide
-README.md          Project overview and local setup
+README.md          Project overview and development workflow
 ```
 
 See `terraform/README.md` for AWS deployment instructions.

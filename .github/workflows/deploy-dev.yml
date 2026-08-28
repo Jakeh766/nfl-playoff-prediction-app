@@ -42,10 +42,12 @@ jobs:
           terraform_version: "1.15.7"
 
       - name: Check frontend JavaScript syntax
-        run: node --check frontend/app.js
+        run: |
+          node --check frontend/app.js
+          node --check frontend/auth-config.js
 
       - name: Check backend Python syntax
-        run: python -m py_compile backend/server.py backend/lambda/app.py
+        run: python -m py_compile backend/lambda/app.py
 
       - name: Test authenticated prediction ownership
         run: python -m unittest discover -s backend -p "test_*.py"

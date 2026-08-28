@@ -123,9 +123,9 @@ anonymous name-keyed rows remain in the table but are not returned or modified
 by the authenticated API.
 
 The module also publishes `cognito_user_pool_id`, `cognito_client_id`, and
-`cognito_domain` outputs. Dev registers `http://localhost:8000` in addition to
-its CloudFront URL; production accepts only its CloudFront URL. Email
-verification is required and MFA is explicitly `OFF`.
+`cognito_domain` outputs. Both environments accept only their own CloudFront
+URL for Cognito callbacks and logout. Email verification is required and MFA is
+explicitly `OFF`.
 
 Review AWS pricing and the target site's automated-access policy before
 deploying. These resources are not guaranteed to remain free.

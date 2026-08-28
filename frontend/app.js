@@ -37,7 +37,7 @@ const TEAMS = {
   ],
 };
 
-const TEST_MODE =
+const LOCAL_PREVIEW =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1";
 
@@ -220,7 +220,7 @@ const elements = {
   toast: document.querySelector("#toast"),
 };
 
-if (!TEST_MODE) {
+if (!LOCAL_PREVIEW) {
   elements.randomizeBracket.classList.add("hidden");
 }
 
@@ -706,7 +706,7 @@ async function loadWinTotals() {
 
     const data = await response.json();
     if (data.apiVersion !== 2) {
-      throw new Error("The odds server is outdated. Restart backend/server.py.");
+      throw new Error("The odds API version does not match this frontend.");
     }
     if (!data.totals || Object.keys(data.totals).length < 32) {
       throw new Error("Incomplete odds response");
@@ -723,10 +723,10 @@ async function loadWinTotals() {
     elements.oddsStatus.textContent = `${sourceLabel} projected wins from ${data.source}. Teams are ranked within each division.`;
     elements.oddsStatus.title = data.message || "";
   } catch (error) {
-    const isStaleServer = error.message.includes("outdated");
-    elements.oddsStatus.textContent = isStaleServer
-      ? "Odds server is outdated. Stop it, restart backend/server.py, then refresh this page."
-      : "Projected wins use the bundled 2026 sportsbook snapshot. Run through backend/server.py for live refreshes.";
+    const isMismatchedApi = error.message.includes("does not match");
+    elements.oddsStatus.textContent = isMismatchedApi
+      ? "The odds API and frontend versions do not match. Deploy the latest dev build."
+      : "Projected wins use the bundled 2026 sportsbook snapshot because live odds are unavailable.";
     elements.oddsStatus.title = error.message;
   }
 
@@ -1000,7 +1000,7 @@ function buildBracket() {
 }
 
 function randomizeBracket() {
-  if (!TEST_MODE) return;
+  if (!LOCAL_PREVIEW) return;
 
   state.divisionWinners = createEmptyDivisionWinners();
   state.seeds = { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
@@ -1501,8 +1501,8 @@ async function initializeAuthentication() {
   if (!authIsConfigured()) {
     renderAuthentication(false);
     elements.signIn.disabled = true;
-    elements.authMessage.textContent = TEST_MODE
-      ? "Set COGNITO_DOMAIN and COGNITO_CLIENT_ID before starting the local server."
+    elements.authMessage.textContent = LOCAL_PREVIEW
+      ? "Authentication and saved predictions are unavailable in the local static preview."
       : "Authentication is not configured for this deployment.";
     return;
   }

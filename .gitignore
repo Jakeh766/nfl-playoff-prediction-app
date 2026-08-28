@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-backend/.data/
 terraform/**/.terraform/
 terraform/**/*.tfstate
 terraform/**/*.tfstate.*
