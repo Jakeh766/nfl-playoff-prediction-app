@@ -188,6 +188,7 @@ const state = {
   bracketBuilt: false,
   savedAt: null,
   savedPrediction: null,
+  leaderboard: null,
 };
 
 const elements = {
@@ -261,6 +262,10 @@ const elements = {
   savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
   emptyLocker: document.querySelector("#empty-locker"),
+  leaderboardStatus: document.querySelector("#leaderboard-status"),
+  leaderboardTableShell: document.querySelector("#leaderboard-table-shell"),
+  leaderboardBody: document.querySelector("#leaderboard-body"),
+  emptyLeaderboard: document.querySelector("#empty-leaderboard"),
   toast: document.querySelector("#toast"),
 };
 
@@ -701,7 +706,12 @@ async function submitLeaderboardName(event) {
     if (shouldSavePrediction) {
       await savePrediction();
     } else {
-      showToast(`Leaderboard name changed to ${state.leaderboardName}.`);
+      showToast(
+        previousName
+          ? `Leaderboard name changed to ${state.leaderboardName}.`
+          : `Leaderboard name set to ${state.leaderboardName}.`,
+      );
+      await loadLeaderboard();
     }
   } catch (error) {
     elements.leaderboardNameMessage.textContent = error.message;
@@ -857,6 +867,68 @@ async function refreshSavedPrediction() {
     }
   }
   renderSavedPrediction();
+}
+
+function renderLeaderboard() {
+  const leaderboard = state.leaderboard;
+  const entries = leaderboard?.entries || [];
+  elements.leaderboardBody.innerHTML = "";
+  elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
+  elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
+
+  if (!leaderboard) return;
+  elements.leaderboardStatus.textContent = leaderboard.status;
+
+  entries.forEach((entry) => {
+    const row = document.createElement("tr");
+    const rank = document.createElement("td");
+    rank.className = "leaderboard-rank";
+    rank.textContent = entry.rank <= 3
+      ? ["🥇", "🥈", "🥉"][entry.rank - 1]
+      : String(entry.rank);
+    rank.setAttribute("aria-label", `Rank ${entry.rank}`);
+
+    const player = document.createElement("th");
+    player.scope = "row";
+    player.textContent = entry.leaderboardName;
+
+    const regularSeason = document.createElement("td");
+    regularSeason.textContent = entry.regularSeason;
+    const playoffs = document.createElement("td");
+    playoffs.textContent = entry.playoffs;
+    const total = document.createElement("td");
+    total.className = "leaderboard-total";
+    total.textContent = entry.total;
+
+    row.append(rank, player, regularSeason, playoffs, total);
+    elements.leaderboardBody.appendChild(row);
+  });
+}
+
+async function loadLeaderboard() {
+  try {
+    state.leaderboard = await apiRequest("/api/leaderboard");
+  } catch (error) {
+    if (LOCAL_PREVIEW) {
+      state.leaderboard = {
+        status: "Preseason — scoring has not started",
+        entries: [
+          { rank: 1, leaderboardName: "Gridiron Jake", regularSeason: 0, playoffs: 0, total: 0 },
+          { rank: 1, leaderboardName: "Sunday Sam", regularSeason: 0, playoffs: 0, total: 0 },
+          { rank: 1, leaderboardName: "Fourth Down Alex", regularSeason: 0, playoffs: 0, total: 0 },
+        ],
+      };
+    } else {
+      state.leaderboard = null;
+      elements.leaderboardStatus.textContent =
+        "The leaderboard could not be loaded. Please refresh and try again.";
+      elements.emptyLeaderboard.classList.add("hidden");
+      elements.leaderboardTableShell.classList.add("hidden");
+      elements.leaderboardStatus.title = error.message;
+      return;
+    }
+  }
+  renderLeaderboard();
 }
 
 function shuffled(values) {
@@ -1590,6 +1662,7 @@ async function savePrediction() {
     state.savedPrediction = saved;
     updateSaveState(true);
     renderSavedPrediction();
+    await loadLeaderboard();
     showToast("Prediction saved.");
   } catch (error) {
     updateSaveState(false);
@@ -1876,4 +1949,5 @@ async function initializeAuthentication() {
 }
 
 loadWinTotals();
+loadLeaderboard();
 initializeAuthentication();

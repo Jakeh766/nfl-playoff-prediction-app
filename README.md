@@ -30,9 +30,13 @@ through an in-app confirmation dialog.
 
 Leaderboard profiles are stored separately from private predictions. Names are
 trimmed and reserved case-insensitively, so capitalization cannot be used to
-duplicate another account's name. New and existing accounts must claim a
-leaderboard name before saving a prediction. Deleting an account releases its
-name for someone else to use.
+duplicate another account's name. New and existing accounts are prompted for a
+leaderboard name the first time they select **Save prediction**. Deleting an
+account releases its name for someone else to use.
+
+The public leaderboard returns only leaderboard name, playoff-field and seeding
+points, playoff-round points, total points, and rank. It does not expose email
+addresses, Cognito identifiers, or private bracket picks.
 
 Win-total projections remain public. Prediction reads and writes require a
 signed-in account.
@@ -88,7 +92,8 @@ odds are intentionally unavailable. Test those behaviors in the deployed dev
 environment.
 
 Use `http://localhost:8000/?preview=leaderboard-name` to visually inspect the
-required first-sign-in leaderboard-name form without an authenticated backend.
+leaderboard-name dialog that opens from **Save prediction** without an
+authenticated backend. The static preview also shows sample leaderboard rows.
 
 ## Repository layout
 

@@ -127,6 +127,20 @@ class LoginFormTests(unittest.TestCase):
             save_flow.index("if (!state.leaderboardName)"),
         )
 
+    def test_public_leaderboard_is_rendered_without_private_account_data(self):
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="leaderboard-section"', html)
+        self.assertIn('id="leaderboard-body"', html)
+        self.assertIn('apiRequest("/api/leaderboard")', app_javascript)
+        leaderboard_renderer = app_javascript[
+            app_javascript.index("function renderLeaderboard()") :
+            app_javascript.index("async function loadLeaderboard()")
+        ]
+        self.assertNotIn("userEmail", leaderboard_renderer)
+        self.assertNotIn("profileKey", leaderboard_renderer)
+
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"

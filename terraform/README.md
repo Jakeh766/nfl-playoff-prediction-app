@@ -25,6 +25,8 @@ Browser
                                                 -> DynamoDB saved predictions
             -> JWT-protected /api/profile    -> Lambda
                                                 -> DynamoDB unique leaderboard profiles
+            -> public /api/leaderboard       -> Lambda
+                                                -> Sanitized scores and leaderboard names
 ```
 
 ## Environment isolation

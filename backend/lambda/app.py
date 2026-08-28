@@ -191,6 +191,66 @@ def public_profile(profile: dict) -> dict:
     }
 
 
+def scan_all(table) -> list[dict]:
+    items = []
+    scan_arguments = {}
+    while True:
+        result = table.scan(**scan_arguments)
+        items.extend(result.get("Items", []))
+        last_key = result.get("LastEvaluatedKey")
+        if not last_key:
+            return items
+        scan_arguments["ExclusiveStartKey"] = last_key
+
+
+def get_leaderboard() -> dict:
+    results = load_season_results()
+    profiles = {
+        item["profileKey"].removeprefix("user#"): item
+        for item in scan_all(profiles_table())
+        if item.get("recordType") == "profile"
+        and item.get("profileKey", "").startswith("user#")
+    }
+    entries = []
+    for prediction in scan_all(predictions_table()):
+        profile = profiles.get(prediction.get("profileKey"))
+        if not profile:
+            continue
+        score = score_prediction(prediction, results)
+        entries.append(
+            {
+                "leaderboardName": profile["leaderboardName"],
+                "regularSeason": score["regularSeason"],
+                "playoffs": score["playoffs"],
+                "total": score["total"],
+            }
+        )
+
+    entries.sort(
+        key=lambda entry: (
+            -entry["total"],
+            -entry["regularSeason"],
+            -entry["playoffs"],
+            entry["leaderboardName"].casefold(),
+        )
+    )
+    previous_score = None
+    current_rank = 0
+    for position, entry in enumerate(entries, start=1):
+        if entry["total"] != previous_score:
+            current_rank = position
+            previous_score = entry["total"]
+        entry["rank"] = current_rank
+
+    return {
+        "season": results.get("season"),
+        "status": results.get("status", "Results unavailable"),
+        "updatedAt": results.get("updatedAt"),
+        "maximum": MAX_SCORE,
+        "entries": entries,
+    }
+
+
 def load_season_results() -> dict:
     with RESULTS_PATH.open(encoding="utf-8") as results_file:
         return json.load(results_file)
@@ -541,6 +601,9 @@ def handler(event, context):
 
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())
+
+    if method == "GET" and path == "/api/leaderboard":
+        return response(200, get_leaderboard())
 
     if path not in ("/api/prediction", "/api/profile"):
         return response(404, {"message": "Not found"})

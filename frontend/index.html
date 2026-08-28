@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=10" />
+    <link rel="stylesheet" href="styles.css?v=11" />
   </head>
   <body>
     <header class="site-header">
@@ -363,10 +363,43 @@
         </p>
       </section>
 
+      <section class="leaderboard-section" id="leaderboard-section">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">03 · THE STANDINGS</p>
+            <h2>Public leaderboard.</h2>
+            <p>
+              Compare every saved preseason prediction. Only leaderboard names
+              and score totals are public; account details and brackets stay private.
+            </p>
+            <p class="leaderboard-status" id="leaderboard-status" role="status">
+              Loading leaderboard…
+            </p>
+          </div>
+        </div>
+        <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th scope="col">Rank</th>
+                <th scope="col">Player</th>
+                <th scope="col">Field + seeding</th>
+                <th scope="col">Playoffs</th>
+                <th scope="col">Total</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+        <p class="empty-leaderboard hidden" id="empty-leaderboard">
+          No scored predictions yet. The first saved prediction will take the top spot.
+        </p>
+      </section>
+
       <section class="scoring-section" id="scoring-section">
         <div class="section-heading compact">
           <div>
-            <p class="eyebrow">03 · FOLLOW THE SEASON</p>
+            <p class="eyebrow">04 · FOLLOW THE SEASON</p>
             <h2>Score the whole journey.</h2>
             <p>
               Earn points for building the right playoff field, nailing the seeds,

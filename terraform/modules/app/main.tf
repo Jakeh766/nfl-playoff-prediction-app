@@ -129,7 +129,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
         Action = [
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
-          "dynamodb:PutItem"
+          "dynamodb:PutItem",
+          "dynamodb:Scan"
         ]
         Resource = aws_dynamodb_table.predictions.arn
       },
@@ -138,7 +139,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
         Action = [
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
-          "dynamodb:PutItem"
+          "dynamodb:PutItem",
+          "dynamodb:Scan"
         ]
         Resource = aws_dynamodb_table.profiles.arn
       }
@@ -230,6 +232,12 @@ resource "aws_apigatewayv2_route" "prediction_get" {
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "leaderboard_get" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /api/leaderboard"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
 resource "aws_apigatewayv2_route" "prediction_put" {

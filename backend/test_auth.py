@@ -54,6 +54,9 @@ class FakeTable:
                 raise ConditionalCheckFailed()
         self.items.pop(Key["profileKey"], None)
 
+    def scan(self, **_arguments):
+        return {"Items": list(self.items.values())}
+
 
 class ConditionalCheckFailed(Exception):
     response = {"Error": {"Code": "ConditionalCheckFailedException"}}
@@ -208,6 +211,73 @@ class LeaderboardProfileTests(unittest.TestCase):
         )
 
         self.assertEqual(result["statusCode"], 400)
+
+
+class PublicLeaderboardTests(unittest.TestCase):
+    def setUp(self):
+        self.predictions = FakeTable(
+            {
+                "user-123": {"profileKey": "user-123", "testScore": 25},
+                "user-456": {"profileKey": "user-456", "testScore": 10},
+                "user-without-profile": {
+                    "profileKey": "user-without-profile",
+                    "testScore": 99,
+                },
+            }
+        )
+        self.profiles = FakeTable(
+            {
+                "user#user-123": {
+                    "profileKey": "user#user-123",
+                    "recordType": "profile",
+                    "leaderboardName": "Jake",
+                },
+                "user#user-456": {
+                    "profileKey": "user#user-456",
+                    "recordType": "profile",
+                    "leaderboardName": "Sam",
+                },
+                "name#jake": {
+                    "profileKey": "name#jake",
+                    "recordType": "leaderboardName",
+                    "ownerId": "user-123",
+                },
+            }
+        )
+        self.original_results_loader = lambda_app.load_season_results
+        self.original_scorer = lambda_app.score_prediction
+        lambda_app.predictions_table = lambda: self.predictions
+        lambda_app.profiles_table = lambda: self.profiles
+        lambda_app.load_season_results = lambda: {
+            "season": 2026,
+            "status": "In progress",
+            "updatedAt": "2026-12-01",
+        }
+        lambda_app.score_prediction = lambda prediction, _results: {
+            "regularSeason": prediction["testScore"],
+            "playoffs": 0,
+            "total": prediction["testScore"],
+        }
+
+    def tearDown(self):
+        lambda_app.load_season_results = self.original_results_loader
+        lambda_app.score_prediction = self.original_scorer
+
+    def test_leaderboard_is_public_ranked_and_sanitized(self):
+        result = lambda_app.handler(
+            event("GET", user_id=None, path="/api/leaderboard"),
+            None,
+        )
+        payload = json.loads(result["body"])
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(
+            [entry["leaderboardName"] for entry in payload["entries"]],
+            ["Jake", "Sam"],
+        )
+        self.assertEqual([entry["rank"] for entry in payload["entries"]], [1, 2])
+        self.assertNotIn("profileKey", payload["entries"][0])
+        self.assertNotIn("picks", payload["entries"][0])
 
 
 if __name__ == "__main__":
