@@ -368,11 +368,20 @@ select:focus {
 }
 
 .button {
-  min-height: 44px;
-  padding: 0 20px;
-  border: 0;
-  border-radius: 5px;
-  font-weight: 700;
+  min-height: 42px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  text-align: center;
+  text-decoration: none;
   white-space: nowrap;
   transition:
     transform 150ms ease,
@@ -381,7 +390,16 @@ select:focus {
 }
 
 .button:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.28);
+  outline-offset: 3px;
 }
 
 .button:disabled {
@@ -397,11 +415,12 @@ select:focus {
 .button-primary {
   color: white;
   background: var(--red);
-  box-shadow: 0 8px 18px rgba(227, 59, 63, 0.22);
+  box-shadow: 0 6px 14px rgba(227, 59, 63, 0.18);
 }
 
 .button-primary:hover {
   background: var(--red-dark);
+  box-shadow: 0 8px 18px rgba(183, 32, 45, 0.22);
 }
 
 .button-danger {
@@ -416,8 +435,15 @@ select:focus {
 
 .button-secondary {
   color: var(--ink);
+  background: rgba(255, 255, 255, 0.76);
+  border-color: rgba(16, 34, 58, 0.18);
+  box-shadow: 0 2px 7px rgba(16, 34, 58, 0.06);
+}
+
+.button-secondary:hover {
   background: white;
-  border: 1px solid var(--line);
+  border-color: rgba(16, 34, 58, 0.3);
+  box-shadow: 0 5px 12px rgba(16, 34, 58, 0.1);
 }
 
 .button-ghost {
@@ -427,8 +453,9 @@ select:focus {
 }
 
 .button-large {
-  min-height: 52px;
-  padding: 0 28px;
+  min-height: 48px;
+  padding: 0 24px;
+  font-size: 13px;
 }
 
 .account-dialog {
