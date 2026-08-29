@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import hmac
 import json
@@ -22,6 +23,9 @@ API_VERSION = 2
 ODDS_URL = "https://www.vegasinsider.com/nfl/odds/win-totals/"
 CACHE_KEY = "current"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "21600"))
+PREDICTION_LOCK_AT = os.environ.get(
+    "PREDICTION_LOCK_AT", "2099-12-31T23:59:59Z"
+)
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
 
@@ -748,6 +752,23 @@ def public_group(group: dict) -> dict:
     }
 
 
+def prediction_window(now_seconds: float | None = None) -> dict:
+    try:
+        lock_seconds = calendar.timegm(
+            time.strptime(PREDICTION_LOCK_AT, "%Y-%m-%dT%H:%M:%SZ")
+        )
+    except ValueError as error:
+        raise RuntimeError("PREDICTION_LOCK_AT must be an ISO-8601 UTC timestamp") from error
+
+    server_seconds = time.time() if now_seconds is None else now_seconds
+    return {
+        "lockAt": PREDICTION_LOCK_AT,
+        "locked": server_seconds >= lock_seconds,
+        "serverTime": int(server_seconds * 1000),
+        "season": int(PREDICTION_LOCK_AT[:4]),
+    }
+
+
 def get_group(group_id: str) -> dict | None:
     result = groups_table().get_item(Key={"groupKey": group_item_key(group_id)})
     item = result.get("Item")
@@ -914,6 +935,9 @@ def handler(event, context):
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())
 
+    if method == "GET" and path == "/api/prediction-window":
+        return response(200, prediction_window())
+
     if method == "GET" and path == "/api/leaderboard":
         return response(200, get_leaderboard())
 
@@ -1000,6 +1024,18 @@ def handler(event, context):
 
     if method == "PUT":
         try:
+            window = prediction_window()
+            if window["locked"]:
+                return response(
+                    423,
+                    {
+                        **window,
+                        "message": (
+                            "Brackets locked at the start of the NFL regular season "
+                            "and can no longer be created or changed."
+                        ),
+                    },
+                )
             if not get_profile(user_id):
                 raise ValueError("Choose a leaderboard name before saving a prediction")
             prediction = put_prediction(user_id, event)

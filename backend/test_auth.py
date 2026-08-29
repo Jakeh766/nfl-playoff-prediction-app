@@ -200,6 +200,49 @@ class PredictionAuthorizationTests(unittest.TestCase):
         self.assertEqual(result["statusCode"], 400)
         self.assertIn("leaderboard name", json.loads(result["body"])["message"])
 
+    def test_prediction_cannot_be_created_or_changed_after_kickoff(self):
+        original_lock_at = lambda_app.PREDICTION_LOCK_AT
+        original_time = lambda_app.time.time
+        lambda_app.PREDICTION_LOCK_AT = "2026-09-10T00:20:00Z"
+        lambda_app.time.time = lambda: 1_789_000_000
+        self.table.items["user-123"] = {
+            "profileKey": "user-123",
+            "savedAt": 123,
+        }
+
+        try:
+            result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
+        finally:
+            lambda_app.PREDICTION_LOCK_AT = original_lock_at
+            lambda_app.time.time = original_time
+
+        self.assertEqual(result["statusCode"], 423)
+        self.assertEqual(self.table.items["user-123"]["savedAt"], 123)
+        self.assertTrue(json.loads(result["body"])["locked"])
+
+
+class PredictionWindowTests(unittest.TestCase):
+    def test_window_endpoint_is_public_and_reports_server_time(self):
+        original_lock_at = lambda_app.PREDICTION_LOCK_AT
+        original_time = lambda_app.time.time
+        lambda_app.PREDICTION_LOCK_AT = "2026-09-10T00:20:00Z"
+        lambda_app.time.time = lambda: 1_788_900_000
+
+        try:
+            result = lambda_app.handler(
+                event("GET", user_id=None, path="/api/prediction-window"),
+                None,
+            )
+        finally:
+            lambda_app.PREDICTION_LOCK_AT = original_lock_at
+            lambda_app.time.time = original_time
+
+        payload = json.loads(result["body"])
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(payload["lockAt"], "2026-09-10T00:20:00Z")
+        self.assertEqual(payload["serverTime"], 1_788_900_000_000)
+        self.assertFalse(payload["locked"])
+
 
 class LeaderboardProfileTests(unittest.TestCase):
     def setUp(self):

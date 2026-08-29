@@ -13,6 +13,11 @@ variable "cache_ttl_seconds" {
   type        = number
 }
 
+variable "prediction_lock_at" {
+  description = "UTC kickoff timestamp after which predictions are locked."
+  type        = string
+}
+
 variable "api_throttling_rate_limit" {
   description = "Maximum sustained API Gateway requests per second."
   type        = number

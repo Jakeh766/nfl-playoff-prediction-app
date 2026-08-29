@@ -211,12 +211,13 @@ resource "aws_lambda_function" "backend" {
 
   environment {
     variables = {
-      CACHE_TABLE       = aws_dynamodb_table.win_totals_cache.name
-      CACHE_TTL_SECONDS = tostring(var.cache_ttl_seconds)
-      ENVIRONMENT       = var.environment
-      GROUPS_TABLE      = aws_dynamodb_table.groups.name
-      PREDICTIONS_TABLE = aws_dynamodb_table.predictions.name
-      PROFILES_TABLE    = aws_dynamodb_table.profiles.name
+      CACHE_TABLE        = aws_dynamodb_table.win_totals_cache.name
+      CACHE_TTL_SECONDS  = tostring(var.cache_ttl_seconds)
+      ENVIRONMENT        = var.environment
+      GROUPS_TABLE       = aws_dynamodb_table.groups.name
+      PREDICTION_LOCK_AT = var.prediction_lock_at
+      PREDICTIONS_TABLE  = aws_dynamodb_table.predictions.name
+      PROFILES_TABLE     = aws_dynamodb_table.profiles.name
     }
   }
 
@@ -282,6 +283,12 @@ resource "aws_apigatewayv2_route" "prediction_get" {
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "prediction_window" {
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "GET /api/prediction-window"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
 resource "aws_apigatewayv2_route" "leaderboard_get" {

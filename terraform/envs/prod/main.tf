@@ -39,6 +39,7 @@ module "nfl_app" {
 
   # Preserve the names of already-deployed production resources.
   resource_prefix            = var.project_name
+  prediction_lock_at         = var.prediction_lock_at
   cache_ttl_seconds          = var.cache_ttl_seconds
   api_throttling_rate_limit  = var.api_throttling_rate_limit
   api_throttling_burst_limit = var.api_throttling_burst_limit

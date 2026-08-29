@@ -158,6 +158,7 @@ function renderConferenceSeeds(conference, container) {
     );
 
     select.addEventListener("change", handleDivisionWinnerChange);
+    select.disabled = state.predictionsLocked;
     const control = document.createElement("div");
     control.className = "logo-select-control";
     const selectedTeam = state.divisionWinners[conference][division];
@@ -326,7 +327,9 @@ function updateDisabledTeamOptions(conference) {
         Object.values(state.divisionWinners[conference]).filter(Boolean),
       );
 
-      select.disabled = isDivisionWinner ? !divisionPicksComplete : !wildCardsUnlocked;
+      select.disabled =
+        state.predictionsLocked ||
+        (isDivisionWinner ? !divisionPicksComplete : !wildCardsUnlocked);
       select.closest(".seed-row").classList.toggle("locked", select.disabled);
       select.options[0].textContent = select.disabled
         ? "Pick all division winners first"
@@ -364,6 +367,10 @@ function validateSeeding() {
 }
 
 function buildBracket() {
+  if (state.predictionsLocked) {
+    showToast("Brackets are locked for the season.");
+    return;
+  }
   const error = validateSeeding();
   elements.seedingMessage.textContent = error;
   if (error) return;
@@ -382,7 +389,7 @@ function buildBracket() {
 }
 
 function randomizeBracket() {
-  if (!TEST_MODE) return;
+  if (!TEST_MODE || state.predictionsLocked) return;
 
   state.divisionWinners = createEmptyDivisionWinners();
   state.seeds = { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
@@ -524,7 +531,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
     const button = document.createElement("button");
     button.className = "team-pick";
     button.type = "button";
-    button.disabled = !team;
+    button.disabled = !team || state.predictionsLocked;
 
     if (team) {
       const isSelected = team.name === selectedTeam;
@@ -577,6 +584,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
 }
 
 function handleGamePick(conference, gameId, teamName, isSuperBowl) {
+  if (state.predictionsLocked) return;
   const hadBothFinalists = Boolean(
     getConferenceWinner("AFC") && getConferenceWinner("NFC"),
   );
@@ -645,6 +653,10 @@ function allGamesPicked() {
 }
 
 async function savePrediction() {
+  if (state.predictionsLocked) {
+    showToast("Brackets are locked for the season.");
+    return;
+  }
   if (!state.signedIn) {
     showAuthPanel("signIn", "Sign in to save this prediction to your account.");
     elements.accountDialog.showModal();
@@ -688,7 +700,7 @@ async function savePrediction() {
     updateSaveState(false);
     showToast(`Could not save: ${error.message}`);
   } finally {
-    elements.savePrediction.disabled = false;
+    elements.savePrediction.disabled = state.predictionsLocked;
     elements.savePrediction.textContent = "Save prediction";
   }
 }
@@ -748,6 +760,7 @@ function openPrediction(scrollToPredictor = true) {
 }
 
 function resetGamePicks() {
+  if (state.predictionsLocked) return;
   state.picks = createEmptyPicks();
   state.savedAt = null;
   renderBracket();

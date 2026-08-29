@@ -732,6 +732,118 @@ select:focus {
   transform: rotate(2deg);
 }
 
+.kickoff-countdown {
+  min-height: 355px;
+  padding: 36px;
+  display: block;
+  color: white;
+  background: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  transform: rotate(2deg);
+}
+
+.kickoff-countdown > .card-kicker {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.countdown-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 34px 0 24px;
+}
+
+.countdown-grid span {
+  min-width: 0;
+  text-align: center;
+}
+
+.countdown-grid strong {
+  display: block;
+  font-family: var(--display);
+  font-size: clamp(34px, 4vw, 58px);
+  line-height: 1;
+}
+
+.countdown-grid small,
+.countdown-stats small {
+  display: block;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.kickoff-countdown time,
+.countdown-status {
+  display: block;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.countdown-status {
+  min-height: 18px;
+  margin: 5px 0 0;
+}
+
+.countdown-stats {
+  display: flex;
+  gap: 24px;
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.countdown-stats span {
+  font-family: var(--display);
+  font-size: 24px;
+}
+
+.countdown-stats small {
+  display: inline;
+  margin-left: 4px;
+}
+
+.kickoff-countdown.locked {
+  background: #162235;
+}
+
+.prediction-lock-notice {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 34px;
+  padding: 18px 20px;
+  color: var(--ink);
+  background: #eaf2ff;
+  border: 1px solid rgba(30, 96, 189, 0.24);
+  border-left: 5px solid var(--blue);
+  border-radius: 6px;
+}
+
+.prediction-lock-notice.locked {
+  background: #f1f3f6;
+  border-color: rgba(16, 34, 58, 0.18);
+  border-left-color: var(--ink);
+}
+
+.prediction-lock-notice span {
+  color: var(--muted);
+  text-align: right;
+}
+
+body.predictions-locked .predictor select,
+body.predictions-locked .predictor .team-pick,
+body.predictions-locked .predictor .field-actions button,
+body.predictions-locked .predictor .final-actions button {
+  cursor: not-allowed;
+}
+
 .hero-field-mark span {
   font-family: var(--display);
   font-size: 66px;
@@ -2036,6 +2148,11 @@ footer p {
     transform: none;
   }
 
+  .kickoff-countdown {
+    min-height: 0;
+    transform: none;
+  }
+
   .hero-field-mark i {
     width: 1px;
     height: 70px;
@@ -2134,6 +2251,28 @@ footer p {
     min-height: 155px;
     padding: 24px 16px;
     gap: 8px;
+  }
+
+
+  .kickoff-countdown {
+    padding: 26px 20px;
+  }
+
+  .countdown-grid {
+    margin-top: 26px;
+  }
+
+  .countdown-grid strong {
+    font-size: 34px;
+  }
+
+  .prediction-lock-notice {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .prediction-lock-notice span {
+    text-align: left;
   }
 
   .hero-field-mark span {

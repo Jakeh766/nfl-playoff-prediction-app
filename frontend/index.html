@@ -8,12 +8,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20" />
+    <link rel="stylesheet" href="/styles.css?v=21" />
     <script src="/shell.js?v=1" defer></script>
     <script src="/auth-config.js" defer></script>
-    <script src="/app.js?v=20" defer></script>
+    <script src="/app.js?v=21" defer></script>
     <script src="/leaderboard.js?v=1" defer></script>
-    <script src="/bootstrap.js?v=1" defer></script>
+    <script src="/bootstrap.js?v=2" defer></script>
   </head>
   <body data-page="home">
     <header id="site-header"></header>
@@ -28,8 +28,17 @@
             <a class="text-link" href="/scoring" data-clean-route="/scoring">See how scoring works</a>
           </div>
         </div>
-        <div class="hero-field-mark" aria-hidden="true">
-          <span>14</span><p>TEAMS</p><i></i><span>300</span><p>POINTS</p>
+        <div class="kickoff-countdown" id="kickoff-countdown" aria-labelledby="kickoff-countdown-label">
+          <p class="card-kicker" id="kickoff-countdown-label">BRACKETS LOCK IN</p>
+          <div class="countdown-grid" aria-live="polite">
+            <span><strong id="countdown-days">--</strong><small>Days</small></span>
+            <span><strong id="countdown-hours">--</strong><small>Hours</small></span>
+            <span><strong id="countdown-minutes">--</strong><small>Minutes</small></span>
+            <span><strong id="countdown-seconds">--</strong><small>Seconds</small></span>
+          </div>
+          <time id="kickoff-lock-time">Loading the NFL kickoff deadline…</time>
+          <p class="countdown-status" id="countdown-status" role="status"></p>
+          <div class="countdown-stats" aria-hidden="true"><span>14 <small>TEAMS</small></span><span>300 <small>POINTS</small></span></div>
         </div>
       </section>
 

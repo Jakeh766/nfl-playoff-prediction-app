@@ -146,4 +146,5 @@ async function initializeAuthentication() {
 
 if (PAGE === "picks") loadWinTotals();
 if (elements.leaderboardBody) loadLeaderboard();
+if (["home", "picks"].includes(PAGE)) initializePredictionWindow();
 initializeAuthentication();

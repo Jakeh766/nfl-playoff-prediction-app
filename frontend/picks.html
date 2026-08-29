@@ -8,13 +8,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=20" />
+    <link rel="stylesheet" href="/styles.css?v=21" />
     <script src="/shell.js?v=1" defer></script>
     <script src="/auth-config.js" defer></script>
-    <script src="/app.js?v=20" defer></script>
+    <script src="/app.js?v=21" defer></script>
     <script src="/leaderboard.js?v=1" defer></script>
-    <script src="/picks.js?v=1" defer></script>
-    <script src="/bootstrap.js?v=1" defer></script>
+    <script src="/picks.js?v=2" defer></script>
+    <script src="/bootstrap.js?v=2" defer></script>
   </head>
   <body data-page="picks">
     <header id="site-header"></header>
@@ -26,6 +26,10 @@
       </section>
 
       <section class="predictor" id="predictor" aria-live="polite">
+        <div class="prediction-lock-notice hidden" id="prediction-lock-notice" role="status">
+          <strong id="prediction-lock-title"></strong>
+          <span id="prediction-lock-message"></span>
+        </div>
         <div class="section-heading">
           <div>
             <p class="eyebrow">01 · SET THE FIELD</p>

@@ -9,12 +9,20 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Track a 300-point score as official results become available.
 - Create or join password-protected groups with their own member-only leaderboards.
 - Save, reopen, update, and delete one prediction per account.
+- Create or change predictions only until the first regular-season kickoff; the
+  backend enforces the deadline and the home page shows a live countdown.
 - Permanently delete their saved prediction and account from the signed-in view.
 
 Predictions are stored in DynamoDB and are available across devices. The Lambda
 backend refreshes projected season win totals when the app loads, reading
 available sportsbook lines from VegasInsider and using the median as a
 consensus projection for each team.
+
+The annual prediction deadline is configured as the UTC ISO-8601 value
+`prediction_lock_at` in each environment's `terraform.tfvars`. The public
+`/api/prediction-window` endpoint supplies the same server-authoritative deadline
+to the countdown and picks UI. Update the timestamp after the next NFL schedule
+is published; do not rely on a browser-only lock.
 
 ## Authentication
 

@@ -194,6 +194,9 @@ const state = {
   groups: [],
   activeGroupId: "",
   groupLeaderboard: null,
+  predictionWindow: null,
+  predictionsLocked: !LOCAL_PREVIEW,
+  predictionClockOffset: 0,
 };
 
 const elements = {
@@ -303,6 +306,16 @@ const elements = {
   publicBracketContent: document.querySelector("#public-bracket-content"),
   closePublicBracket: document.querySelector("#close-public-bracket"),
   toast: document.querySelector("#toast"),
+  kickoffCountdown: document.querySelector("#kickoff-countdown"),
+  countdownDays: document.querySelector("#countdown-days"),
+  countdownHours: document.querySelector("#countdown-hours"),
+  countdownMinutes: document.querySelector("#countdown-minutes"),
+  countdownSeconds: document.querySelector("#countdown-seconds"),
+  kickoffLockTime: document.querySelector("#kickoff-lock-time"),
+  countdownStatus: document.querySelector("#countdown-status"),
+  predictionLockNotice: document.querySelector("#prediction-lock-notice"),
+  predictionLockTitle: document.querySelector("#prediction-lock-title"),
+  predictionLockMessage: document.querySelector("#prediction-lock-message"),
 };
 
 if (!TEST_MODE && elements.randomizeBracket) {
@@ -929,6 +942,115 @@ async function apiRequest(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+let predictionCountdownTimer;
+
+function predictionLockDateLabel(lockAt) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(lockAt));
+}
+
+function setPredictionEditingLocked(locked, message = "") {
+  state.predictionsLocked = locked;
+  document.body.classList.toggle("predictions-locked", locked);
+
+  if (elements.predictionLockNotice) {
+    elements.predictionLockNotice.classList.remove("hidden");
+    elements.predictionLockNotice.classList.toggle("locked", locked);
+    elements.predictionLockTitle.textContent = locked
+      ? "Brackets are locked."
+      : "Picks are open.";
+    elements.predictionLockMessage.textContent = message;
+  }
+
+  [
+    elements.randomizeBracket,
+    elements.buildBracket,
+    elements.resetPicks,
+    elements.savePrediction,
+  ].forEach((control) => {
+    if (control) control.disabled = locked;
+  });
+
+  if (PAGE === "picks" && elements.afcSeeds?.childElementCount) {
+    renderSeedSelectors();
+    if (state.bracketBuilt) renderBracket();
+  }
+}
+
+function renderPredictionCountdown() {
+  if (!state.predictionWindow || !elements.kickoffCountdown) return;
+
+  const lockTime = new Date(state.predictionWindow.lockAt).getTime();
+  const now = Date.now() + state.predictionClockOffset;
+  const remaining = Math.max(0, lockTime - now);
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  elements.countdownDays.textContent = String(days).padStart(2, "0");
+  elements.countdownHours.textContent = String(hours).padStart(2, "0");
+  elements.countdownMinutes.textContent = String(minutes).padStart(2, "0");
+  elements.countdownSeconds.textContent = String(seconds).padStart(2, "0");
+
+  if (!remaining && !state.predictionsLocked) {
+    state.predictionWindow.locked = true;
+    setPredictionEditingLocked(true, "The NFL regular season has kicked off. Saved brackets are now read-only.");
+  }
+
+  elements.countdownStatus.textContent = remaining
+    ? "Finish and save your bracket before kickoff."
+    : "Kickoff has arrived. All saved brackets are read-only.";
+  elements.kickoffCountdown.classList.toggle("locked", !remaining);
+}
+
+async function initializePredictionWindow() {
+  try {
+    const response = await fetch("/api/prediction-window", { cache: "no-store" });
+    if (!response.ok) throw new Error("Prediction deadline unavailable");
+    const windowState = await response.json();
+    if (!windowState.lockAt || !Number.isFinite(windowState.serverTime)) {
+      throw new Error("Invalid prediction deadline response");
+    }
+
+    state.predictionWindow = windowState;
+    state.predictionClockOffset = windowState.serverTime - Date.now();
+    const label = predictionLockDateLabel(windowState.lockAt);
+    if (elements.kickoffLockTime) {
+      elements.kickoffLockTime.dateTime = windowState.lockAt;
+      elements.kickoffLockTime.textContent = `Deadline: ${label}`;
+    }
+    setPredictionEditingLocked(
+      Boolean(windowState.locked),
+      windowState.locked
+        ? `The ${windowState.season} NFL regular season has kicked off. Saved brackets are read-only.`
+        : `Create or change your bracket until ${label}.`,
+    );
+    renderPredictionCountdown();
+    clearInterval(predictionCountdownTimer);
+    predictionCountdownTimer = setInterval(renderPredictionCountdown, 1000);
+  } catch (error) {
+    if (elements.countdownStatus) {
+      elements.countdownStatus.textContent = "The kickoff countdown is temporarily unavailable.";
+      elements.countdownStatus.title = error.message;
+    }
+    if (!LOCAL_PREVIEW) {
+      setPredictionEditingLocked(
+        true,
+        "We could not verify whether picks are still open. Refresh before editing your bracket.",
+      );
+    }
+  }
 }
 
 function getTeamNickname(teamName) {

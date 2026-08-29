@@ -56,6 +56,16 @@ variable "cache_ttl_seconds" {
   }
 }
 
+variable "prediction_lock_at" {
+  description = "UTC kickoff timestamp after which predictions cannot be created or changed."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", var.prediction_lock_at))
+    error_message = "prediction_lock_at must be an ISO-8601 UTC timestamp ending in Z."
+  }
+}
+
 variable "api_throttling_rate_limit" {
   description = "Maximum sustained requests per second across API Gateway routes."
   type        = number
