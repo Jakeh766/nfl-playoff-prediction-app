@@ -1682,6 +1682,27 @@ select:focus {
   font-weight: 600;
 }
 
+.seed-point-tiers {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  list-style: none;
+  text-align: left;
+}
+
+.seed-point-tiers li {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.seed-point-tiers strong {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
 .scoring-table tfoot th,
 .scoring-table tfoot td {
   color: white;
