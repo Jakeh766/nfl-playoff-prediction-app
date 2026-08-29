@@ -108,6 +108,40 @@ def valid_prediction():
     }
 
 
+class NameNormalizationTests(unittest.TestCase):
+    def test_leaderboard_validation_messages_are_preserved(self):
+        cases = (
+            (None, "leaderboardName must be a string"),
+            ("A", "Leaderboard name must be between 3 and 24 characters"),
+            (
+                "Jake🏈",
+                "Leaderboard name may use letters, numbers, spaces, periods, underscores, and hyphens",
+            ),
+        )
+
+        for value, message in cases:
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ValueError, f"^{message}$"
+            ):
+                lambda_app.normalize_leaderboard_name(value)
+
+    def test_group_validation_messages_are_preserved(self):
+        cases = (
+            (None, "groupName must be a string"),
+            ("A", "Group name must be between 3 and 40 characters"),
+            (
+                "Crew🏈",
+                "Group name may use letters, numbers, spaces, periods, underscores, and hyphens",
+            ),
+        )
+
+        for value, message in cases:
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ValueError, f"^{message}$"
+            ):
+                lambda_app.normalize_group_name(value)
+
+
 class PredictionAuthorizationTests(unittest.TestCase):
     def setUp(self):
         self.table = FakeTable()

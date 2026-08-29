@@ -23,6 +23,7 @@ ODDS_URL = "https://www.vegasinsider.com/nfl/odds/win-totals/"
 CACHE_KEY = "current"
 CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "21600"))
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
+NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
 
 SCORING_RULES = {
     "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 70},
@@ -95,18 +96,29 @@ def groups_table():
     return boto3.resource("dynamodb").Table(os.environ["GROUPS_TABLE"])
 
 
-def normalize_leaderboard_name(value) -> tuple[str, str]:
+def normalize_name(
+    value,
+    field_name: str,
+    label: str,
+    maximum_length: int,
+) -> tuple[str, str]:
     if not isinstance(value, str):
-        raise ValueError("leaderboardName must be a string")
+        raise ValueError(f"{field_name} must be a string")
 
     display_name = re.sub(r"\s+", " ", value.strip())
-    if not 3 <= len(display_name) <= 24:
-        raise ValueError("Leaderboard name must be between 3 and 24 characters")
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]", display_name):
+    if not 3 <= len(display_name) <= maximum_length:
         raise ValueError(
-            "Leaderboard name may use letters, numbers, spaces, periods, underscores, and hyphens"
+            f"{label} name must be between 3 and {maximum_length} characters"
+        )
+    if not NAME_PATTERN.fullmatch(display_name):
+        raise ValueError(
+            f"{label} name may use letters, numbers, spaces, periods, underscores, and hyphens"
         )
     return display_name, display_name.casefold()
+
+
+def normalize_leaderboard_name(value) -> tuple[str, str]:
+    return normalize_name(value, "leaderboardName", "Leaderboard", 24)
 
 
 def profile_item_key(user_id: str) -> str:
@@ -667,22 +679,11 @@ def delete_prediction(user_id: str) -> None:
     predictions_table().delete_item(Key={"profileKey": user_id})
 
 
-GROUP_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
 GROUP_PASSWORD_ITERATIONS = 310_000
 
 
 def normalize_group_name(value) -> tuple[str, str]:
-    if not isinstance(value, str):
-        raise ValueError("groupName must be a string")
-
-    display_name = re.sub(r"\s+", " ", value.strip())
-    if not 3 <= len(display_name) <= 40:
-        raise ValueError("Group name must be between 3 and 40 characters")
-    if not GROUP_NAME_PATTERN.fullmatch(display_name):
-        raise ValueError(
-            "Group name may use letters, numbers, spaces, periods, underscores, and hyphens"
-        )
-    return display_name, display_name.casefold()
+    return normalize_name(value, "groupName", "Group", 40)
 
 
 def validate_group_password(value) -> str:
