@@ -750,33 +750,31 @@ select:focus {
 
 .countdown-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns:
+    minmax(0, 1fr) auto minmax(0, 1fr) auto
+    minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
   margin: 34px 0 24px;
 }
 
 .countdown-grid span {
-  position: relative;
   min-width: 0;
   text-align: center;
 }
 
-.countdown-grid span:not(:last-child)::after {
-  content: ":";
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
+.countdown-separator {
   color: rgba(255, 255, 255, 0.58);
   font-family: var(--display);
-  font-size: clamp(24px, 3vw, 44px);
+  font-size: clamp(30px, 3vw, 40px);
+  font-style: normal;
   line-height: 1;
-  transform: translateX(-50%);
 }
 
 .countdown-grid strong {
   display: block;
   font-family: var(--display);
-  font-size: clamp(34px, 4vw, 58px);
+  font-size: clamp(34px, 3.6vw, 46px);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -2274,13 +2272,12 @@ footer p {
   }
 
   .countdown-grid {
-    gap: 8px;
+    gap: 4px;
     margin-top: 26px;
   }
 
-  .countdown-grid span:not(:last-child)::after {
-    left: calc(100% + 4px);
-    font-size: 28px;
+  .countdown-separator {
+    font-size: 26px;
   }
 
   .countdown-grid strong {
