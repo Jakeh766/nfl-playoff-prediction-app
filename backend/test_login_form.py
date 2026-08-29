@@ -30,8 +30,19 @@ class FormParser(HTMLParser):
 class LoginFormTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.shell = (FRONTEND_DIR / "shell.js").read_text(encoding="utf-8")
+        cls.app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        cls.bootstrap_javascript = (FRONTEND_DIR / "bootstrap.js").read_text(
+            encoding="utf-8"
+        )
+        cls.leaderboard_javascript = (
+            FRONTEND_DIR / "leaderboard.js"
+        ).read_text(encoding="utf-8")
+        cls.picks_javascript = (FRONTEND_DIR / "picks.js").read_text(
+            encoding="utf-8"
+        )
         parser = FormParser()
-        parser.feed((FRONTEND_DIR / "index.html").read_text(encoding="utf-8"))
+        parser.feed(cls.shell)
         cls.controls = parser.controls
 
     def control(self, tag, control_id):
@@ -64,7 +75,7 @@ class LoginFormTests(unittest.TestCase):
         self.assertEqual(submit.get("type"), "submit")
 
     def test_frontend_and_cognito_client_enable_the_same_password_flow(self):
-        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        app_javascript = self.app_javascript
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
         ).read_text(encoding="utf-8")
@@ -72,7 +83,7 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('"ALLOW_USER_PASSWORD_AUTH"', terraform)
 
     def test_all_account_flows_stay_in_the_application(self):
-        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        app_javascript = self.app_javascript
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
         ).read_text(encoding="utf-8")
@@ -92,8 +103,8 @@ class LoginFormTests(unittest.TestCase):
         self.assertNotIn("/oauth2/", app_javascript)
 
     def test_account_deletion_requires_confirmation_and_removes_saved_data_first(self):
-        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        html = self.shell
+        app_javascript = self.app_javascript
 
         self.assertIn('id="delete-account-dialog"', html)
         self.assertIn('id="delete-account-confirmation"', html)
@@ -112,7 +123,7 @@ class LoginFormTests(unittest.TestCase):
         self.assertLess(profile_delete, account_delete)
 
     def test_signed_in_card_keeps_account_details_in_account_dialog(self):
-        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        html = self.shell
 
         signed_in_panel = html[
             html.index('id="signed-in-panel"') : html.index('id="auth-message"')
@@ -129,24 +140,28 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="delete-account"', account_dialog)
 
     def test_leaderboard_name_is_required_and_sent_to_the_profile_api(self):
-        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        html = self.shell
+        app_javascript = self.app_javascript
+        picks_javascript = self.picks_javascript
 
         self.assertIn('id="leaderboard-name-form"', html)
         self.assertIn('id="leaderboard-name"', html)
         self.assertIn('maxlength="24"', html)
         self.assertIn('apiRequest("/api/profile", {', app_javascript)
-        self.assertIn("openLeaderboardNameDialog(true);", app_javascript)
+        self.assertIn("openLeaderboardNameDialog(true);", picks_javascript)
 
-        save_flow = app_javascript[app_javascript.index("async function savePrediction") :]
+        save_flow = picks_javascript[
+            picks_javascript.index("async function savePrediction") :
+        ]
         self.assertLess(
             save_flow.index("if (!allGamesPicked())"),
             save_flow.index("if (!state.leaderboardName)"),
         )
 
     def test_public_leaderboard_is_rendered_without_private_account_data(self):
-        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        html += self.shell
+        app_javascript = self.leaderboard_javascript
 
         self.assertIn('id="leaderboard-section"', html)
         self.assertIn('id="leaderboard-body"', html)
@@ -170,8 +185,15 @@ class LoginFormTests(unittest.TestCase):
         )
 
     def test_public_and_group_leaderboards_share_a_toggleable_section(self):
-        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        html += self.shell
+        app_javascript = "\n".join(
+            (
+                self.app_javascript,
+                self.leaderboard_javascript,
+                self.bootstrap_javascript,
+            )
+        )
 
         self.assertIn('id="leaderboard-section"', html)
         self.assertIn('id="public-leaderboard-tab"', html)
@@ -188,6 +210,33 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('"/api/groups/join"', app_javascript)
         self.assertIn("/leaderboard`", app_javascript)
         self.assertIn('path.startsWith("/api/groups")', app_javascript)
+
+    def test_primary_features_have_clean_dedicated_pages(self):
+        home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        picks = (FRONTEND_DIR / "picks.html").read_text(encoding="utf-8")
+        leaderboard = (FRONTEND_DIR / "leaderboard.html").read_text(
+            encoding="utf-8"
+        )
+        scoring = (FRONTEND_DIR / "scoring.html").read_text(encoding="utf-8")
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn('id="predictor"', home)
+        self.assertNotIn('id="leaderboard-section"', home)
+        self.assertNotIn('id="scoring-section"', home)
+        self.assertIn('id="predictor"', picks)
+        self.assertIn('id="saved-section"', picks)
+        self.assertIn('id="leaderboard-section"', leaderboard)
+        self.assertIn('id="scoring-section"', scoring)
+
+        for route, source in (
+            ("picks", "picks.html"),
+            ("leaderboard", "leaderboard.html"),
+            ("scoring", "scoring.html"),
+        ):
+            self.assertIn(f'"{route}" = {{', terraform)
+            self.assertIn(f'${{var.frontend_dir}}/{source}', terraform)
 
     def test_deployed_frontend_files_are_not_browser_cached(self):
         terraform = (

@@ -61,6 +61,29 @@ button {
   border-bottom: 1px solid rgba(16, 34, 58, 0.12);
 }
 
+.primary-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 3vw, 42px);
+}
+
+.primary-nav a {
+  padding: 29px 0 25px;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.primary-nav a:hover,
+.primary-nav a[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--red);
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -431,6 +454,21 @@ select:focus {
   text-transform: uppercase;
 }
 
+.auth-dialog h3 {
+  margin: 4px 0 12px;
+  font-family: var(--display);
+  font-size: 1.65rem;
+  text-transform: uppercase;
+}
+
+.auth-dialog .dialog-heading {
+  margin-bottom: 18px;
+}
+
+.auth-dialog label {
+  margin-bottom: 0;
+}
+
 .dialog-heading {
   display: flex;
   align-items: flex-start;
@@ -639,6 +677,171 @@ select:focus {
   max-width: 1440px;
   margin: 0 auto;
   padding: 90px 5vw;
+}
+
+.home-hero,
+.how-it-works,
+.home-leaderboard,
+.page-intro {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-left: 5vw;
+  padding-right: 5vw;
+}
+
+.home-hero {
+  min-height: 620px;
+  padding-top: 100px;
+  padding-bottom: 110px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
+  gap: 8vw;
+  align-items: center;
+}
+
+.home-hero-copy h1,
+.page-intro h1 {
+  max-width: 980px;
+}
+
+.hero-actions {
+  margin-top: 34px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.text-link {
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 700;
+  text-underline-offset: 4px;
+}
+
+.hero-field-mark {
+  min-height: 355px;
+  padding: 36px;
+  display: grid;
+  place-content: center;
+  color: white;
+  background: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  text-align: center;
+  transform: rotate(2deg);
+}
+
+.hero-field-mark span {
+  font-family: var(--display);
+  font-size: 66px;
+  line-height: 0.9;
+}
+
+.hero-field-mark p {
+  margin: 8px 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.hero-field-mark i {
+  width: 130px;
+  height: 1px;
+  margin: 22px auto;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.how-it-works,
+.home-leaderboard {
+  padding-top: 90px;
+  padding-bottom: 90px;
+  border-top: 1px solid rgba(16, 34, 58, 0.12);
+}
+
+.steps-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  list-style: none;
+}
+
+.steps-list li {
+  min-height: 165px;
+  padding: 26px;
+  display: flex;
+  gap: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 7px 24px rgba(16, 34, 58, 0.05);
+}
+
+.steps-list li > span {
+  color: var(--red);
+  font-family: var(--display);
+  font-size: 25px;
+}
+
+.steps-list strong {
+  display: block;
+  margin: 3px 0 9px;
+  font-family: var(--display);
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+.steps-list p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.page-intro {
+  padding-top: 78px;
+  padding-bottom: 68px;
+}
+
+.page-intro h1 {
+  margin-bottom: 20px;
+  font-size: clamp(3rem, 6vw, 5.8rem);
+}
+
+.page-intro > p:last-child {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.compact-page-intro {
+  padding-bottom: 60px;
+}
+
+.page-section {
+  padding-top: 70px;
+}
+
+.scoring-cta {
+  margin-top: 28px;
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.scoring-cta h2,
+.scoring-cta .eyebrow {
+  margin-bottom: 0;
 }
 
 .predictor {
@@ -1365,6 +1568,10 @@ select:focus {
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .group-tab:hover,
@@ -1817,6 +2024,24 @@ footer p {
 }
 
 @media (max-width: 1080px) {
+  .home-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-field-mark {
+    min-height: 190px;
+    grid-template-columns: auto auto 1px auto auto;
+    gap: 14px;
+    align-items: center;
+    transform: none;
+  }
+
+  .hero-field-mark i {
+    width: 1px;
+    height: 70px;
+    margin: 0 18px;
+  }
+
   .hero {
     grid-template-columns: 1fr;
     gap: 55px;
@@ -1851,6 +2076,27 @@ footer p {
 @media (max-width: 760px) {
   .site-header {
     height: 66px;
+    gap: 12px;
+  }
+
+  .primary-nav {
+    margin-left: auto;
+    gap: 13px;
+  }
+
+  .primary-nav a {
+    padding: 24px 0 20px;
+    font-size: 10px;
+  }
+
+  .header-account {
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 10px;
+  }
+
+  .brand > span:last-child {
+    display: none;
   }
 
   .season-badge {
@@ -1861,6 +2107,51 @@ footer p {
     min-height: auto;
     padding-top: 65px;
     padding-bottom: 75px;
+  }
+
+  .home-hero,
+  .page-intro {
+    padding-top: 62px;
+    padding-bottom: 68px;
+  }
+
+  .home-hero {
+    min-height: auto;
+  }
+
+  .hero-actions,
+  .scoring-cta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-actions .button,
+  .scoring-cta .button {
+    width: 100%;
+  }
+
+  .hero-field-mark {
+    min-height: 155px;
+    padding: 24px 16px;
+    gap: 8px;
+  }
+
+  .hero-field-mark span {
+    font-size: 46px;
+  }
+
+  .hero-field-mark i {
+    margin: 0 8px;
+  }
+
+  .how-it-works,
+  .home-leaderboard {
+    padding-top: 68px;
+    padding-bottom: 68px;
+  }
+
+  .steps-list {
+    grid-template-columns: 1fr;
   }
 
   body.signed-in .hero {

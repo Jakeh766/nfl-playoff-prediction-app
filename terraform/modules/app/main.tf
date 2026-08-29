@@ -8,8 +8,36 @@ locals {
       source       = "${var.frontend_dir}/index.html"
       content_type = "text/html; charset=utf-8"
     }
+    "picks" = {
+      source       = "${var.frontend_dir}/picks.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "leaderboard" = {
+      source       = "${var.frontend_dir}/leaderboard.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "scoring" = {
+      source       = "${var.frontend_dir}/scoring.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "shell.js" = {
+      source       = "${var.frontend_dir}/shell.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "app.js" = {
       source       = "${var.frontend_dir}/app.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "leaderboard.js" = {
+      source       = "${var.frontend_dir}/leaderboard.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "picks.js" = {
+      source       = "${var.frontend_dir}/picks.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "bootstrap.js" = {
+      source       = "${var.frontend_dir}/bootstrap.js"
       content_type = "application/javascript; charset=utf-8"
     }
     "styles.css" = {

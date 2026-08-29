@@ -84,6 +84,10 @@ Run all local checks from the repository root:
 
 ```powershell
 node --check frontend/app.js
+node --check frontend/bootstrap.js
+node --check frontend/leaderboard.js
+node --check frontend/picks.js
+node --check frontend/shell.js
 python -m py_compile backend/lambda/app.py
 python -m unittest discover -s backend -p "test_*.py"
 terraform fmt -check -recursive terraform
@@ -101,6 +105,11 @@ Then visit `http://localhost:8000`. The preview uses bundled win totals and
 exposes the bracket randomizer, but authentication, saved predictions, and live
 odds are intentionally unavailable. Test those behaviors in the deployed dev
 environment.
+
+The deployed frontend uses clean page URLs: `/` for the landing page, `/picks`
+for the prediction builder, `/leaderboard` for public and private standings,
+and `/scoring` for the scoring rules. In the basic local file server, open the
+corresponding `.html` files for the three non-home pages.
 
 Use `http://localhost:8000/?preview=leaderboard-name` to visually inspect the
 leaderboard-name dialog that opens from **Save prediction** without an
@@ -120,7 +129,7 @@ email inboxes or verification codes. Production is never seeded.
 ## Repository layout
 
 ```text
-frontend/          Browser application
+frontend/          Multi-page browser application and shared page shell
 backend/           Lambda handler and backend tests
 terraform/         AWS infrastructure, state, and deployment guide
 README.md          Project overview and development workflow

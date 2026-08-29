@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Learn how Road to the Bowl awards 300 points for playoff teams, seeding, and postseason winners." />
+    <title>Scoring — Road to the Bowl</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=20" />
+    <script src="/shell.js?v=1" defer></script>
+    <script src="/auth-config.js" defer></script>
+    <script src="/app.js?v=20" defer></script>
+    <script src="/bootstrap.js?v=1" defer></script>
+  </head>
+  <body data-page="scoring">
+    <header id="site-header"></header>
+    <main>
+      <section class="page-intro compact-page-intro">
+        <p class="eyebrow">FOLLOW THE SEASON</p>
+        <h1>300 points.<br />Every call counts.</h1>
+        <p>Build the right playoff field, nail the seeds, and predict which teams keep advancing.</p>
+      </section>
+      <section class="scoring-section page-section" id="scoring-section">
+        <div class="section-heading compact">
+          <div><h2>How scoring works.</h2><p>A perfect preseason prediction is worth 300 points.</p></div>
+        </div>
+        <div class="scoring-layout">
+          <div class="scoring-table-shell">
+            <table class="scoring-table">
+              <thead><tr><th scope="col">Prediction</th><th scope="col">Points each</th><th scope="col">Maximum</th></tr></thead>
+              <tbody>
+                <tr><td>Correct playoff team</td><td>5</td><td>70</td></tr>
+                <tr><td>Correct division winner</td><td>+5</td><td>40</td></tr>
+                <tr><td>Exact playoff seed</td><td><ul class="seed-point-tiers" aria-label="Exact playoff seed points"><li><span>#1 seed</span><strong>+5</strong></li><li><span>#2–#4 seeds</span><strong>+3</strong></li><li><span>#5–#7 seeds</span><strong>+2</strong></li></ul></td><td>40</td></tr>
+                <tr><td>Correct Wild Card winner</td><td>5</td><td>30</td></tr>
+                <tr><td>Correct Divisional winner</td><td>10</td><td>40</td></tr>
+                <tr><td>Correct conference champion</td><td>20</td><td>40</td></tr>
+                <tr><td>Correct Super Bowl champion</td><td>40</td><td>40</td></tr>
+              </tbody>
+              <tfoot><tr><th scope="row" colspan="2">Perfect score</th><td>300</td></tr></tfoot>
+            </table>
+          </div>
+          <aside class="scoring-note">
+            <p class="card-kicker">ADVANCEMENT, NOT MATCHUP</p>
+            <h3>Later picks stay alive.</h3>
+            <p>Round points follow the team you picked to advance. If Minnesota wins the Wild Card round against a different opponent than you predicted, your Minnesota pick still earns credit.</p>
+            <p>A missed earlier matchup does not erase a correct conference or Super Bowl champion.</p>
+          </aside>
+        </div>
+        <div class="scoring-cta"><div><p class="eyebrow">READY TO CALL IT?</p><h2>Put all 300 points on the line.</h2></div><a class="button button-primary button-large" href="/picks" data-clean-route="/picks">Make My Picks</a></div>
+      </section>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div id="site-dialogs"></div>
+    <footer id="site-footer"></footer>
+  </body>
+</html>

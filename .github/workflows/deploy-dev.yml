@@ -44,6 +44,10 @@ jobs:
       - name: Check frontend JavaScript syntax
         run: |
           node --check frontend/app.js
+          node --check frontend/bootstrap.js
+          node --check frontend/leaderboard.js
+          node --check frontend/picks.js
+          node --check frontend/shell.js
           node --check frontend/auth-config.js
 
       - name: Check backend Python syntax

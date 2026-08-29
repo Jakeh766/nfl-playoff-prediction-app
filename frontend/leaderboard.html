@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Compare Road to the Bowl predictions on the public leaderboard or in a private group." />
+    <title>Leaderboard — Road to the Bowl</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=20" />
+    <script src="/shell.js?v=1" defer></script>
+    <script src="/auth-config.js" defer></script>
+    <script src="/app.js?v=20" defer></script>
+    <script src="/leaderboard.js?v=1" defer></script>
+    <script src="/bootstrap.js?v=1" defer></script>
+  </head>
+  <body data-page="leaderboard">
+    <header id="site-header"></header>
+    <main>
+      <section class="page-intro compact-page-intro">
+        <p class="eyebrow">THE STANDINGS</p>
+        <h1>Leaderboard.</h1>
+        <p>Compare public predictions or switch to a private group. Select any player to view their bracket; account details stay private.</p>
+      </section>
+
+      <section class="leaderboard-section page-section" id="leaderboard-section">
+        <div class="section-heading compact leaderboard-heading">
+          <div><h2>Season standings.</h2><p>Scores update as official results become available.</p></div>
+          <div class="leaderboard-view-tabs" role="tablist" aria-label="Leaderboard view">
+            <button class="leaderboard-view-tab active" id="public-leaderboard-tab" type="button" role="tab" aria-selected="true" aria-controls="public-leaderboard-panel">Public</button>
+            <button class="leaderboard-view-tab hidden" id="groups-leaderboard-tab" type="button" role="tab" aria-selected="false" aria-controls="groups-leaderboard-panel" tabindex="-1">My Groups</button>
+          </div>
+        </div>
+        <div class="leaderboard-view-panel" id="public-leaderboard-panel" role="tabpanel" aria-labelledby="public-leaderboard-tab">
+          <p class="leaderboard-status" id="leaderboard-status" role="status">Loading leaderboard…</p>
+          <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
+            <table class="leaderboard-table">
+              <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Total</th></tr></thead>
+              <tbody id="leaderboard-body"></tbody>
+            </table>
+          </div>
+          <p class="empty-leaderboard hidden" id="empty-leaderboard">No scored predictions yet. The first saved prediction will take the top spot.</p>
+        </div>
+        <div class="leaderboard-view-panel hidden" id="groups-leaderboard-panel" role="tabpanel" aria-labelledby="groups-leaderboard-tab">
+          <div class="groups-toolbar">
+            <p>Create or join a password-protected group to compare only its members.</p>
+            <div class="group-actions"><button class="button button-secondary" id="join-group" type="button">Join group</button><button class="button button-primary" id="create-group" type="button">Create group</button></div>
+          </div>
+          <div class="group-tabs" id="group-tabs" aria-label="Your groups"></div>
+          <p class="empty-groups" id="empty-groups">You have not joined a group yet. Create one for friends or join one with its name and password.</p>
+          <div class="group-leaderboard hidden" id="group-leaderboard">
+            <div class="group-leaderboard-heading">
+              <div><p class="card-kicker">GROUP LEADERBOARD</p><h3 id="active-group-name"></h3></div>
+              <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
+            </div>
+            <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
+              <table class="leaderboard-table">
+                <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Total</th></tr></thead>
+                <tbody id="group-leaderboard-body"></tbody>
+              </table>
+            </div>
+            <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No group member has a saved prediction yet.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div id="site-dialogs"></div>
+    <footer id="site-footer"></footer>
+  </body>
+</html>
