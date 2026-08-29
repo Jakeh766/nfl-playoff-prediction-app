@@ -751,13 +751,25 @@ select:focus {
 .countdown-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 16px;
   margin: 34px 0 24px;
 }
 
 .countdown-grid span {
+  position: relative;
   min-width: 0;
   text-align: center;
+}
+
+.countdown-grid span:not(:last-child)::after {
+  content: ":";
+  position: absolute;
+  top: 0;
+  right: -9px;
+  color: rgba(255, 255, 255, 0.58);
+  font-family: var(--display);
+  font-size: clamp(24px, 3vw, 44px);
+  line-height: 1;
 }
 
 .countdown-grid strong {
@@ -2259,7 +2271,13 @@ footer p {
   }
 
   .countdown-grid {
+    gap: 8px;
     margin-top: 26px;
+  }
+
+  .countdown-grid span:not(:last-child)::after {
+    right: -5px;
+    font-size: 28px;
   }
 
   .countdown-grid strong {
