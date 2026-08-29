@@ -938,14 +938,12 @@ async function refreshSavedPrediction() {
   renderSavedPrediction();
 }
 
-function publicSeedTeam(bracket, conference, seed) {
-  const name = bracket.seeds?.[conference]?.[seed - 1];
-  return name ? { name, seed } : null;
-}
-
-function getPublicConferenceGames(bracket, conference) {
-  const picks = bracket.picks?.[conference] || {};
-  const seed = (number) => publicSeedTeam(bracket, conference, number);
+function buildConferenceGames(seeds, picksByConference, conference) {
+  const picks = picksByConference?.[conference] || {};
+  const seed = (number) => {
+    const name = seeds?.[conference]?.[number - 1];
+    return name ? { name, seed: number } : null;
+  };
   const wildCard = [
     { id: "wc-2-7", title: "Wild Card · 2 vs 7", teams: [seed(2), seed(7)] },
     { id: "wc-3-6", title: "Wild Card · 3 vs 6", teams: [seed(3), seed(6)] },
@@ -1042,7 +1040,7 @@ function createPublicConferenceBracket(conference, bracket) {
 
   const rounds = document.createElement("div");
   rounds.className = "public-bracket-rounds";
-  const games = getPublicConferenceGames(bracket, conference);
+  const games = buildConferenceGames(bracket.seeds, bracket.picks, conference);
   [
     { key: "wildCard", label: "Wild Card" },
     { key: "divisional", label: "Divisional" },
@@ -1423,11 +1421,6 @@ function createTeamLogo(teamName, className = "team-logo") {
   logo.loading = "lazy";
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
   return logo;
-}
-
-function seedTeam(conference, seed) {
-  const name = state.seeds[conference][seed - 1];
-  return name ? { name, seed } : null;
 }
 
 function projectedWins(team) {
@@ -1843,53 +1836,7 @@ function randomizeBracket() {
 }
 
 function getConferenceGames(conference) {
-  const picks = state.picks[conference];
-  const wildCard = [
-    { id: "wc-2-7", title: "Wild Card · 2 vs 7", teams: [seedTeam(conference, 2), seedTeam(conference, 7)] },
-    { id: "wc-3-6", title: "Wild Card · 3 vs 6", teams: [seedTeam(conference, 3), seedTeam(conference, 6)] },
-    { id: "wc-4-5", title: "Wild Card · 4 vs 5", teams: [seedTeam(conference, 4), seedTeam(conference, 5)] },
-  ];
-
-  const wildCardWinners = wildCard.map((game) => {
-    const selected = picks[game.id];
-    return game.teams.find((team) => team?.name === selected) || null;
-  });
-  const remaining = [seedTeam(conference, 1), ...wildCardWinners].filter(Boolean);
-  const sorted = [...remaining].sort((a, b) => a.seed - b.seed);
-
-  const divisional =
-    sorted.length === 4
-      ? [
-          {
-            id: "div-1",
-            title: "Divisional · High vs Low",
-            teams: [sorted[0], sorted[3]],
-          },
-          {
-            id: "div-2",
-            title: "Divisional",
-            teams: [sorted[1], sorted[2]],
-          },
-        ]
-      : [
-          { id: "div-1", title: "Divisional · High vs Low", teams: [seedTeam(conference, 1), null] },
-          { id: "div-2", title: "Divisional", teams: [null, null] },
-        ];
-
-  const divisionalWinners = divisional.map((game) => {
-    const selected = picks[game.id];
-    return game.teams.find((team) => team?.name === selected) || null;
-  });
-
-  const championship = [
-    {
-      id: "conf",
-      title: `${conference} Championship`,
-      teams: divisionalWinners,
-    },
-  ];
-
-  return { wildCard, divisional, championship };
+  return buildConferenceGames(state.seeds, state.picks, conference);
 }
 
 function clearInvalidDownstreamPicks(conference, games) {
