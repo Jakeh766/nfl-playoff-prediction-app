@@ -6,7 +6,7 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Claim a unique public leaderboard name when saving a prediction.
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
-- Track a 302-point score as official results become available.
+- Track a 300-point score as official results become available.
 - Create or join password-protected groups with their own member-only leaderboards.
 - Save, reopen, update, and delete one prediction per account.
 - Permanently delete their saved prediction and account from the signed-in view.
@@ -54,10 +54,11 @@ account.
 ## Scoring
 
 Saved predictions earn five points for each correct playoff team, five bonus
-points for each correct division winner, and three bonus points for each exact
-seed. Correct advancing teams earn five points in the Wild Card round, ten in
-the Divisional round, twenty for a conference championship, and forty for the
-Super Bowl championship. The maximum is 302 points.
+points for each correct division winner, and five, three, or two bonus points
+for an exact seed depending on whether it is seed 1, seeds 2–4, or seeds 5–7.
+Correct advancing teams earn five points in the Wild Card round, ten in the
+Divisional round, twenty for a conference championship, and forty for the
+Super Bowl championship. The maximum is 300 points.
 
 Playoff rounds are scored by advancement rather than exact matchup. A team that
 advances earns its round points even when its real opponent differs from the

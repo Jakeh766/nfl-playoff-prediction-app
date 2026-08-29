@@ -108,14 +108,37 @@ def completed_results():
 
 
 class PredictionScoringTests(unittest.TestCase):
-    def test_perfect_bracket_scores_302_points(self):
+    def test_perfect_bracket_scores_300_points(self):
         score = lambda_app.score_prediction(perfect_prediction(), completed_results())
 
-        self.assertEqual(score["total"], 302)
-        self.assertEqual(score["possible"], 302)
-        self.assertEqual(score["maximum"], 302)
-        self.assertEqual(score["regularSeason"], 152)
+        self.assertEqual(score["total"], 300)
+        self.assertEqual(score["possible"], 300)
+        self.assertEqual(score["maximum"], 300)
+        self.assertEqual(score["regularSeason"], 150)
         self.assertEqual(score["playoffs"], 150)
+
+    def test_exact_seed_points_follow_seed_position(self):
+        prediction = perfect_prediction()
+        prediction["seeds"]["AFC"][0] = "Miami Dolphins"
+        prediction["seeds"]["NFC"][4] = "Philadelphia Eagles"
+
+        score = lambda_app.score_prediction(prediction, completed_results())
+
+        self.assertEqual(score["breakdown"]["exactSeeds"]["hits"], 12)
+        self.assertEqual(score["breakdown"]["exactSeeds"]["points"], 33)
+        self.assertEqual(score["breakdown"]["exactSeeds"]["maximum"], 40)
+
+    def test_partial_seed_results_only_expose_weighted_available_points(self):
+        results = completed_results()
+        results["seeds"] = {
+            "AFC": results["seeds"]["AFC"][:2],
+            "NFC": results["seeds"]["NFC"][:1],
+        }
+
+        score = lambda_app.score_prediction(perfect_prediction(), results)
+
+        self.assertEqual(score["breakdown"]["exactSeeds"]["points"], 13)
+        self.assertEqual(score["breakdown"]["exactSeeds"]["possible"], 13)
 
     def test_round_winner_scores_without_an_exact_matchup(self):
         prediction = perfect_prediction()

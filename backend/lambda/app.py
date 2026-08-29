@@ -25,10 +25,15 @@ CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "21600"))
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
 
+EXACT_SEED_POINTS = (5, 3, 3, 3, 2, 2, 2)
+
 SCORING_RULES = {
     "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 70},
     "divisionWinners": {"label": "Correct division winner", "points": 5, "maximum": 40},
-    "exactSeeds": {"label": "Exact playoff seed", "points": 3, "maximum": 42},
+    "exactSeeds": {
+        "label": "Exact playoff seed",
+        "maximum": sum(EXACT_SEED_POINTS) * 2,
+    },
     "wildCard": {"label": "Correct Wild Card winner", "points": 5, "maximum": 30},
     "divisional": {"label": "Correct Divisional winner", "points": 10, "maximum": 40},
     "conferenceChampions": {
@@ -383,6 +388,8 @@ def score_prediction(prediction: dict, results: dict | None = None) -> dict:
             division_hits += int(bool(actual) and actual == predicted)
 
     seed_hits = 0
+    seed_points = 0
+    possible_seed_points = 0
     settled_seed_slots = 0
     for conference in ("AFC", "NFC"):
         actual_conference_seeds = actual_seeds.get(conference, [])
@@ -390,9 +397,15 @@ def score_prediction(prediction: dict, results: dict | None = None) -> dict:
         for index, actual in enumerate(actual_conference_seeds):
             if not actual:
                 continue
+            if index >= len(EXACT_SEED_POINTS):
+                continue
+            point_value = EXACT_SEED_POINTS[index]
             settled_seed_slots += 1
+            possible_seed_points += point_value
             if index < len(predicted_conference_seeds):
-                seed_hits += int(actual == predicted_conference_seeds[index])
+                if actual == predicted_conference_seeds[index]:
+                    seed_hits += 1
+                    seed_points += point_value
 
     predicted_wild_card = {
         predicted_picks.get(conference, {}).get(game_id)
@@ -455,17 +468,22 @@ def score_prediction(prediction: dict, results: dict | None = None) -> dict:
         "superBowlChampion": int(bool(actual_super_bowl_champion)),
     }
 
-    breakdown = {
-        key: {
+    breakdown = {}
+    for key, rule in SCORING_RULES.items():
+        points = seed_points if key == "exactSeeds" else hit_counts[key] * rule["points"]
+        possible = (
+            possible_seed_points
+            if key == "exactSeeds"
+            else settled_counts[key] * rule["points"]
+        )
+        breakdown[key] = {
             "label": rule["label"],
             "hits": hit_counts[key],
             "settled": settled_counts[key],
-            "points": hit_counts[key] * rule["points"],
-            "possible": settled_counts[key] * rule["points"],
+            "points": points,
+            "possible": possible,
             "maximum": rule["maximum"],
         }
-        for key, rule in SCORING_RULES.items()
-    }
     regular_season = sum(
         breakdown[key]["points"]
         for key in ("playoffField", "divisionWinners", "exactSeeds")

@@ -1073,7 +1073,7 @@ function renderPublicBracket(bracket) {
       }).format(new Date(bracket.savedAt))}`
     : "";
   elements.publicBracketStatus.textContent =
-    `${score.total ?? 0} / ${score.maximum ?? 302} points${savedAt}`;
+    `${score.total ?? 0} / ${score.maximum ?? 300} points${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
@@ -1218,7 +1218,7 @@ function createPreviewPublicBracket(leaderboardName, variant = 0) {
       playoffs: 0,
       total: 0,
       possible: 0,
-      maximum: 302,
+      maximum: 300,
     },
   };
 }
