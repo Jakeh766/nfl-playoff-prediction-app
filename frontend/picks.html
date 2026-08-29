@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=24" />
+    <link rel="stylesheet" href="/styles.css?v=25" />
     <script src="/shell.js?v=1" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/app.js?v=21" defer></script>
@@ -76,7 +76,18 @@
               <p class="card-kicker">THE BIG GAME</p><h3>Super Bowl</h3>
               <p class="super-bowl-status" id="super-bowl-status" aria-live="polite"></p>
               <div id="super-bowl-game"></div>
-              <div class="champion-display empty" id="champion-display"><span class="trophy" aria-hidden="true">♜</span><p>YOUR CHAMPION</p><strong>Make your final pick</strong></div>
+              <div class="champion-display empty" id="champion-display">
+                <svg class="trophy" viewBox="0 0 64 88" aria-hidden="true" focusable="false">
+                  <g transform="rotate(-32 32 20)">
+                    <ellipse cx="32" cy="20" rx="22" ry="12" />
+                    <path class="trophy-detail" d="M22 20h20M27 16v8M32 16v8M37 16v8" />
+                  </g>
+                  <path d="M28 31h9l10 38H17z" />
+                  <path d="M14 66h36l3 8H11z" />
+                  <path d="M9 74h46v11H9z" />
+                </svg>
+                <p>YOUR CHAMPION</p><strong>Make your final pick</strong>
+              </div>
             </section>
             <div class="bracket-conference">
               <div class="bracket-conference-label nfc-label"><img class="bracket-conference-logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/nfc.png" alt="NFC logo" /><span>NFC</span></div>

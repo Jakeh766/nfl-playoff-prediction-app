@@ -1586,10 +1586,19 @@ body.predictions-locked .predictor .final-actions button {
 }
 
 .trophy {
+  width: 34px;
+  height: 47px;
   display: block;
+  margin: 0 auto;
   color: var(--gold);
-  font-size: 37px;
-  transform: rotate(180deg);
+  fill: currentColor;
+}
+
+.trophy-detail {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-width: 1.8px;
 }
 
 .champion-display p {
