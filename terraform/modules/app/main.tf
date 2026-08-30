@@ -189,7 +189,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:UpdateItem"
         ]
         Resource = aws_dynamodb_table.groups.arn
       }

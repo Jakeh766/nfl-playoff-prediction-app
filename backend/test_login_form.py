@@ -237,6 +237,10 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn("/invite`", app_javascript)
         self.assertIn('route_key          = "POST /api/groups/join-invite"', terraform)
         self.assertIn('route_key          = "GET /api/groups/{groupId}/invite"', terraform)
+        groups_resource = 'Resource = aws_dynamodb_table.groups.arn'
+        groups_resource_index = terraform.index(groups_resource)
+        groups_permissions = terraform[:groups_resource_index].rsplit("{", 1)[-1]
+        self.assertIn('"dynamodb:UpdateItem"', groups_permissions)
 
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
