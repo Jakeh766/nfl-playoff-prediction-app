@@ -157,12 +157,12 @@ if (dialogs) {
       </form>
     </dialog>
 
-    ${pageName === "leaderboard" ? `
+    ${["home", "leaderboard"].includes(pageName) ? `
       <dialog class="account-dialog" id="group-dialog" aria-labelledby="group-dialog-title" aria-describedby="group-dialog-description">
         <form id="group-form" method="post">
           <p class="card-kicker" id="group-dialog-kicker">PRIVATE GROUP</p>
           <h2 id="group-dialog-title">Create a group.</h2>
-          <p id="group-dialog-description">Pick a unique group name and share its password with the people you invite.</p>
+          <p id="group-dialog-description">Pick a unique group name. You can invite people with a private link or the group password.</p>
           <label for="group-name">Group name</label>
           <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
           <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
@@ -175,6 +175,24 @@ if (dialogs) {
             <button class="button button-primary" id="submit-group" type="submit">Create group</button>
           </div>
         </form>
+      </dialog>
+
+      <dialog class="account-dialog" id="group-invite-dialog" aria-labelledby="group-invite-title" aria-describedby="group-invite-description">
+        <div class="dialog-heading">
+          <div>
+            <p class="card-kicker">PRIVATE GROUP INVITE</p>
+            <h2 id="group-invite-title">Invite your group.</h2>
+          </div>
+          <button class="dialog-close" id="close-group-invite" type="button" aria-label="Close group invite">×</button>
+        </div>
+        <p id="group-invite-description">Anyone with this link can join <strong id="group-invite-name"></strong> after signing in.</p>
+        <label for="group-invite-link">Invite link</label>
+        <input id="group-invite-link" type="url" readonly />
+        <p class="dialog-message" id="group-invite-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary hidden" id="share-group-invite-native" type="button">Share link</button>
+          <button class="button button-primary" id="copy-group-invite" type="button">Copy invite link</button>
+        </div>
       </dialog>
     ` : ""}
 

@@ -8,12 +8,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=24" />
-    <script src="/shell.js?v=1" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=26" />
+    <script src="/shell.js?v=2" defer></script>
     <script src="/auth-config.js" defer></script>
-    <script src="/app.js?v=20" defer></script>
-    <script src="/leaderboard.js?v=1" defer></script>
-    <script src="/bootstrap.js?v=1" defer></script>
+    <script src="/app.js?v=22" defer></script>
+    <script src="/leaderboard.js?v=2" defer></script>
+    <script src="/bootstrap.js?v=3" defer></script>
   </head>
   <body data-page="leaderboard">
     <header id="site-header"></header>
@@ -52,7 +52,10 @@
           <div class="group-leaderboard hidden" id="group-leaderboard">
             <div class="group-leaderboard-heading">
               <div><p class="card-kicker">GROUP LEADERBOARD</p><h3 id="active-group-name"></h3></div>
-              <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
+              <div class="group-leaderboard-heading-actions">
+                <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
+                <button class="button button-secondary" id="share-group-invite" type="button">Invite others</button>
+              </div>
             </div>
             <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
               <table class="leaderboard-table">

@@ -7,7 +7,8 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Seed seven AFC and seven NFC teams.
 - Predict every playoff game, including conference championships and the Super Bowl.
 - Track a 300-point score as official results become available.
-- Create or join password-protected groups with their own member-only leaderboards.
+- Create or join private groups with their own member-only leaderboards.
+- Invite other players to a group with a private share link.
 - Save, reopen, update, and delete one prediction per account.
 - Create or change predictions only until the first regular-season kickoff; the
   backend enforces the deadline and the home page shows a live countdown.
@@ -51,9 +52,11 @@ controls.
 
 Signed-in users can create or join multiple private groups using a unique group
 name and shared password. Group passwords are salted and hashed with PBKDF2
-before storage. A group leaderboard can only be loaded by a current member and
-uses the same live scoring as the global leaderboard, filtered to members with
-saved predictions. Deleting an account removes all of its group memberships.
+before storage. Members can also copy a private invite link; an authenticated
+recipient who accepts the link joins without entering the shared password. A
+group leaderboard can only be loaded by a current member and uses the same live
+scoring as the global leaderboard, filtered to members with saved predictions.
+Deleting an account removes all of its group memberships.
 
 Win-total projections, leaderboard scores, and read-only leaderboard brackets
 are public. Reading or writing your own saved prediction requires a signed-in

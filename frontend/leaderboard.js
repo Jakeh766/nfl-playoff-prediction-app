@@ -315,6 +315,7 @@ async function loadLeaderboard() {
 }
 
 function renderGroups() {
+  if (!elements.groupTabs) return;
   const activeGroup = state.groups.find(
     (group) => group.groupId === state.activeGroupId,
   );
@@ -383,9 +384,6 @@ async function loadGroupLeaderboard(groupId = state.activeGroupId) {
 async function refreshGroups(preferredGroupId = state.activeGroupId) {
   try {
     const payload = await apiRequest("/api/groups");
-    elements.emptyGroups.textContent =
-      "You have not joined a group yet. Create one for friends or join one with its name and password.";
-    elements.emptyGroups.title = "";
     state.groups = payload.groups || [];
     state.activeGroupId = state.groups.some(
       (group) => group.groupId === preferredGroupId,
@@ -393,12 +391,17 @@ async function refreshGroups(preferredGroupId = state.activeGroupId) {
       ? preferredGroupId
       : state.groups[0]?.groupId || "";
     state.groupLeaderboard = null;
+    if (!elements.groupTabs) return;
+    elements.emptyGroups.textContent =
+      "You have not joined a group yet. Create one for friends or join one with its name and password.";
+    elements.emptyGroups.title = "";
     renderGroups();
     if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
   } catch (error) {
     state.groups = [];
     state.activeGroupId = "";
     state.groupLeaderboard = null;
+    if (!elements.groupTabs) throw error;
     renderGroups();
     elements.emptyGroups.textContent =
       "Your groups could not be loaded. Please refresh and try again.";
@@ -413,7 +416,7 @@ function openGroupDialog(mode) {
   elements.groupDialogKicker.textContent = creating ? "NEW PRIVATE GROUP" : "JOIN PRIVATE GROUP";
   elements.groupDialogTitle.textContent = creating ? "Create a group." : "Join a group.";
   elements.groupDialogDescription.textContent = creating
-    ? "Pick a unique group name and share its password with the people you invite."
+    ? "Pick a unique group name. You can invite people with a private link or the group password."
     : "Enter the exact group name and the password shared by its creator.";
   elements.submitGroup.textContent = creating ? "Create group" : "Join group";
   elements.groupDialogMessage.textContent = "";
@@ -440,8 +443,18 @@ async function submitGroup(event) {
       }),
     });
     elements.groupDialog.close();
-    await refreshGroups(group.groupId);
+    state.groups = [
+      ...state.groups.filter((existing) => existing.groupId !== group.groupId),
+      group,
+    ];
+    if (PAGE === "leaderboard") await refreshGroups(group.groupId);
+    if (elements.homeGroupStatus) {
+      elements.homeGroupStatus.textContent = creating
+        ? `${group.groupName} is ready. Copy the invite link to bring people in.`
+        : `You joined ${group.groupName}. Open My Groups to view its standings.`;
+    }
     showToast(creating ? `Created ${group.groupName}.` : `Joined ${group.groupName}.`);
+    if (creating) await openGroupInviteDialog(group);
   } catch (error) {
     elements.groupDialogMessage.textContent = error.message;
     elements.groupPassword.value = "";
@@ -450,5 +463,154 @@ async function submitGroup(event) {
     elements.submitGroup.disabled = false;
     elements.submitGroup.removeAttribute("aria-busy");
     elements.submitGroup.textContent = creating ? "Create group" : "Join group";
+  }
+}
+
+function renderHomeGroupInvite() {
+  if (!elements.homeInviteCallout) return;
+  const hasInviteParameter = new URLSearchParams(window.location.search).has("invite");
+  elements.homeInviteCallout.classList.toggle("hidden", !pendingGroupInvite);
+  if (hasInviteParameter && !pendingGroupInvite) {
+    elements.homeGroupStatus.textContent =
+      "This group invite link is invalid. Ask the sender for a new link.";
+  }
+}
+
+function openGroupAction(mode) {
+  if (state.signedIn) {
+    openGroupDialog(mode);
+    return;
+  }
+  pendingGroupAction = mode;
+  showAuthPanel(
+    "signIn",
+    mode === "create"
+      ? "Sign in to create a private group."
+      : "Sign in to join a private group.",
+  );
+  elements.accountDialog.showModal();
+  elements.loginEmail.focus();
+}
+
+async function acceptPendingGroupInvite() {
+  if (!pendingGroupInvite) return;
+  if (!state.signedIn) {
+    pendingGroupAction = "accept-invite";
+    showAuthPanel("signIn", "Sign in to accept this private group invite.");
+    elements.accountDialog.showModal();
+    elements.loginEmail.focus();
+    return;
+  }
+
+  elements.homeAcceptInvite.disabled = true;
+  elements.homeAcceptInvite.setAttribute("aria-busy", "true");
+  elements.homeAcceptInvite.textContent = "Joining…";
+  try {
+    const group = await apiRequest("/api/groups/join-invite", {
+      method: "POST",
+      body: JSON.stringify(pendingGroupInvite),
+    });
+    pendingGroupInvite = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("invite");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    renderHomeGroupInvite();
+    elements.homeGroupStatus.textContent =
+      `You joined ${group.groupName}. Open My Groups to view its standings.`;
+    showToast(`Joined ${group.groupName}.`);
+  } catch (error) {
+    elements.homeGroupStatus.textContent = error.message;
+  } finally {
+    elements.homeAcceptInvite.disabled = false;
+    elements.homeAcceptInvite.removeAttribute("aria-busy");
+    elements.homeAcceptInvite.textContent = "Accept group invite";
+  }
+}
+
+async function resumePendingGroupAction() {
+  if (!pendingGroupAction) return;
+  const action = pendingGroupAction;
+  pendingGroupAction = "";
+  if (elements.accountDialog.open) elements.accountDialog.close();
+  if (action === "accept-invite") {
+    await acceptPendingGroupInvite();
+  } else {
+    openGroupDialog(action);
+  }
+}
+
+function groupInviteUrl(groupId, inviteCode) {
+  const url = new URL("/", window.location.origin);
+  url.searchParams.set("invite", `${groupId}.${inviteCode}`);
+  return url.toString();
+}
+
+async function openGroupInviteDialog(group) {
+  elements.groupInviteName.textContent = group.groupName;
+  elements.groupInviteLink.value = "";
+  elements.groupInviteMessage.textContent = "Creating a private invite link…";
+  elements.copyGroupInvite.disabled = true;
+  elements.shareGroupInviteNative.classList.toggle("hidden", !navigator.share);
+  elements.groupInviteDialog.showModal();
+
+  try {
+    const invite = await apiRequest(
+      `/api/groups/${encodeURIComponent(group.groupId)}/invite`,
+    );
+    elements.groupInviteName.textContent = invite.groupName;
+    elements.groupInviteLink.value = groupInviteUrl(
+      invite.groupId,
+      invite.inviteCode,
+    );
+    elements.groupInviteMessage.textContent =
+      "Only share this link with people you want in the group.";
+    elements.copyGroupInvite.disabled = false;
+  } catch (error) {
+    elements.groupInviteMessage.textContent = error.message;
+  }
+}
+
+async function shareActiveGroupInvite() {
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === state.activeGroupId,
+  );
+  if (group) await openGroupInviteDialog(group);
+}
+
+async function copyGroupInviteLink() {
+  const link = elements.groupInviteLink.value;
+  if (!link) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(link);
+    } else {
+      elements.groupInviteLink.select();
+      document.execCommand("copy");
+    }
+    elements.groupInviteMessage.textContent = "Invite link copied.";
+    elements.copyGroupInvite.textContent = "Copied";
+    setTimeout(() => {
+      elements.copyGroupInvite.textContent = "Copy invite link";
+    }, 1800);
+  } catch (error) {
+    elements.groupInviteMessage.textContent =
+      "Copy failed. Select the link and copy it manually.";
+    elements.groupInviteLink.select();
+  }
+}
+
+async function shareGroupInviteNatively() {
+  const link = elements.groupInviteLink.value;
+  if (!link || !navigator.share) return;
+  try {
+    await navigator.share({
+      title: `Join ${elements.groupInviteName.textContent}`,
+      text: "Join my Road to the Bowl private leaderboard.",
+      url: link,
+    });
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      elements.groupInviteMessage.textContent = "The invite link could not be shared.";
+    }
   }
 }

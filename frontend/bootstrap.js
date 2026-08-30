@@ -27,13 +27,27 @@ elements.groupsLeaderboardTab?.addEventListener("click", () => {
 });
 elements.publicLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
 elements.groupsLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
-elements.createGroup?.addEventListener("click", () => openGroupDialog("create"));
-elements.joinGroup?.addEventListener("click", () => openGroupDialog("join"));
+elements.createGroup?.addEventListener("click", () => openGroupAction("create"));
+elements.joinGroup?.addEventListener("click", () => openGroupAction("join"));
+elements.homeCreateGroup?.addEventListener("click", () => openGroupAction("create"));
+elements.homeJoinGroup?.addEventListener("click", () => openGroupAction("join"));
+elements.homeAcceptInvite?.addEventListener("click", acceptPendingGroupInvite);
 elements.groupForm?.addEventListener("submit", submitGroup);
 elements.cancelGroup?.addEventListener("click", () => elements.groupDialog.close());
 elements.groupDialog?.addEventListener("close", () => {
   elements.groupForm.reset();
   elements.groupDialogMessage.textContent = "";
+});
+elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+elements.copyGroupInvite?.addEventListener("click", copyGroupInviteLink);
+elements.shareGroupInviteNative?.addEventListener("click", shareGroupInviteNatively);
+elements.closeGroupInvite?.addEventListener("click", () => {
+  elements.groupInviteDialog.close();
+});
+elements.groupInviteDialog?.addEventListener("close", () => {
+  elements.groupInviteLink.value = "";
+  elements.groupInviteMessage.textContent = "";
+  elements.copyGroupInvite.textContent = "Copy invite link";
 });
 elements.changeLeaderboardName.addEventListener("click", () => {
   elements.accountDialog.close();
@@ -79,6 +93,9 @@ elements.headerAccount.addEventListener("click", () => {
 });
 elements.closeAccountDialog.addEventListener("click", () => {
   elements.accountDialog.close();
+});
+elements.accountDialog.addEventListener("close", () => {
+  if (!state.signedIn) pendingGroupAction = "";
 });
 elements.accountSignOut.addEventListener("click", signOut);
 elements.deleteAccount.addEventListener("click", () => {
@@ -147,4 +164,5 @@ async function initializeAuthentication() {
 if (PAGE === "picks") loadWinTotals();
 if (elements.leaderboardBody) loadLeaderboard();
 if (["home", "picks"].includes(PAGE)) initializePredictionWindow();
+if (typeof renderHomeGroupInvite === "function") renderHomeGroupInvite();
 initializeAuthentication();

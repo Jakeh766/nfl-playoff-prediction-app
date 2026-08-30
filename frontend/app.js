@@ -286,6 +286,11 @@ const elements = {
   emptyGroupLeaderboard: document.querySelector("#empty-group-leaderboard"),
   createGroup: document.querySelector("#create-group"),
   joinGroup: document.querySelector("#join-group"),
+  homeCreateGroup: document.querySelector("#home-create-group"),
+  homeJoinGroup: document.querySelector("#home-join-group"),
+  homeGroupStatus: document.querySelector("#home-group-status"),
+  homeInviteCallout: document.querySelector("#home-invite-callout"),
+  homeAcceptInvite: document.querySelector("#home-accept-invite"),
   groupDialog: document.querySelector("#group-dialog"),
   groupForm: document.querySelector("#group-form"),
   groupDialogKicker: document.querySelector("#group-dialog-kicker"),
@@ -296,6 +301,14 @@ const elements = {
   groupDialogMessage: document.querySelector("#group-dialog-message"),
   cancelGroup: document.querySelector("#cancel-group"),
   submitGroup: document.querySelector("#submit-group"),
+  shareGroupInvite: document.querySelector("#share-group-invite"),
+  groupInviteDialog: document.querySelector("#group-invite-dialog"),
+  groupInviteName: document.querySelector("#group-invite-name"),
+  groupInviteLink: document.querySelector("#group-invite-link"),
+  groupInviteMessage: document.querySelector("#group-invite-message"),
+  closeGroupInvite: document.querySelector("#close-group-invite"),
+  copyGroupInvite: document.querySelector("#copy-group-invite"),
+  shareGroupInviteNative: document.querySelector("#share-group-invite-native"),
   leaderboardStatus: document.querySelector("#leaderboard-status"),
   leaderboardTableShell: document.querySelector("#leaderboard-table-shell"),
   leaderboardBody: document.querySelector("#leaderboard-body"),
@@ -337,6 +350,22 @@ let deleteAccountPending = false;
 let pendingPredictionSave = false;
 let publicBracketRequest = 0;
 let groupDialogMode = "create";
+let pendingGroupAction = "";
+
+function groupInviteFromUrl() {
+  const value = new URLSearchParams(window.location.search).get("invite") || "";
+  const [groupId, inviteCode, extra] = value.split(".");
+  if (
+    extra ||
+    !/^[0-9a-f-]{36}$/.test(groupId || "") ||
+    !/^[A-Za-z0-9_-]{32}$/.test(inviteCode || "")
+  ) {
+    return null;
+  }
+  return { groupId, inviteCode };
+}
+
+let pendingGroupInvite = groupInviteFromUrl();
 
 function authConfig() {
   const config = window.AUTH_CONFIG || {};
@@ -489,6 +518,9 @@ async function submitSignIn(event) {
       if (loadAuthSession() && !state.bracketBuilt) openPrediction();
     } else if (PAGE === "leaderboard") {
       await refreshGroups();
+    }
+    if (typeof resumePendingGroupAction === "function") {
+      await resumePendingGroupAction();
     }
   } catch (error) {
     console.error("Could not sign in with Cognito.", error);
@@ -739,6 +771,7 @@ function renderAuthentication(signedIn) {
   elements.headerAccount.textContent = signedIn ? "Account" : "Sign in";
   elements.accountEmail.textContent = state.userEmail;
   document.body.classList.toggle("signed-in", signedIn);
+  if (typeof renderHomeGroupInvite === "function") renderHomeGroupInvite();
 
   if (!signedIn) {
     state.leaderboardName = "";

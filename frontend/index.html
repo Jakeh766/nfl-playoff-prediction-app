@@ -8,12 +8,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=24" />
-    <script src="/shell.js?v=1" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=26" />
+    <script src="/shell.js?v=2" defer></script>
     <script src="/auth-config.js" defer></script>
-    <script src="/app.js?v=21" defer></script>
-    <script src="/leaderboard.js?v=1" defer></script>
-    <script src="/bootstrap.js?v=2" defer></script>
+    <script src="/app.js?v=22" defer></script>
+    <script src="/leaderboard.js?v=2" defer></script>
+    <script src="/bootstrap.js?v=3" defer></script>
   </head>
   <body data-page="home">
     <header id="site-header"></header>
@@ -54,6 +54,35 @@
           <li><span>02</span><div><strong>Build your bracket</strong><p>Advance a winner through every playoff round.</p></div></li>
           <li><span>03</span><div><strong>Compete all season</strong><p>Climb the public standings or challenge a private group.</p></div></li>
         </ol>
+      </section>
+
+      <section class="home-groups" id="home-groups" aria-labelledby="home-groups-title">
+        <div class="home-groups-card">
+          <div class="home-groups-copy">
+            <p class="eyebrow">PRIVATE LEADERBOARDS</p>
+            <h2 id="home-groups-title">Make it a group thing.</h2>
+            <p>Start a private leaderboard for friends, family, or coworkers—or join one you have been invited to.</p>
+            <div class="home-group-actions">
+              <button class="button button-primary" id="home-create-group" type="button">Create a group</button>
+              <button class="button button-secondary" id="home-join-group" type="button">Join a group</button>
+              <a class="text-link" href="/leaderboard" data-clean-route="/leaderboard">View my groups</a>
+            </div>
+            <p class="home-group-status" id="home-group-status" role="status" aria-live="polite"></p>
+          </div>
+          <div class="home-groups-feature" aria-label="Private group features">
+            <span class="home-groups-icon" aria-hidden="true">↗</span>
+            <strong>Invite by link</strong>
+            <p>Share one private link. Invitees sign in, accept, and join your group—no password to copy.</p>
+          </div>
+        </div>
+        <div class="home-invite-callout hidden" id="home-invite-callout">
+          <div>
+            <p class="card-kicker">YOU'RE INVITED</p>
+            <strong>Join this private leaderboard.</strong>
+            <p>Accept the invitation to compare your picks with the group.</p>
+          </div>
+          <button class="button button-primary" id="home-accept-invite" type="button">Accept group invite</button>
+        </div>
       </section>
 
       <section class="home-leaderboard" aria-labelledby="home-leaderboard-title">

@@ -666,6 +666,20 @@ select:focus {
   line-height: 1.6;
 }
 
+#group-invite-description {
+  margin-bottom: 22px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+#group-invite-description strong {
+  color: var(--ink);
+}
+
+#group-invite-link {
+  font-size: 13px;
+}
+
 .account-dialog label {
   display: block;
   margin-bottom: 8px;
@@ -708,6 +722,7 @@ select:focus {
 
 .home-hero,
 .how-it-works,
+.home-groups,
 .home-leaderboard,
 .page-intro {
   max-width: 1440px;
@@ -903,10 +918,131 @@ body.predictions-locked .predictor .final-actions button {
 }
 
 .how-it-works,
+.home-groups,
 .home-leaderboard {
   padding-top: 90px;
   padding-bottom: 90px;
   border-top: 1px solid rgba(16, 34, 58, 0.12);
+}
+
+.home-groups-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 12px 38px rgba(16, 34, 58, 0.08);
+}
+
+.home-groups-copy {
+  padding: clamp(32px, 5vw, 62px);
+}
+
+.home-groups-copy h2 {
+  margin-bottom: 16px;
+  font-family: var(--display);
+  font-size: clamp(2.25rem, 4.3vw, 4rem);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.home-groups-copy > p:not(.eyebrow):not(.home-group-status) {
+  max-width: 650px;
+  margin-bottom: 25px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.home-group-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.home-group-actions .text-link {
+  margin-left: 8px;
+}
+
+.home-group-status {
+  min-height: 20px;
+  margin: 16px 0 0;
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.home-groups-feature {
+  min-height: 310px;
+  padding: clamp(32px, 4vw, 50px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: white;
+  background:
+    linear-gradient(145deg, rgba(24, 89, 169, 0.9), rgba(13, 57, 114, 0.98)),
+    repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 255, 255, 0.08) 10px, rgba(255, 255, 255, 0.08) 11px);
+}
+
+.home-groups-icon {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 36px;
+  display: grid;
+  place-items: center;
+  color: var(--blue-dark);
+  background: var(--gold);
+  border-radius: 50%;
+  font-family: var(--display);
+  font-size: 28px;
+}
+
+.home-groups-feature strong {
+  margin-bottom: 10px;
+  font-family: var(--display);
+  font-size: 28px;
+  text-transform: uppercase;
+}
+
+.home-groups-feature p {
+  max-width: 390px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.home-invite-callout {
+  margin-top: 16px;
+  padding: 22px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: white;
+  background: var(--ink);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.home-invite-callout .card-kicker {
+  margin-bottom: 7px;
+  color: var(--gold);
+}
+
+.home-invite-callout strong {
+  font-family: var(--display);
+  font-size: 21px;
+  text-transform: uppercase;
+}
+
+.home-invite-callout p:last-child {
+  margin: 5px 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
 }
 
 .steps-list {
@@ -1769,6 +1905,13 @@ body.predictions-locked .predictor .final-actions button {
   margin: 0 !important;
 }
 
+.group-leaderboard-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .empty-groups {
   padding: 30px;
   color: var(--muted);
@@ -2330,6 +2473,7 @@ footer p {
   }
 
   .how-it-works,
+  .home-groups,
   .home-leaderboard {
     padding-top: 68px;
     padding-bottom: 68px;
@@ -2337,6 +2481,39 @@ footer p {
 
   .steps-list {
     grid-template-columns: 1fr;
+  }
+
+  .home-groups-card {
+    grid-template-columns: 1fr;
+  }
+
+  .home-groups-copy,
+  .home-groups-feature {
+    padding: 28px 24px;
+  }
+
+  .home-groups-feature {
+    min-height: 260px;
+  }
+
+  .home-group-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-group-actions .button,
+  .home-group-actions .text-link {
+    width: 100%;
+  }
+
+  .home-group-actions .text-link {
+    margin: 8px 0 0;
+    text-align: center;
+  }
+
+  .home-invite-callout {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   body.signed-in .hero {
@@ -2490,6 +2667,11 @@ footer p {
 
   .group-leaderboard {
     padding: 16px;
+  }
+
+  .group-leaderboard-heading-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .scoring-table th,

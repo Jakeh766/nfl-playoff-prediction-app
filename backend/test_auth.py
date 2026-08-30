@@ -74,6 +74,23 @@ class FakeGroupTable:
     def delete_item(self, *, Key):
         self.items.pop(Key["groupKey"], None)
 
+    def update_item(
+        self,
+        *,
+        Key,
+        UpdateExpression,
+        ConditionExpression=None,
+        ExpressionAttributeValues=None,
+        ReturnValues=None,
+    ):
+        item = self.items[Key["groupKey"]]
+        if ConditionExpression and "inviteCode" in item:
+            raise ConditionalCheckFailed()
+        if UpdateExpression != "SET inviteCode = :inviteCode":
+            raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
+        item["inviteCode"] = ExpressionAttributeValues[":inviteCode"]
+        return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
+
     def scan(self, **_arguments):
         return {"Items": list(self.items.values())}
 
@@ -404,6 +421,17 @@ class PrivateGroupTests(unittest.TestCase):
             None,
         )
 
+    def join_invite(self, group_id, invite_code, user_id="user-456"):
+        return lambda_app.handler(
+            event(
+                "POST",
+                user_id=user_id,
+                body={"groupId": group_id, "inviteCode": invite_code},
+                path="/api/groups/join-invite",
+            ),
+            None,
+        )
+
     def test_group_routes_require_authentication(self):
         result = lambda_app.handler(
             event("GET", user_id=None, path="/api/groups"),
@@ -421,6 +449,7 @@ class PrivateGroupTests(unittest.TestCase):
         self.assertNotIn("password", payload)
         self.assertNotEqual(group["passwordHash"], "secret1")
         self.assertNotIn("password", group)
+        self.assertNotIn("inviteCode", payload)
         self.assertIn(
             f"membership#{payload['groupId']}#user#user-123",
             self.groups.items,
@@ -462,7 +491,46 @@ class PrivateGroupTests(unittest.TestCase):
         self.assertEqual(len(creator_payload["groups"]), 1)
         self.assertEqual(creator_payload["groups"][0]["groupName"], "Sunday Crew")
         self.assertNotIn("passwordHash", creator_payload["groups"][0])
+        self.assertNotIn("inviteCode", creator_payload["groups"][0])
         self.assertEqual(json.loads(outsider_list["body"])["groups"], [])
+
+    def test_member_can_get_an_invite_and_outsider_can_join_with_it(self):
+        created = json.loads(self.create()["body"])
+        invite_path = f"/api/groups/{created['groupId']}/invite"
+
+        forbidden = lambda_app.handler(
+            event("GET", user_id="user-456", path=invite_path),
+            None,
+        )
+        allowed = lambda_app.handler(event("GET", path=invite_path), None)
+        invite = json.loads(allowed["body"])
+
+        self.assertEqual(forbidden["statusCode"], 403)
+        self.assertEqual(allowed["statusCode"], 200)
+        self.assertEqual(len(invite["inviteCode"]), 32)
+
+        rejected = self.join_invite(created["groupId"], "x" * 32)
+        joined = self.join_invite(created["groupId"], invite["inviteCode"])
+        self.assertEqual(rejected["statusCode"], 400)
+        self.assertEqual(joined["statusCode"], 200)
+        self.assertIn(
+            f"membership#{created['groupId']}#user#user-456",
+            self.groups.items,
+        )
+
+    def test_existing_group_gets_an_invite_code_when_first_shared(self):
+        created = json.loads(self.create()["body"])
+        group = self.groups.items[f"group#{created['groupId']}"]
+        del group["inviteCode"]
+
+        result = lambda_app.handler(
+            event("GET", path=f"/api/groups/{created['groupId']}/invite"),
+            None,
+        )
+        invite = json.loads(result["body"])
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(group["inviteCode"], invite["inviteCode"])
 
     def test_group_leaderboard_is_member_only_and_group_scoped(self):
         created = json.loads(self.create()["body"])

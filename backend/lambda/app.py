@@ -702,6 +702,8 @@ def delete_prediction(user_id: str) -> None:
 
 
 GROUP_PASSWORD_ITERATIONS = 310_000
+GROUP_INVITE_CODE_PATTERN = re.compile(r"[A-Za-z0-9_-]{32}")
+GROUP_ID_PATTERN = re.compile(r"[0-9a-f-]{36}")
 
 
 def normalize_group_name(value) -> tuple[str, str]:
@@ -742,6 +744,10 @@ def group_name_item_key(normalized_name: str) -> str:
 
 def membership_item_key(group_id: str, user_id: str) -> str:
     return f"membership#{group_id}#user#{user_id}"
+
+
+def new_group_invite_code() -> str:
+    return secrets.token_urlsafe(24)
 
 
 def public_group(group: dict) -> dict:
@@ -835,6 +841,7 @@ def create_group(user_id: str, event: dict) -> dict:
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
+        "inviteCode": new_group_invite_code(),
         "createdAt": created_at,
     }
     try:
@@ -876,19 +883,81 @@ def join_group(user_id: str, event: dict) -> dict:
     if not hmac.compare_digest(digest, group["passwordHash"]):
         raise ValueError("Group name or password is incorrect")
 
-    if is_group_member(group["groupId"], user_id):
-        return public_group(group)
+    add_group_membership(group["groupId"], user_id)
+    return public_group(group)
 
-    table.put_item(
+
+def add_group_membership(group_id: str, user_id: str) -> None:
+    if is_group_member(group_id, user_id):
+        return
+
+    groups_table().put_item(
         Item={
-            "groupKey": membership_item_key(group["groupId"], user_id),
+            "groupKey": membership_item_key(group_id, user_id),
             "recordType": "membership",
-            "groupId": group["groupId"],
+            "groupId": group_id,
             "userId": user_id,
             "joinedAt": int(time.time() * 1000),
         },
         ConditionExpression="attribute_not_exists(groupKey)",
     )
+
+
+def get_group_invite(group_id: str, user_id: str) -> dict:
+    group = get_group(group_id)
+    if not group or not is_group_member(group_id, user_id):
+        raise PermissionError("Group membership required")
+
+    invite_code = group.get("inviteCode")
+    if not isinstance(invite_code, str) or not GROUP_INVITE_CODE_PATTERN.fullmatch(
+        invite_code
+    ):
+        invite_code = new_group_invite_code()
+        try:
+            updated = groups_table().update_item(
+                Key={"groupKey": group_item_key(group_id)},
+                UpdateExpression="SET inviteCode = :inviteCode",
+                ConditionExpression="attribute_not_exists(inviteCode)",
+                ExpressionAttributeValues={":inviteCode": invite_code},
+                ReturnValues="ALL_NEW",
+            )
+            group = updated.get("Attributes", {**group, "inviteCode": invite_code})
+        except Exception as error:
+            if not is_conditional_failure(error):
+                raise
+            group = get_group(group_id)
+            invite_code = group.get("inviteCode") if group else None
+
+    if not isinstance(invite_code, str) or not GROUP_INVITE_CODE_PATTERN.fullmatch(
+        invite_code
+    ):
+        raise RuntimeError("Group invite link could not be created")
+    return {
+        "groupId": group_id,
+        "groupName": group["groupName"],
+        "inviteCode": invite_code,
+    }
+
+
+def join_group_by_invite(user_id: str, event: dict) -> dict:
+    body = parse_body(event)
+    group_id = body.get("groupId")
+    invite_code = body.get("inviteCode")
+    if not isinstance(group_id, str) or not GROUP_ID_PATTERN.fullmatch(group_id):
+        raise ValueError("That group invite link is invalid")
+    if not isinstance(invite_code, str) or not GROUP_INVITE_CODE_PATTERN.fullmatch(
+        invite_code
+    ):
+        raise ValueError("That group invite link is invalid")
+
+    group = get_group(group_id)
+    stored_code = group.get("inviteCode") if group else None
+    if not isinstance(stored_code, str) or not hmac.compare_digest(
+        invite_code, stored_code
+    ):
+        raise ValueError("That group invite link is invalid")
+
+    add_group_membership(group_id, user_id)
     return public_group(group)
 
 
@@ -955,12 +1024,16 @@ def handler(event, context):
     group_leaderboard_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/leaderboard", path or ""
     )
+    group_invite_match = re.fullmatch(
+        r"/api/groups/([0-9a-f-]{36})/invite", path or ""
+    )
     if path not in (
         "/api/prediction",
         "/api/profile",
         "/api/groups",
         "/api/groups/join",
-    ) and not group_leaderboard_match:
+        "/api/groups/join-invite",
+    ) and not group_leaderboard_match and not group_invite_match:
         return response(404, {"message": "Not found"})
 
     user_id = authenticated_user_id(event)
@@ -984,6 +1057,25 @@ def handler(event, context):
             except ValueError as error:
                 return response(400, {"message": str(error)})
         return response(404, {"message": "Not found"})
+
+    if path == "/api/groups/join-invite":
+        if method == "POST":
+            try:
+                return response(200, join_group_by_invite(user_id, event))
+            except ValueError as error:
+                return response(400, {"message": str(error)})
+        return response(404, {"message": "Not found"})
+
+    if group_invite_match:
+        if method != "GET":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(
+                200,
+                get_group_invite(group_invite_match.group(1), user_id),
+            )
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
 
     if group_leaderboard_match:
         if method != "GET":

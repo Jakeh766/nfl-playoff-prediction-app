@@ -211,6 +211,33 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn("/leaderboard`", app_javascript)
         self.assertIn('path.startsWith("/api/groups")', app_javascript)
 
+    def test_homepage_exposes_group_actions_and_link_invites(self):
+        home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        app_javascript = "\n".join(
+            (
+                self.app_javascript,
+                self.leaderboard_javascript,
+                self.bootstrap_javascript,
+            )
+        )
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="home-groups"', home)
+        self.assertIn('id="home-create-group"', home)
+        self.assertIn('id="home-join-group"', home)
+        self.assertIn('id="home-accept-invite"', home)
+        self.assertIn('id="group-invite-dialog"', self.shell)
+        leaderboard = (FRONTEND_DIR / "leaderboard.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="share-group-invite"', leaderboard)
+        self.assertIn('apiRequest("/api/groups/join-invite"', app_javascript)
+        self.assertIn("/invite`", app_javascript)
+        self.assertIn('route_key          = "POST /api/groups/join-invite"', terraform)
+        self.assertIn('route_key          = "GET /api/groups/{groupId}/invite"', terraform)
+
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         picks = (FRONTEND_DIR / "picks.html").read_text(encoding="utf-8")
