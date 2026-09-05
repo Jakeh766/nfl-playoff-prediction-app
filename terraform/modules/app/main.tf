@@ -137,7 +137,7 @@ resource "aws_cognito_user_pool" "users" {
 
     content {
       email_sending_account = "DEVELOPER"
-      from_email_address    = "Road to the Bowl <no-reply@${email_configuration.value}>"
+      from_email_address    = "Predict Playoffs <no-reply@${email_configuration.value}>"
       source_arn            = local.cognito_email_source_arn
     }
   }
@@ -447,7 +447,7 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         width  = 24
         height = 2
         properties = {
-          markdown = "# Road to the Bowl — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
+          markdown = "# Predict Playoffs — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
         }
       },
       {

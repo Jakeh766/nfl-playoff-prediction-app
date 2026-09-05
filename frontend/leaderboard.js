@@ -778,7 +778,7 @@ async function shareGroupInviteNatively() {
   try {
     await navigator.share({
       title: `Join ${elements.groupInviteName.textContent}`,
-      text: "Join my Road to the Bowl private leaderboard.",
+      text: "Join my Predict Playoffs private leaderboard.",
       url: link,
     });
   } catch (error) {

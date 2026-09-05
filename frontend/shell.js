@@ -6,9 +6,9 @@ const header = document.querySelector("#site-header");
 if (header) {
   header.className = "site-header";
   header.innerHTML = `
-    <a class="brand" href="/" aria-label="Road to the Bowl home">
+    <a class="brand" href="/" aria-label="Predict Playoffs home">
       <span class="brand-mark" aria-hidden="true">◆</span>
-      <span>ROAD TO THE BOWL</span>
+      <span>PREDICT PLAYOFFS</span>
     </a>
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
@@ -223,7 +223,7 @@ if (dialogs) {
 
 const footer = document.querySelector("#site-footer");
 if (footer) {
-  footer.innerHTML = `<span>ROAD TO THE BOWL</span><p>Your account details stay private.</p>`;
+  footer.innerHTML = `<span>PREDICT PLAYOFFS</span><p>Your account details stay private.</p>`;
 }
 
 if (localPreview) {

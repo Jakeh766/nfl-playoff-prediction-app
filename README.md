@@ -1,4 +1,4 @@
-# Road to the Bowl
+# Predict Playoffs
 
 A self-contained NFL preseason playoff predictor. Users can:
 
@@ -39,7 +39,7 @@ key. Signed-in users can permanently delete their prediction and Cognito user
 through an in-app confirmation dialog.
 
 Production verification and password-recovery messages are sent as
-`Road to the Bowl <no-reply@predictplayoffs.com>`. The domain is verified in
+`Predict Playoffs <no-reply@predictplayoffs.com>`. The domain is verified in
 Amazon SES and authenticated with DKIM, a custom MAIL FROM domain, SPF, and
 DMARC records in Cloudflare. Cognito continues to use its built-in delivery
 service so these transactional messages do not depend on SES production-access
