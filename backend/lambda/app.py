@@ -28,6 +28,20 @@ PREDICTION_LOCK_AT = os.environ.get(
 )
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
+ANALYTICS_ID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+ANALYTICS_EVENTS = {
+    "account_created",
+    "group_created",
+    "group_invite_joined",
+    "group_joined",
+    "page_view",
+    "prediction_saved",
+    "sign_in",
+}
+ANALYTICS_PAGES = {"/", "/leaderboard", "/picks", "/scoring"}
 
 EXACT_SEED_POINTS = (5, 3, 3, 3, 2, 2, 2)
 
@@ -657,6 +671,44 @@ def parse_body(event) -> dict:
     return body
 
 
+def record_analytics_event(event: dict) -> None:
+    if len(event.get("body") or "") > 2048:
+        raise ValueError("Analytics payload is too large")
+
+    payload = parse_body(event)
+    event_name = payload.get("event")
+    page = payload.get("page")
+    session_id = payload.get("sessionId")
+    visitor_id = payload.get("visitorId")
+
+    if not isinstance(event_name, str) or event_name not in ANALYTICS_EVENTS:
+        raise ValueError("Unknown analytics event")
+    if not isinstance(page, str) or page not in ANALYTICS_PAGES:
+        raise ValueError("Unknown analytics page")
+    if not isinstance(session_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(
+        session_id
+    ):
+        raise ValueError("Invalid analytics session")
+    if not isinstance(visitor_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(
+        visitor_id
+    ):
+        raise ValueError("Invalid analytics visitor")
+
+    print(
+        json.dumps(
+            {
+                "type": "site_analytics",
+                "environment": "dev",
+                "event": event_name,
+                "page": page,
+                "sessionId": session_id,
+                "visitorId": visitor_id,
+            },
+            separators=(",", ":"),
+        )
+    )
+
+
 def validate_prediction(user_id: str, prediction: dict) -> dict:
     division_winners = prediction.get("divisionWinners")
     seeds = prediction.get("seeds")
@@ -1000,6 +1052,15 @@ def handler(event, context):
     del context
     method = event.get("requestContext", {}).get("http", {}).get("method")
     path = event.get("rawPath")
+
+    if method == "POST" and path == "/api/analytics":
+        if os.environ.get("ENVIRONMENT") != "dev":
+            return response(404, {"message": "Not found"})
+        try:
+            record_analytics_event(event)
+            return response(202, {"accepted": True})
+        except ValueError as error:
+            return response(400, {"message": str(error)})
 
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())

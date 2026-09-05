@@ -447,6 +447,7 @@ async function submitGroup(event) {
       ...state.groups.filter((existing) => existing.groupId !== group.groupId),
       group,
     ];
+    window.siteAnalytics?.track(creating ? "group_created" : "group_joined");
     if (PAGE === "leaderboard") await refreshGroups(group.groupId);
     if (elements.homeGroupStatus) {
       elements.homeGroupStatus.textContent = creating
@@ -511,6 +512,7 @@ async function acceptPendingGroupInvite() {
       body: JSON.stringify(pendingGroupInvite),
     });
     pendingGroupInvite = null;
+    window.siteAnalytics?.track("group_invite_joined");
     const url = new URL(window.location.href);
     url.searchParams.delete("invite");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);

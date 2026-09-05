@@ -509,6 +509,7 @@ async function submitSignIn(event) {
       refresh_token: authentication.RefreshToken,
       expires_in: authentication.ExpiresIn,
     });
+    window.siteAnalytics?.track("sign_in");
     elements.loginPassword.value = "";
     elements.authMessage.textContent = "";
     renderAuthentication(true);
@@ -582,6 +583,7 @@ async function submitCreateAccount(event) {
       Password: elements.createPassword.value,
       UserAttributes: [{ Name: "email", Value: email }],
     });
+    window.siteAnalytics?.track("account_created");
     elements.createPassword.value = "";
     elements.confirmEmail.value = email;
     if (result.UserConfirmed) {
