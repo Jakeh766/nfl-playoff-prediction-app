@@ -47,3 +47,13 @@ output "cognito_client_id" {
   description = "Public browser app client ID used by the in-app authentication forms."
   value       = aws_cognito_user_pool_client.browser.id
 }
+
+output "analytics_dashboard_name" {
+  description = "CloudWatch analytics dashboard name for environments where analytics are enabled."
+  value       = try(aws_cloudwatch_dashboard.analytics[0].dashboard_name, null)
+}
+
+output "analytics_dashboard_url" {
+  description = "AWS console URL for the CloudWatch analytics dashboard."
+  value       = var.environment == "dev" ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.analytics[0].dashboard_name}" : null
+}

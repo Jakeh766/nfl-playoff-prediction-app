@@ -171,6 +171,12 @@ fields event, page, sessionId
 The tracked conversion events are account creation, sign-in, prediction save,
 group creation, password-based group join, and invite-based group join.
 
+Terraform also creates the `nfl-playoff-predictor-dev-analytics` CloudWatch
+dashboard. It opens on a seven-day view with visitor, session, page-view, and
+prediction-save summaries; traffic and page-popularity charts; conversion and
+engagement breakdowns; recent sessions; and backend Lambda health. The dev
+deployment summary includes a direct link to the dashboard.
+
 ## Repository layout
 
 ```text
