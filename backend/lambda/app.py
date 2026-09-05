@@ -262,12 +262,14 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         profile = profiles.get(prediction.get("profileKey"))
         if not profile:
             continue
+        predicted_picks = prediction.get("picks") or {}
         scores = {mode: score_prediction(prediction, results, mode)
                   for mode in ("classic", "vegas")}
         score = scores[scoring_option]
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
+                "superBowl": predicted_picks.get("superBowl", ""),
                 "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total", "upsetBonus")}
                            for mode, value in scores.items()},
                 "regularSeason": score["regularSeason"],

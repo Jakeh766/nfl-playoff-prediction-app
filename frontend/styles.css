@@ -1961,7 +1961,7 @@ body.predictions-locked .predictor .final-actions button {
 
 .leaderboard-table {
   width: 100%;
-  min-width: 760px;
+  min-width: 920px;
   border-collapse: collapse;
 }
 
@@ -1973,8 +1973,15 @@ body.predictions-locked .predictor .final-actions button {
 }
 
 .leaderboard-table th:nth-child(2),
-.leaderboard-table td:nth-child(2) {
+.leaderboard-table td:nth-child(2),
+.leaderboard-table th:nth-child(3),
+.leaderboard-table td:nth-child(3) {
   text-align: left;
+}
+
+.leaderboard-champion-heading {
+  padding: 0 18px !important;
+  text-align: left !important;
 }
 
 .leaderboard-table thead th {
@@ -2107,6 +2114,37 @@ body.predictions-locked .predictor .final-actions button {
 .leaderboard-player-button:hover strong {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.leaderboard-champion {
+  min-width: 176px;
+  white-space: nowrap;
+}
+
+.leaderboard-champion-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.leaderboard-champion-logo {
+  width: 30px;
+  height: 30px;
+  max-width: 30px;
+  max-height: 30px;
+  flex: 0 0 30px;
+  display: block;
+  object-fit: contain;
+}
+
+.leaderboard-champion-pick span {
+  max-width: 175px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .leaderboard-rank {

@@ -571,7 +571,11 @@ class PublicLeaderboardTests(unittest.TestCase):
     def setUp(self):
         self.predictions = FakeTable(
             {
-                "user-123": {"profileKey": "user-123", "testScore": 25},
+                "user-123": {
+                    "profileKey": "user-123",
+                    "testScore": 25,
+                    "picks": {"superBowl": "Detroit Lions"},
+                },
                 "user-456": {"profileKey": "user-456", "testScore": 10},
                 "user-without-profile": {
                     "profileKey": "user-without-profile",
@@ -633,6 +637,7 @@ class PublicLeaderboardTests(unittest.TestCase):
             ["Jake", "Sam"],
         )
         self.assertEqual([entry["rank"] for entry in payload["entries"]], [1, 2])
+        self.assertEqual(payload["entries"][0]["superBowl"], "Detroit Lions")
         self.assertNotIn("profileKey", payload["entries"][0])
         self.assertNotIn("picks", payload["entries"][0])
 

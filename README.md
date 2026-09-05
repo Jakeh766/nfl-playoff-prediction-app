@@ -51,11 +51,11 @@ duplicate another account's name. New and existing accounts are prompted for a
 leaderboard name the first time they select **Save prediction**. Deleting an
 account releases its name for someone else to use.
 
-The public leaderboard returns leaderboard name, playoff-field and seeding
-points, playoff-round points, total points, and rank. Each leaderboard name
-links to a read-only view of that player's saved bracket. Public bracket views
-do not expose email addresses, Cognito identifiers, profile keys, or editing
-controls.
+The public leaderboard returns leaderboard name, Super Bowl pick, playoff-field
+and seeding points, playoff-round points, total points, and rank. Each
+leaderboard name links to a read-only view of that player's saved bracket.
+Public bracket views do not expose email addresses, Cognito identifiers,
+profile keys, or editing controls.
 
 Signed-in users can create or join multiple private groups using a unique group
 name and shared password. Group passwords are salted and hashed with PBKDF2

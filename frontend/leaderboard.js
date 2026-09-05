@@ -329,6 +329,33 @@ function formatLeaderboardScore(value, decimals = 0) {
   return decimals ? number.toFixed(decimals) : String(value);
 }
 
+function leaderboardChampion(entry) {
+  return entry.superBowl || entry.bracket?.picks?.superBowl || "";
+}
+
+function createLeaderboardChampionCell(entry) {
+  const cell = document.createElement("td");
+  cell.className = "leaderboard-champion";
+  const champion = leaderboardChampion(entry);
+  if (!champion) {
+    cell.textContent = "—";
+    cell.setAttribute("aria-label", "No Super Bowl pick");
+    return cell;
+  }
+
+  const pick = document.createElement("div");
+  pick.className = "leaderboard-champion-pick";
+  const logo = createTeamLogo(champion, "leaderboard-champion-logo");
+  logo.alt = "";
+  logo.setAttribute("aria-hidden", "true");
+  const name = document.createElement("span");
+  name.textContent = champion;
+  pick.append(logo, name);
+  cell.appendChild(pick);
+  cell.setAttribute("aria-label", `Super Bowl pick: ${champion}`);
+  return cell;
+}
+
 function renderLeaderboardRows(body, entries) {
   leaderboardEntriesByBody.set(body, entries);
   bindLeaderboardSortControls(body);
@@ -360,6 +387,7 @@ function renderLeaderboardRows(body, entries) {
     playerButton.addEventListener("click", () => openPublicBracket(entry));
     player.appendChild(playerButton);
 
+    const champion = createLeaderboardChampionCell(entry);
     const regularSeason = document.createElement("td");
     regularSeason.textContent = formatLeaderboardScore(entry.regularSeason);
     const playoffs = document.createElement("td");
@@ -381,7 +409,7 @@ function renderLeaderboardRows(body, entries) {
       leaderboardScoreValue(entry, "vegas", "total"),
       2,
     );
-    row.append(rank, player, regularSeason, playoffs, total, bonus, upsetTotal);
+    row.append(rank, player, champion, regularSeason, playoffs, total, bonus, upsetTotal);
     body.appendChild(row);
   });
 }
