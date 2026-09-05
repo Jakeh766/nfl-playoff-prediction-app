@@ -40,6 +40,10 @@ locals {
       source       = "${var.frontend_dir}/bootstrap.js"
       content_type = "application/javascript; charset=utf-8"
     }
+    "monitoring.js" = {
+      source       = "${var.frontend_dir}/monitoring.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "styles.css" = {
       source       = "${var.frontend_dir}/styles.css"
       content_type = "text/css; charset=utf-8"
@@ -289,6 +293,14 @@ resource "aws_apigatewayv2_route" "prediction_get" {
 resource "aws_apigatewayv2_route" "prediction_window" {
   api_id    = aws_apigatewayv2_api.api.id
   route_key = "GET /api/prediction-window"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "analytics" {
+  count = var.environment == "dev" ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.api.id
+  route_key = "POST /api/analytics"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 

@@ -139,6 +139,38 @@ These are DynamoDB-only demo participants rather than Cognito login accounts.
 They exist to populate global and group standings without requiring disposable
 email inboxes or verification codes. Production is never seeded.
 
+## Development site analytics
+
+The deployed dev site records privacy-conscious, first-party analytics in the
+existing backend Lambda log group. It uses random browser and tab-session IDs,
+does not send email addresses, IP addresses, query strings, or referrers, and
+honors the browser's Do Not Track and Global Privacy Control settings.
+Monitoring is disabled in local previews and production.
+
+In CloudWatch Logs Insights, select
+`/aws/lambda/nfl-playoff-predictor-dev-backend` and use this query for daily
+traffic:
+
+```text
+fields @timestamp, event, visitorId, sessionId
+| filter type = "site_analytics" and event = "page_view"
+| stats count(*) as pageViews, count_distinct(sessionId) as sessions,
+    count_distinct(visitorId) as approximateUniqueVisitors by bin(1d) as day
+| sort day desc
+```
+
+Use this query for page popularity and conversion events:
+
+```text
+fields event, page, sessionId
+| filter type = "site_analytics"
+| stats count(*) as events, count_distinct(sessionId) as sessions by event, page
+| sort events desc
+```
+
+The tracked conversion events are account creation, sign-in, prediction save,
+group creation, password-based group join, and invite-based group join.
+
 ## Repository layout
 
 ```text

@@ -691,6 +691,7 @@ async function savePrediction() {
     });
     state.savedAt = saved.savedAt;
     state.savedPrediction = saved;
+    window.siteAnalytics?.track("prediction_saved");
     updateSaveState(true);
     renderSavedPrediction();
     if (elements.leaderboardBody) await loadLeaderboard();
