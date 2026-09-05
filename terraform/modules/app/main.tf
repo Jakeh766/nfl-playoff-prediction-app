@@ -132,7 +132,7 @@ resource "aws_cognito_user_pool" "users" {
     for_each = var.cognito_email_domain == null ? [] : [var.cognito_email_domain]
 
     content {
-      email_sending_account = "COGNITO_DEFAULT"
+      email_sending_account = "DEVELOPER"
       from_email_address    = "Road to the Bowl <no-reply@${email_configuration.value}>"
       source_arn            = local.cognito_email_source_arn
     }
