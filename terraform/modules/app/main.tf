@@ -23,6 +23,10 @@ locals {
       source       = "${var.frontend_dir}/scoring.html"
       content_type = "text/html; charset=utf-8"
     }
+    "scoring.js" = {
+      source       = "${var.frontend_dir}/scoring.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "shell.js" = {
       source       = "${var.frontend_dir}/shell.js"
       content_type = "application/javascript; charset=utf-8"
