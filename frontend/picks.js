@@ -105,7 +105,7 @@ async function loadWinTotals() {
         : data.status === "cached"
           ? "Cached"
           : "Fallback";
-    elements.oddsStatus.textContent = `${PROJECTION_HELP_TEXT} ${sourceLabel} projections from ${data.source}. Teams are ranked within each division.`;
+    elements.oddsStatus.textContent = `${PROJECTION_HELP_TEXT} ${sourceLabel} projections from ${data.source}.`;
     elements.oddsStatus.title = data.message || "";
   } catch (error) {
     const isMismatchedApi = error.message.includes("does not match");
