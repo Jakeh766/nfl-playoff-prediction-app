@@ -12,7 +12,7 @@ import secrets
 import statistics
 import time
 import uuid
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from urllib.parse import unquote
 from urllib.request import Request, urlopen
@@ -268,7 +268,7 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
-                "scores": {mode: {key: value[key] for key in ("regularSeason", "playoffs", "total")}
+                "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total", "upsetBonus")}
                            for mode, value in scores.items()},
                 "regularSeason": score["regularSeason"],
                 "playoffs": score["playoffs"],
@@ -296,7 +296,8 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         "season": results.get("season"),
         "status": results.get("status", "Results unavailable"),
         "updatedAt": results.get("updatedAt"),
-        "maximum": MAX_SCORE,
+        "maximum": MAX_SCORE if scoring_option == "classic" else None,
+        "classicMaximum": MAX_SCORE,
         "entries": entries,
         "scoringOption": scoring_option,
     }
@@ -540,92 +541,80 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
 
 def score_vegas_prediction(prediction: dict, results: dict) -> dict:
-    """Allocate each bracket's two 150-point budgets using frozen market totals.
-
-    Missing/unknown picks retain the largest weight, so blanking a pick cannot
-    increase the value of the remaining picks. Duplicate teams never earn twice
-    in a field or round. Integer hundredths keep the maximum exactly 300.
-    """
+    """Classic credit plus a fixed, nonnegative bonus for each correct pick."""
+    classic = score_prediction(prediction, results)
     with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
         snapshot = json.load(file)
     if snapshot["season"] != results.get("season"):
         raise ValueError("Vegas scoring needs a market snapshot for this season")
     totals = snapshot["totals"]
-    slots = []
+    earned = {key: Decimal(0) for key in SCORING_RULES}
+    available = {key: Decimal(0) for key in SCORING_RULES}
 
-    def add(category, team, correct, settled, base):
-        weight = base * (18 - totals[team]) if team in totals else base * 18
-        slots.append((category, weight, bool(team in totals and correct), bool(settled)))
+    def add(category, team, correct, base):
+        if not team:
+            return
+        if team not in totals:
+            raise ValueError(f"Missing frozen Vegas win total for {team}")
+        rate = (Decimal("18") - Decimal(str(totals[team]))) / Decimal("8.5")
+        bonus = (Decimal(base) * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        available[category] += bonus
+        if correct:
+            earned[category] += bonus
 
+    predicted_seeds = prediction.get("seeds", {})
     actual_seeds = results.get("seeds", {})
-    divisions = results.get("divisionWinners", {})
-    winners = results.get("roundWinners", {})
+    predicted_field = {team for conference in ("AFC", "NFC")
+                       for team in predicted_seeds.get(conference, []) if team}
+    actual_field = {team for conference in ("AFC", "NFC")
+                    for team in actual_seeds.get(conference, []) if team}
+    for team in actual_field:
+        add("playoffField", team, team in predicted_field, 5)
     for conference in ("AFC", "NFC"):
-        seeds = prediction.get("seeds", {}).get(conference, [])
-        actual = actual_seeds.get(conference, [])
-        seen = set()
-        for index, base in enumerate(EXACT_SEED_POINTS):
-            team = seeds[index] if index < len(seeds) else ""
-            add("playoffField", team, team in actual and team not in seen,
-                team in actual or len([t for t in actual if t]) == 7, 5)
-            add("exactSeeds", team, index < len(actual) and team == actual[index],
-                index < len(actual) and actual[index], base)
-            seen.add(team)
+        seeds = predicted_seeds.get(conference, [])
+        for index, team in enumerate(actual_seeds.get(conference, [])[:7]):
+            add("exactSeeds", team, index < len(seeds) and seeds[index] == team,
+                EXACT_SEED_POINTS[index])
         for division in ("North", "South", "East", "West"):
-            team = prediction.get("divisionWinners", {}).get(conference, {}).get(division, "")
-            actual_team = divisions.get(conference, {}).get(division)
-            add("divisionWinners", team, team == actual_team, actual_team, 5)
+            team = results.get("divisionWinners", {}).get(conference, {}).get(division)
+            selected = prediction.get("divisionWinners", {}).get(conference, {}).get(division)
+            add("divisionWinners", team, selected == team, 5)
 
-    regular_count = len(slots)
-    for category, games, base, count in (
-        ("wildCard", ("wc-2-7", "wc-3-6", "wc-4-5"), 5, 6),
-        ("divisional", ("div-1", "div-2"), 10, 4),
-        ("conferenceChampions", ("conf",), 20, 2),
+    picks = prediction.get("picks", {})
+    winners = results.get("roundWinners", {})
+    for category, games, base in (
+        ("wildCard", ("wc-2-7", "wc-3-6", "wc-4-5"), 5),
+        ("divisional", ("div-1", "div-2"), 10),
     ):
-        actual = winners.get(category, {} if category == "conferenceChampions" else [])
-        seen = set()
-        for conference in ("AFC", "NFC"):
-            for game in games:
-                team = prediction.get("picks", {}).get(conference, {}).get(game, "")
-                correct = (team == actual.get(conference) if isinstance(actual, dict)
-                           else team in actual)
-                settled = (bool(actual.get(conference)) if isinstance(actual, dict)
-                           else correct or len([t for t in actual if t]) == count)
-                add(category, team, correct and team not in seen, settled, base)
-                seen.add(team)
-    champion = winners.get("superBowlChampion")
-    add("superBowlChampion", prediction.get("picks", {}).get("superBowl", ""),
-        prediction.get("picks", {}).get("superBowl") == champion, champion, 40)
+        selected = {picks.get(conference, {}).get(game)
+                    for conference in ("AFC", "NFC") for game in games}
+        for team in set(winners.get(category, [])):
+            add(category, team, team in selected, base)
+    for conference in ("AFC", "NFC"):
+        team = winners.get("conferenceChampions", {}).get(conference)
+        add("conferenceChampions", team, picks.get(conference, {}).get("conf") == team, 20)
+    team = winners.get("superBowlChampion")
+    add("superBowlChampion", team, picks.get("superBowl") == team, 40)
 
-    breakdown = {key: {"label": rule["label"], "hits": 0, "settled": 0,
-                       "points": 0, "possible": 0, "maximum": 0}
-                 for key, rule in SCORING_RULES.items()}
-    phase_points = []
-    for phase in (slots[:regular_count], slots[regular_count:]):
-        total_weight = sum(slot[1] for slot in phase)
-        raw = [Decimal(str(slot[1])) * 15000 / Decimal(str(total_weight)) for slot in phase]
-        allocations = [int(value) for value in raw]
-        order = sorted(range(len(raw)), key=lambda i: raw[i] - allocations[i], reverse=True)
-        for index in order[:15000 - sum(allocations)]:
-            allocations[index] += 1
-        phase_points.append(sum(value for value, slot in zip(allocations, phase) if slot[2]))
-        for (category, _, correct, settled), value in zip(phase, allocations):
-            item = breakdown[category]
-            item["hits"] += int(correct)
-            item["settled"] += int(settled)
-            item["points"] += value if correct else 0
-            item["possible"] += value if settled else 0
-            item["maximum"] += value
-    for item in breakdown.values():
-        for key in ("points", "possible", "maximum"):
-            item[key] = item[key] / 100
-    return {"season": results.get("season"), "status": results.get("status"),
-            "updatedAt": results.get("updatedAt"), "scoringOption": "vegas",
-            "oddsSource": snapshot["source"], "breakdown": breakdown,
-            "regularSeason": phase_points[0] / 100, "playoffs": phase_points[1] / 100,
-            "total": sum(phase_points) / 100,
-            "possible": round(sum(item["possible"] for item in breakdown.values()), 2),
-            "maximum": MAX_SCORE}
+    breakdown = {}
+    for category, item in classic["breakdown"].items():
+        breakdown[category] = {
+            **item, "classicPoints": item["points"], "upsetBonus": float(earned[category]),
+            "points": float(Decimal(item["points"]) + earned[category]),
+            "possible": float(Decimal(item["possible"]) + available[category]),
+            "classicMaximum": item["maximum"], "maximum": None,
+        }
+    regular_bonus = sum(earned[key] for key in ("playoffField", "divisionWinners", "exactSeeds"))
+    bonus = sum(earned.values())
+    return {
+        **classic, "scoringOption": "vegas", "oddsSource": snapshot["source"],
+        "breakdown": breakdown, "classicScore": classic["total"], "upsetBonus": float(bonus),
+        "regularSeason": float(Decimal(classic["regularSeason"]) + regular_bonus),
+        "playoffs": float(Decimal(classic["playoffs"]) + bonus - regular_bonus),
+        "total": float(Decimal(classic["total"]) + bonus),
+        "possible": float(Decimal(classic["possible"]) + sum(available.values())),
+        "classicMaximum": MAX_SCORE, "maximum": None,
+    }
 
 
 def fetch_live_totals() -> dict[str, float]:

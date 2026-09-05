@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css?v=27" />
-    <script src="/shell.js?v=3" defer></script>
+    <script src="/shell.js?v=4" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=22" defer></script>
@@ -21,12 +21,12 @@
     <main>
       <section class="page-intro compact-page-intro">
         <p class="eyebrow">FOLLOW THE SEASON</p>
-        <h1>300 points.<br />Every call counts.</h1>
+        <h1>Accuracy.<br />Extra credit.</h1>
         <p>Build the right playoff field, nail the seeds, and predict which teams keep advancing.</p>
       </section>
       <section class="scoring-section page-section" id="scoring-section">
         <div class="section-heading compact">
-          <div><h2>Choose your scoring.</h2><p>A perfect preseason prediction is worth 300 points in either option.</p></div>
+          <div><h2>Choose your scoring.</h2><p>Classic scores accuracy out of 300. Vegas Upset adds a fixed bonus for bold, correct picks.</p></div>
           <div class="leaderboard-view-tabs" role="tablist" aria-label="Scoring option">
             <button class="leaderboard-view-tab active" id="classic-scoring-tab" type="button" role="tab" aria-selected="true" aria-controls="classic-scoring-panel">Classic</button>
             <button class="leaderboard-view-tab" id="vegas-scoring-tab" type="button" role="tab" aria-selected="false" aria-controls="vegas-scoring-panel" tabindex="-1">Vegas Upset</button>
@@ -60,35 +60,35 @@
         <div class="hidden" id="vegas-scoring-panel" role="tabpanel" aria-labelledby="vegas-scoring-tab" tabindex="0" hidden>
           <div class="scoring-layout">
             <div class="scoring-table-shell">
-              <table class="scoring-table" aria-label="Vegas Upset scoring weights" aria-describedby="vegas-weight-explanation">
-                <thead><tr><th scope="col">Prediction</th><th scope="col">Weight per pick</th><th scope="col">Phase budget</th></tr></thead>
+              <table class="scoring-table" aria-label="Vegas Upset scoring bonuses" aria-describedby="vegas-weight-explanation">
+                <thead><tr><th scope="col">Correct prediction</th><th scope="col">Classic points</th><th scope="col">Upset Bonus</th></tr></thead>
                 <tbody>
-                  <tr><td>Correct playoff team</td><td>5 × multiplier</td><td rowspan="3">150<br />Field + seeding</td></tr>
-                  <tr><td>Correct division winner</td><td>5 × multiplier</td></tr>
-                  <tr><td>Exact playoff seed</td><td><ul class="seed-point-tiers" aria-label="Exact playoff seed weights"><li><span>#1 seed</span><strong>5 × multiplier</strong></li><li><span>#2–#4 seeds</span><strong>3 × multiplier</strong></li><li><span>#5–#7 seeds</span><strong>2 × multiplier</strong></li></ul></td></tr>
+                  <tr><td>Playoff team</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Division winner</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Exact #1 seed</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Exact #2–#4 seed</td><td>3</td><td>3 × bonus rate</td></tr>
+                  <tr><td>Exact #5–#7 seed</td><td>2</td><td>2 × bonus rate</td></tr>
+                  <tr><td>Wild Card winner</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Divisional winner</td><td>10</td><td>10 × bonus rate</td></tr>
+                  <tr><td>Conference champion</td><td>20</td><td>20 × bonus rate</td></tr>
+                  <tr><td>Super Bowl champion</td><td>40</td><td>40 × bonus rate</td></tr>
                 </tbody>
-                <tbody>
-                  <tr><td>Correct Wild Card winner</td><td>5 × multiplier</td><td rowspan="4">150<br />Playoffs</td></tr>
-                  <tr><td>Correct Divisional winner</td><td>10 × multiplier</td></tr>
-                  <tr><td>Correct conference champion</td><td>20 × multiplier</td></tr>
-                  <tr><td>Correct Super Bowl champion</td><td>40 × multiplier</td></tr>
-                </tbody>
-                <tfoot><tr><th scope="row" colspan="2">Perfect score</th><td>300</td></tr></tfoot>
+                <tfoot><tr><th scope="row">Vegas total</th><td colspan="2">Classic + Upset Bonus</td></tr></tfoot>
               </table>
             </div>
             <aside class="scoring-note">
-              <h3>More credit for surprises.</h3>
-              <p id="vegas-weight-explanation">Multiplier = 18 − the team’s preseason Vegas win total. Lower-projected teams carry more weight in both seeding and playoffs.</p>
-              <p>A team projected for 6.5 wins gets an 11.5 multiplier. A team projected for 11.5 wins gets a 6.5 multiplier.</p>
-              <p>Points per pick = 150 × its weight ÷ the total weight of all your picks in that phase. The table shows weights, not fixed point awards. Field, division and seed picks share 150 points; playoff picks share another 150.</p>
-              <p>Points are rounded to hundredths, with leftover hundredths assigned to the largest remainders. Missing picks reserve points and earn zero. A perfect bracket earns exactly 300.</p>
-              <p>Weights use the app’s fixed 2026 FanDuel/DraftKings win-total snapshot from <a href="https://www.vegasinsider.com/nfl/odds/win-totals/">VegasInsider</a>. Live line changes never change these weights. Your allocation depends on your full bracket and freezes when picks lock.</p>
-              <p>Later-round credit follows the team advancing, even if you missed its matchup.</p>
+              <h3>Same pick. Same points.</h3>
+              <p id="vegas-weight-explanation">Bonus rate = (18 − preseason Vegas win total) ÷ 8.5. Multiply this rate by the pick’s Classic points to get its fixed Upset Bonus.</p>
+              <p>Every correct pick earns its Classic points plus a bonus. Lower Vegas win totals earn larger bonuses; favorites earn smaller bonuses.</p>
+              <p>Minnesota at 7.5 wins: a correct Wild Card pick earns 5 Classic + 6.18 bonus = <strong>11.18 points</strong>. Everyone who makes that pick earns exactly the same amount, regardless of their other picks.</p>
+              <p>Classic remains out of 300. Vegas total is Classic + Upset Bonus and can exceed 300. For example, 247 Classic + 31.40 bonus = 278.40 Vegas points. No bracket normalization or shared point budgets.</p>
+              <p>Each pick’s bonus is rounded to the nearest hundredth before adding it to the score. Incorrect or missing picks earn zero. Later-round credit still follows the team advancing, even if you missed its matchup.</p>
+              <p>Values use the app’s fixed 2026 FanDuel/DraftKings win-total snapshot from <a href="https://www.vegasinsider.com/nfl/odds/win-totals/">VegasInsider</a>. They are set before the season; live odds and other brackets never change a pick’s value.</p>
             </aside>
           </div>
         </div>
         <p>Both totals appear on the leaderboards. Choose either public ranking, or set your group’s scoring option when you create it. Existing groups use Classic.</p>
-        <div class="scoring-cta"><div><p class="eyebrow">READY TO CALL IT?</p><h2>Put all 300 points on the line.</h2></div><a class="button button-primary button-large" href="/picks" data-clean-route="/picks">Make My Picks</a></div>
+        <div class="scoring-cta"><div><p class="eyebrow">READY TO CALL IT?</p><h2>Make every pick count.</h2></div><a class="button button-primary button-large" href="/picks" data-clean-route="/picks">Make My Picks</a></div>
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -9,9 +9,9 @@ test('public ranking switches scores, preserves both totals, and shares tied ran
   const entry = (name, classic, vegas) => ({ leaderboardName: name,
     total: classic, regularSeason: classic, playoffs: 0,
     scores: { classic: { total: classic, regularSeason: classic, playoffs: 0 },
-      vegas: { total: vegas, regularSeason: vegas, playoffs: 0 } } });
+      vegas: { total: vegas, regularSeason: vegas, playoffs: 0, upsetBonus: vegas - classic } } });
   const context = vm.createContext({ document: { querySelector: () => control },
-    state: { leaderboard: { entries: [entry('A', 20, 10), entry('B', 10, 30), entry('C', 5, 30)] } },
+    state: { leaderboard: { entries: [entry('A', 20, 20), entry('B', 10, 30), entry('C', 5, 30)] } },
     elements: { leaderboardTableShell: node(), emptyLeaderboard: node(),
       leaderboardBody: node(), leaderboardStatus: node() } });
   vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), context);
@@ -22,6 +22,7 @@ test('public ranking switches scores, preserves both totals, and shares tied ran
   assert.equal(context.rendered[0].leaderboardName, 'B');
   assert.equal(context.rendered[0].total, 30);
   assert.equal(context.rendered[0].scores.classic.total, 10);
+  assert.equal(context.rendered[0].scores.vegas.upsetBonus, 20);
   assert.equal(context.rendered[1].rank, 1);
   assert.equal(context.rendered[2].rank, 3);
 });

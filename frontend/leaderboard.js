@@ -133,7 +133,7 @@ function renderPublicBracket(bracket) {
       }).format(new Date(bracket.savedAt))}`
     : "";
   elements.publicBracketStatus.textContent =
-    `Classic: ${score.total ?? 0} / 300 · Vegas Upset: ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} / 300${savedAt}`;
+    `Classic: ${score.total ?? 0} / 300 + ${bracket.vegasScore?.upsetBonus?.toFixed(2) ?? "—"} upset bonus = ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} Vegas Upset points${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
@@ -222,7 +222,9 @@ function renderLeaderboardRows(body, entries) {
     vegas.className = "leaderboard-total";
     vegas.textContent = entry.scores?.vegas?.total?.toFixed(2) ?? "—";
     total.textContent = entry.scores?.classic?.total ?? entry.total;
-    row.append(rank, player, regularSeason, playoffs, total, vegas);
+    const bonus = document.createElement("td");
+    bonus.textContent = entry.scores?.vegas?.upsetBonus == null ? "—" : `+${entry.scores.vegas.upsetBonus.toFixed(2)}`;
+    row.append(rank, player, regularSeason, playoffs, total, bonus, vegas);
     body.appendChild(row);
   });
 }
@@ -314,8 +316,8 @@ async function loadLeaderboard() {
       state.leaderboard.entries.forEach((entry, index) => {
         entry.bracket = createPreviewPublicBracket(entry.leaderboardName, index);
         entry.scores = { classic: { regularSeason: 0, playoffs: 0, total: 0 },
-          vegas: { regularSeason: 0, playoffs: 0, total: 0 } };
-        entry.bracket.vegasScore = { total: 0 };
+          vegas: { regularSeason: 0, playoffs: 0, total: 0, upsetBonus: 0 } };
+        entry.bracket.vegasScore = { total: 0, upsetBonus: 0 };
       });
     } else {
       state.leaderboard = null;

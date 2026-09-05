@@ -170,9 +170,9 @@ if (dialogs) {
             <label for="group-scoring">Scoring option</label>
             <select id="group-scoring" name="scoring-option" aria-describedby="group-scoring-hint">
               <option value="classic">Classic · 300 points</option>
-              <option value="vegas">Vegas Upset · 300 points</option>
+              <option value="vegas">Vegas Upset · Classic + bonus</option>
             </select>
-            <p class="input-hint" id="group-scoring-hint">Vegas Upset gives more weight to lower Vegas win totals in seeding and playoffs. This choice sets your group’s ranking and cannot be changed.</p>
+            <p class="input-hint" id="group-scoring-hint">Vegas Upset adds a fixed Vegas-based bonus for every correct pick in seeding and playoffs. Lower-projected teams earn bigger bonuses. Totals can exceed 300. This choice sets your group’s ranking and cannot be changed.</p>
           </div>
           <label for="group-password">Group password</label>
           <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="current-password" required />
