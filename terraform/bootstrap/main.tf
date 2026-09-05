@@ -12,6 +12,7 @@ locals {
   dev_prefix          = "${var.project_name}-dev"
   dev_frontend_bucket = "${local.dev_prefix}-frontend-${local.account_id}"
   dev_lambda_role     = "${local.dev_prefix}-lambda-role"
+  dev_dashboard_name  = "${local.dev_prefix}-analytics"
 
   prod_frontend_bucket = "${var.project_name}-frontend-${local.account_id}"
   prod_lambda_role     = "${var.project_name}-lambda-role"
@@ -310,6 +311,22 @@ data "aws_iam_policy_document" "github_dev_deploy" {
       "arn:aws:cloudfront::${local.account_id}:origin-access-control/${var.dev_cloudfront_oac_id}",
       "arn:aws:cloudfront::${local.account_id}:cache-policy/${var.dev_cloudfront_cache_policy_id}",
     ]
+  }
+
+  statement {
+    sid = "ManageDevAnalyticsDashboard"
+    actions = [
+      "cloudwatch:DeleteDashboards",
+      "cloudwatch:GetDashboard",
+      "cloudwatch:PutDashboard",
+    ]
+    resources = ["arn:aws:cloudwatch::${local.account_id}:dashboard/${local.dev_dashboard_name}"]
+  }
+
+  statement {
+    sid       = "ListCloudWatchDashboards"
+    actions   = ["cloudwatch:ListDashboards"]
+    resources = ["*"]
   }
 
   statement {

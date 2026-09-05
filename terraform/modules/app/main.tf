@@ -4,6 +4,7 @@ locals {
   resource_prefix = coalesce(var.resource_prefix, "${var.project_name}-${var.environment}")
 
   cognito_email_source_arn = var.cognito_email_domain == null ? null : "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_email_domain}"
+  analytics_log_group      = "/aws/lambda/${local.resource_prefix}-backend"
 
   frontend_files = {
     "index.html" = {
@@ -425,6 +426,170 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = var.api_throttling_burst_limit
     throttling_rate_limit  = var.api_throttling_rate_limit
   }
+}
+
+resource "aws_cloudwatch_dashboard" "analytics" {
+  count = var.environment == "dev" ? 1 : 0
+
+  dashboard_name = "${local.resource_prefix}-analytics"
+  dashboard_body = jsonencode({
+    start          = "-P7D"
+    periodOverride = "inherit"
+    widgets = [
+      {
+        type   = "text"
+        x      = 0
+        y      = 0
+        width  = 24
+        height = 2
+        properties = {
+          markdown = "# Road to the Bowl — Dev Analytics\nAnonymous product analytics for the development site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 2
+        width  = 6
+        height = 4
+        properties = {
+          region = var.aws_region
+          title  = "Unique visitors"
+          view   = "table"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count_distinct(visitorId) as uniqueVisitors"
+        }
+      },
+      {
+        type   = "log"
+        x      = 6
+        y      = 2
+        width  = 6
+        height = 4
+        properties = {
+          region = var.aws_region
+          title  = "Sessions"
+          view   = "table"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count_distinct(sessionId) as sessions"
+        }
+      },
+      {
+        type   = "log"
+        x      = 12
+        y      = 2
+        width  = 6
+        height = 4
+        properties = {
+          region = var.aws_region
+          title  = "Page views"
+          view   = "table"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews"
+        }
+      },
+      {
+        type   = "log"
+        x      = 18
+        y      = 2
+        width  = 6
+        height = 4
+        properties = {
+          region = var.aws_region
+          title  = "Predictions saved"
+          view   = "table"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"prediction_saved\"\n| stats count(*) as predictionsSaved"
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 6
+        width  = 16
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Traffic over time"
+          view   = "timeSeries"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews, count_distinct(sessionId) as sessions by bin(1h)"
+        }
+      },
+      {
+        type   = "log"
+        x      = 16
+        y      = 6
+        width  = 8
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Popular pages"
+          view   = "pie"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as views by page\n| sort views desc"
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 13
+        width  = 12
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Visitor conversion"
+          view   = "bar"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"account_created\", \"prediction_saved\"]\n| stats count_distinct(visitorId) as visitors by event\n| sort visitors desc"
+        }
+      },
+      {
+        type   = "log"
+        x      = 12
+        y      = 13
+        width  = 12
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Engagement events"
+          view   = "bar"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\"\n| stats count(*) as events by event\n| sort events desc"
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 20
+        width  = 12
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Recent sessions"
+          view   = "table"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews, count_distinct(page) as pages, min(@timestamp) as started, max(@timestamp) as lastSeen by sessionId\n| sort lastSeen desc\n| limit 20"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 20
+        width  = 12
+        height = 7
+        properties = {
+          region  = var.aws_region
+          title   = "Backend health"
+          view    = "timeSeries"
+          period  = 300
+          stat    = "Sum"
+          stacked = false
+          metrics = [
+            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.backend.function_name, { label = "Invocations", color = "2F855A" }],
+            [".", "Errors", ".", ".", { label = "Errors", color = "C53030" }],
+          ]
+          yAxis = {
+            left = {
+              min       = 0
+              showUnits = false
+            }
+          }
+        }
+      },
+    ]
+  })
 }
 
 resource "aws_lambda_permission" "api_gateway" {
