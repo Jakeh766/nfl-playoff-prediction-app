@@ -7,8 +7,8 @@ if (header) {
   header.className = "site-header";
   header.innerHTML = `
     <a class="brand" href="/" aria-label="Predict Playoffs home">
-      <span class="brand-mark" aria-hidden="true">◆</span>
-      <span>PREDICT PLAYOFFS</span>
+      <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
+      <span class="brand-name">PREDICT PLAYOFFS</span>
     </a>
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
@@ -223,7 +223,16 @@ if (dialogs) {
 
 const footer = document.querySelector("#site-footer");
 if (footer) {
-  footer.innerHTML = `<span>PREDICT PLAYOFFS</span><p>Your account details stay private.</p>`;
+  footer.innerHTML = `
+    <div class="footer-brand">
+      <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
+      <div class="footer-wordmark">
+        <span>PREDICT PLAYOFFS</span>
+        <small>CALL IT BEFORE KICKOFF</small>
+      </div>
+    </div>
+    <p>Your account details stay private. Not affiliated with the NFL.</p>
+  `;
 }
 
 if (localPreview) {

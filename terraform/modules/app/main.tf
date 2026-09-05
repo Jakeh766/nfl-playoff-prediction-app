@@ -55,6 +55,10 @@ locals {
       source       = "${var.frontend_dir}/styles.css"
       content_type = "text/css; charset=utf-8"
     }
+    "assets/predict-playoffs-mark.svg" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
+      content_type = "image/svg+xml"
+    }
   }
 }
 

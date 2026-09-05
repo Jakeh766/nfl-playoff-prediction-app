@@ -88,6 +88,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 11px;
+  min-width: 0;
   color: var(--ink);
   font-family: var(--display);
   font-weight: 700;
@@ -96,19 +97,10 @@ button {
 }
 
 .brand-mark {
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  color: white;
-  background: var(--red);
-  border-radius: 5px;
-  font-size: 12px;
-  transform: rotate(45deg);
-}
-
-.brand-mark::first-letter {
-  transform: rotate(-45deg);
+  width: 34px;
+  height: 34px;
+  display: block;
+  object-fit: contain;
 }
 
 .season-badge {
@@ -2531,15 +2523,43 @@ footer {
   font-size: 11px;
 }
 
-footer span {
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.footer-mark {
+  width: 34px;
+  height: 34px;
+  display: block;
+  object-fit: contain;
+}
+
+.footer-wordmark {
+  display: grid;
+  gap: 3px;
+}
+
+.footer-wordmark span {
   color: white;
   font-family: var(--display);
   font-size: 14px;
   letter-spacing: 0.1em;
 }
 
+.footer-wordmark small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
 footer p {
   margin: 0;
+  max-width: 390px;
+  line-height: 1.5;
+  text-align: right;
 }
 
 @media (max-width: 1080px) {
@@ -2619,8 +2639,13 @@ footer p {
     font-size: 10px;
   }
 
-  .brand > span:last-child {
+  .brand-name {
     display: none;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
   }
 
   .season-badge {
@@ -2913,6 +2938,10 @@ footer p {
     flex-direction: column;
     justify-content: center;
     gap: 9px;
+  }
+
+  footer p {
+    text-align: center;
   }
 }
 

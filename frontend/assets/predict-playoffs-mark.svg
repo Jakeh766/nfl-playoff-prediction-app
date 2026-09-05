@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Predict Playoffs trophy mark</title>
+  <path fill="#10223a" fill-rule="evenodd" d="M45 28h166v19h-11v32c0 44-22 81-58 100v24h20c14 0 25 11 25 25v6H69v-6c0-14 11-25 25-25h20v-24C78 160 56 123 56 79V47H45V28Zm31 31v20c0 40 20 70 52 86 32-16 52-46 52-86V59H76Z"/>
+  <path fill="none" stroke="#10223a" stroke-linecap="round" stroke-linejoin="round" stroke-width="14" d="M62 55H29v30c0 33 16 61 46 75M194 55h33v30c0 33-16 61-46 75"/>
+  <path fill="#e33b3f" d="m128 67 11 25 27 2-21 18 7 27-24-15-24 15 7-27-21-18 27-2 11-25Z"/>
+</svg>
