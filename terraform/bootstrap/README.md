@@ -1,18 +1,19 @@
 # Terraform bootstrap
 
-This root creates the resources required before automated dev deployments can
-use Terraform:
+This root creates the resources required before automated dev and production
+deployments can use Terraform:
 
 - a private, encrypted, versioned S3 state bucket with native lock-file support;
 - the GitHub Actions OIDC provider for this AWS account;
-- a deployment role trusted only by this repository's `dev` environment;
-- an inline policy scoped to the existing dev stack and dev state object.
+- deployment roles separately trusted by this repository's `dev` and `prod`
+  environments;
+- inline policies scoped to each environment's stack and state object.
 
-The deployment policy also permits Terraform to create a dev-tagged Cognito
-user pool and manage its app client. It retains delete and describe access for
-the retired managed-login resources until existing environments have removed
-them. Cognito inventory access is read-only and creation is
-restricted by the `Project` and `Environment` request tags.
+The deployment policies also permit Terraform to create environment-tagged
+Cognito user pools and manage their app clients. They retain delete and
+describe access for the retired managed-login resources until existing
+environments have removed them. Cognito inventory access is read-only and
+creation is restricted by the `Project` and `Environment` request tags.
 
 The initial apply used local state because the S3 backend did not exist yet.
 The bootstrap state now lives at

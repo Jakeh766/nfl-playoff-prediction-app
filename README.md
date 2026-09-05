@@ -87,9 +87,11 @@ DynamoDB.
 
 The `dev` branch deploys automatically through GitHub Actions. Make changes
 locally, run the relevant fast checks, push to `dev`, and perform functional or
-integration testing in the deployed dev environment. This keeps Cognito, API
-Gateway, Lambda, and DynamoDB behavior identical to the architecture being
-tested.
+integration testing in the deployed dev environment. After validation, merge
+`dev` into `prod`. A successful push to `prod` runs the same checks, applies the
+production Terraform stack, and creates a GitHub release with generated notes
+for the deployed changes. This keeps Cognito, API Gateway, Lambda, and DynamoDB
+behavior identical to the architecture being tested.
 
 Run all local checks from the repository root:
 

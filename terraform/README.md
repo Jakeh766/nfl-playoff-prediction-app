@@ -45,27 +45,36 @@ resource names are intentionally preserved to prevent replacement of the live
 stack during this refactor. The `moved` blocks in `envs/prod/main.tf` migrate
 the existing state addresses into the shared module without recreating them.
 
-The states are separate:
+The states are separate objects in the shared state bucket:
 
 - Bootstrap: S3 object `nfl-playoff-predictor/bootstrap/terraform.tfstate`
 - Dev: S3 object `nfl-playoff-predictor/dev/terraform.tfstate`
-- Prod: `terraform/envs/prod/terraform.tfstate`
+- Prod: S3 object `nfl-playoff-predictor/prod/terraform.tfstate`
 
 Never copy one environment's state into the other.
 
-## Automatic dev deployment
+## Automatic deployments
 
 Every push to the `dev` branch runs `.github/workflows/deploy-dev.yml`. The
 workflow checks the JavaScript and Python syntax, checks and validates the
 Terraform configuration, and then plans and applies the dev environment. It
 uses GitHub OIDC to obtain temporary AWS credentials.
 
-The one-time AWS prerequisites are managed by `terraform/bootstrap`. It created:
+Every push to the `prod` branch runs `.github/workflows/deploy-prod.yml`. The
+workflow runs the same checks, verifies that the remote production state
+contains the existing live resources, and then plans and applies production.
+After a successful apply it creates a `prod-<run>-<commit>` GitHub release with
+GitHub-generated release notes. The release is not created when tests or the
+deployment fail.
+
+The one-time AWS prerequisites are managed by `terraform/bootstrap`:
 
 - state bucket `nfl-playoff-predictor-tfstate-410533922944`;
 - GitHub OIDC provider `token.actions.githubusercontent.com`;
 - role `nfl-playoff-predictor-dev-github-actions`, trusted only by the
-  `Jakeh766/nfl-playoff-prediction-app` repository's `dev` environment.
+  `Jakeh766/nfl-playoff-prediction-app` repository's `dev` environment;
+- role `nfl-playoff-predictor-prod-github-actions`, trusted only by the
+  repository's `prod` environment.
 
 The existing dev state has been migrated into the state bucket. The workflow
 also verifies that remote state is nonempty before it plans or applies.
@@ -75,6 +84,38 @@ The GitHub environment named `dev` must define these environment variables:
 - `AWS_ROLE_ARN` =
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-dev-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
+
+The GitHub environment named `prod` must define:
+
+- `AWS_ROLE_ARN` =
+  `arn:aws:iam::410533922944:role/nfl-playoff-predictor-prod-github-actions`
+- `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
+
+## One-time production automation setup
+
+Apply the bootstrap root with separately authenticated AWS administrator
+credentials so the production GitHub Actions role exists:
+
+```powershell
+terraform -chdir=terraform/bootstrap init
+terraform -chdir=terraform/bootstrap plan
+terraform -chdir=terraform/bootstrap apply
+```
+
+Then migrate the existing local production state into the shared state bucket.
+Do this from the checkout that contains the existing
+`terraform/envs/prod/terraform.tfstate` file:
+
+```powershell
+terraform -chdir=terraform/envs/prod init -migrate-state -backend-config="bucket=nfl-playoff-predictor-tfstate-410533922944"
+terraform -chdir=terraform/envs/prod state list
+```
+
+Confirm that the state list includes the existing API Gateway, CloudFront,
+DynamoDB, and S3 resources. Finally, create the GitHub `prod` environment with
+the variables above and create the `prod` branch from the current production
+branch. Protect `prod` so changes arrive through reviewed pull requests, then
+merge `dev` into `prod` to deploy.
 
 ## Review and deploy dev
 
@@ -97,14 +138,14 @@ Use the `app_url` output after the apply completes. Dev is a complete cloud
 environment, so it creates its own CloudFront distribution and may take several
 minutes to become available.
 
-## Review and deploy prod
+## Review prod locally
 
-Only deploy prod after testing dev:
+Only review prod after testing dev. The automated workflow applies the saved
+plan after changes reach the `prod` branch:
 
 ```powershell
-terraform -chdir=terraform/envs/prod init
+terraform -chdir=terraform/envs/prod init -backend-config="bucket=nfl-playoff-predictor-tfstate-410533922944"
 terraform -chdir=terraform/envs/prod plan
-terraform -chdir=terraform/envs/prod apply
 ```
 
 The authentication deployment creates a Cognito user pool, browser app client,

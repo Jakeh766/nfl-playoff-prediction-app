@@ -12,9 +12,11 @@ terraform {
     }
   }
 
-  # Keep production state with the production environment root.
-  backend "local" {
-    path = "terraform.tfstate"
+  backend "s3" {
+    key          = "nfl-playoff-predictor/prod/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 

@@ -1,0 +1,161 @@
+name: Test, deploy, and release prod
+
+on:
+  push:
+    branches:
+      - prod
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-environment
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  AWS_REGION: us-east-1
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.7"
+
+      - name: Check frontend JavaScript syntax
+        run: |
+          node --check frontend/app.js
+          node --check frontend/bootstrap.js
+          node --check frontend/leaderboard.js
+          node --check frontend/picks.js
+          node --check frontend/shell.js
+          node --check frontend/auth-config.js
+
+      - name: Check backend Python syntax
+        run: python -m py_compile backend/lambda/app.py
+
+      - name: Test authenticated prediction ownership
+        run: python -m unittest discover -s backend -p "test_*.py"
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive terraform
+
+      - name: Initialize Terraform for validation
+        run: terraform -chdir=terraform/envs/prod init -backend=false
+
+      - name: Validate Terraform
+        run: terraform -chdir=terraform/envs/prod validate
+
+  deploy:
+    name: Deploy prod
+    needs: test
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.7"
+
+      - name: Check deployment configuration
+        shell: bash
+        run: |
+          test -n "$AWS_ROLE_ARN" || { echo "AWS_ROLE_ARN is not configured in the prod environment."; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo "TF_STATE_BUCKET is not configured in the prod environment."; exit 1; }
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Initialize prod Terraform state
+        run: >-
+          terraform -chdir=terraform/envs/prod init
+          -backend-config="bucket=$TF_STATE_BUCKET"
+
+      - name: Verify migrated prod state
+        shell: bash
+        run: |
+          state_resources="$(terraform -chdir=terraform/envs/prod state list)"
+          required_resources=(
+            "module.nfl_app.aws_apigatewayv2_api.api"
+            "module.nfl_app.aws_cloudfront_distribution.app"
+            "module.nfl_app.aws_dynamodb_table.predictions"
+            "module.nfl_app.aws_s3_bucket.frontend"
+          )
+
+          for resource in "${required_resources[@]}"; do
+            if ! grep -Fxq "$resource" <<< "$state_resources"; then
+              echo "Production state is missing $resource. Migrate and verify the existing prod state before deploying."
+              exit 1
+            fi
+          done
+
+      - name: Plan prod deployment
+        run: terraform -chdir=terraform/envs/prod plan -out=tfplan
+
+      - name: Apply prod deployment
+        run: terraform -chdir=terraform/envs/prod apply tfplan
+
+      - name: Publish deployment URLs
+        shell: bash
+        run: |
+          {
+            echo "## Production deployment"
+            echo ""
+            echo "- App: $(terraform -chdir=terraform/envs/prod output -raw app_url)"
+            echo "- API: $(terraform -chdir=terraform/envs/prod output -raw api_url)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Create GitHub release
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          tag="prod-${GITHUB_RUN_NUMBER}-${short_sha}"
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; no duplicate was created."
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Production ${GITHUB_RUN_NUMBER} (${short_sha})" \
+              --generate-notes
+          fi
