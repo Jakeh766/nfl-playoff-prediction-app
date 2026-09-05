@@ -2148,6 +2148,37 @@ body.predictions-locked .predictor .final-actions button {
   align-items: stretch;
 }
 
+#vegas-scoring-panel .scoring-layout {
+  align-items: start;
+}
+
+#vegas-scoring-panel .scoring-table-shell {
+  overflow-x: auto;
+}
+
+#vegas-scoring-panel .scoring-table {
+  min-width: 460px;
+}
+
+#vegas-scoring-panel .scoring-table th:nth-child(2),
+#vegas-scoring-panel .scoring-table td:nth-child(2) {
+  width: 210px;
+}
+
+#vegas-scoring-panel .seed-point-tiers li {
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+#vegas-scoring-panel .seed-point-tiers span {
+  white-space: nowrap;
+}
+
+#vegas-scoring-panel .scoring-note a {
+  color: #b9d8ff;
+  text-underline-offset: 3px;
+}
+
 .scoring-table-shell {
   overflow: hidden;
   background: var(--card);
