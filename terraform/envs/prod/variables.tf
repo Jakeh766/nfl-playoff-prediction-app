@@ -32,3 +32,8 @@ variable "cloudfront_price_class" {
   description = "CloudFront edge-location price class."
   type        = string
 }
+
+variable "site_domain_name" {
+  description = "Apex domain name served by the production CloudFront distribution."
+  type        = string
+}

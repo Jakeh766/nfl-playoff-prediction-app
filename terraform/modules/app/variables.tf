@@ -101,3 +101,15 @@ variable "cloudfront_price_class" {
     error_message = "cloudfront_price_class must be PriceClass_100, PriceClass_200, or PriceClass_All."
   }
 }
+
+variable "cloudfront_aliases" {
+  description = "Custom domain names served by the CloudFront distribution."
+  type        = list(string)
+  default     = []
+}
+
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN for CloudFront aliases. The certificate must be issued in us-east-1."
+  type        = string
+  default     = null
+}

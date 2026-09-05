@@ -1,6 +1,11 @@
 output "app_url" {
   description = "Environment URL for the frontend and proxied API."
-  value       = "https://${aws_cloudfront_distribution.app.domain_name}"
+  value       = "https://${length(var.cloudfront_aliases) > 0 ? var.cloudfront_aliases[0] : aws_cloudfront_distribution.app.domain_name}"
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution hostname used as the DNS target for custom domains."
+  value       = aws_cloudfront_distribution.app.domain_name
 }
 
 output "api_url" {

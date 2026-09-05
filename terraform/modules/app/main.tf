@@ -488,6 +488,7 @@ resource "aws_cloudfront_distribution" "app" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = var.cloudfront_price_class
+  aliases             = var.cloudfront_aliases
 
   origin {
     origin_id                = "frontend-s3"
@@ -534,7 +535,17 @@ resource "aws_cloudfront_distribution" "app" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    cloudfront_default_certificate = var.acm_certificate_arn == null
+    acm_certificate_arn            = var.acm_certificate_arn
+    ssl_support_method             = var.acm_certificate_arn == null ? null : "sni-only"
+    minimum_protocol_version       = var.acm_certificate_arn == null ? "TLSv1" : "TLSv1.2_2021"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = (length(var.cloudfront_aliases) == 0) == (var.acm_certificate_arn == null)
+      error_message = "cloudfront_aliases and acm_certificate_arn must either both be configured or both be omitted."
+    }
   }
 }
 

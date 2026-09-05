@@ -30,6 +30,16 @@ provider "aws" {
   }
 }
 
+resource "aws_acm_certificate" "site" {
+  domain_name               = var.site_domain_name
+  subject_alternative_names = ["www.${var.site_domain_name}"]
+  validation_method         = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 module "nfl_app" {
   source = "../../modules/app"
 
@@ -44,6 +54,8 @@ module "nfl_app" {
   api_throttling_rate_limit  = var.api_throttling_rate_limit
   api_throttling_burst_limit = var.api_throttling_burst_limit
   cloudfront_price_class     = var.cloudfront_price_class
+  cloudfront_aliases         = [var.site_domain_name, "www.${var.site_domain_name}"]
+  acm_certificate_arn        = aws_acm_certificate.site.arn
   frontend_dir               = abspath("${path.root}/../../../frontend")
   lambda_source_dir          = abspath("${path.root}/../../../backend/lambda")
   lambda_zip_path            = abspath("${path.root}/lambda.zip")
@@ -51,6 +63,21 @@ module "nfl_app" {
 
 output "app_url" {
   value = module.nfl_app.app_url
+}
+
+output "cloudfront_domain_name" {
+  value = module.nfl_app.cloudfront_domain_name
+}
+
+output "certificate_validation_records" {
+  description = "DNS CNAME records that must remain in Cloudflare for ACM validation and renewal."
+  value = {
+    for option in aws_acm_certificate.site.domain_validation_options : option.domain_name => {
+      name  = option.resource_record_name
+      type  = option.resource_record_type
+      value = option.resource_record_value
+    }
+  }
 }
 
 output "api_url" {
