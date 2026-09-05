@@ -133,7 +133,7 @@ function renderPublicBracket(bracket) {
       }).format(new Date(bracket.savedAt))}`
     : "";
   elements.publicBracketStatus.textContent =
-    `${score.total ?? 0} / ${score.maximum ?? 300} points${savedAt}`;
+    `Classic: ${score.total ?? 0} / 300 + ${bracket.vegasScore?.upsetBonus?.toFixed(2) ?? "—"} upset bonus = ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} Upset Edge points${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
@@ -184,18 +184,195 @@ async function openPublicBracket(entry) {
   }
 }
 
+const LEADERBOARD_SORT_META = {
+  rank: { label: "Rank", numeric: true },
+  player: { label: "Player", numeric: false },
+  field: { label: "Field and seeding", numeric: true },
+  playoffs: { label: "Playoffs", numeric: true },
+  classic: { label: "Classic points", numeric: true },
+  bonus: { label: "Upset Bonus", numeric: true },
+  upsetTotal: { label: "Upset Edge total", numeric: true },
+};
+const DEFAULT_LEADERBOARD_SORT = { key: "rank", direction: "ascending" };
+const leaderboardSortStateByBody = new WeakMap();
+const leaderboardEntriesByBody = new WeakMap();
+
+function getLeaderboardSortState(body) {
+  if (!leaderboardSortStateByBody.has(body)) {
+    leaderboardSortStateByBody.set(body, { ...DEFAULT_LEADERBOARD_SORT });
+  }
+  return leaderboardSortStateByBody.get(body);
+}
+
+function numericLeaderboardValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function leaderboardScoreValue(entry, mode, key) {
+  const score = entry.scores?.[mode];
+  if (score?.[key] != null) return score[key];
+  if (!entry.scores || entry.scoringOption === mode || (mode === "classic" && !entry.scoringOption)) {
+    return entry[key] ?? null;
+  }
+  return null;
+}
+
+function leaderboardSortValue(entry, key) {
+  switch (key) {
+    case "player":
+      return String(entry.leaderboardName || "");
+    case "rank":
+      return numericLeaderboardValue(entry.rank);
+    case "field":
+      return numericLeaderboardValue(entry.regularSeason);
+    case "playoffs":
+      return numericLeaderboardValue(entry.playoffs);
+    case "classic":
+      return numericLeaderboardValue(leaderboardScoreValue(entry, "classic", "total"));
+    case "bonus":
+      return numericLeaderboardValue(leaderboardScoreValue(entry, "vegas", "upsetBonus"));
+    case "upsetTotal":
+      return numericLeaderboardValue(leaderboardScoreValue(entry, "vegas", "total"));
+    default:
+      return null;
+  }
+}
+
+function compareLeaderboardValues(first, second, numeric, direction) {
+  const firstMissing = first == null;
+  const secondMissing = second == null;
+  if (firstMissing || secondMissing) {
+    if (firstMissing && secondMissing) return 0;
+    return firstMissing ? 1 : -1;
+  }
+  const comparison = numeric
+    ? first - second
+    : String(first).localeCompare(String(second), undefined, { sensitivity: "base" });
+  return comparison * direction;
+}
+
+function sortLeaderboardEntries(entries, sortState = DEFAULT_LEADERBOARD_SORT) {
+  const meta = LEADERBOARD_SORT_META[sortState.key] || LEADERBOARD_SORT_META.rank;
+  const direction = sortState.direction === "descending" ? -1 : 1;
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((first, second) => {
+      const comparison = compareLeaderboardValues(
+        leaderboardSortValue(first.entry, sortState.key),
+        leaderboardSortValue(second.entry, sortState.key),
+        meta.numeric,
+        direction,
+      );
+      if (comparison) return comparison;
+
+      const rankComparison = compareLeaderboardValues(
+        leaderboardSortValue(first.entry, "rank"),
+        leaderboardSortValue(second.entry, "rank"),
+        true,
+        1,
+      );
+      if (rankComparison) return rankComparison;
+
+      const playerComparison = compareLeaderboardValues(
+        leaderboardSortValue(first.entry, "player"),
+        leaderboardSortValue(second.entry, "player"),
+        false,
+        1,
+      );
+      return playerComparison || first.index - second.index;
+    })
+    .map(({ entry }) => entry);
+}
+
+function updateLeaderboardSortIndicators(body, sortState) {
+  const table = typeof body.closest === "function" ? body.closest("table") : null;
+  if (!table) return;
+  table.querySelectorAll("th[data-sort-key]").forEach((header) => {
+    const key = header.dataset.sortKey;
+    const active = key === sortState.key;
+    const direction = active ? sortState.direction : "none";
+    header.setAttribute("aria-sort", direction);
+    const button = header.querySelector("button[data-sort-key]");
+    if (!button) return;
+    const label = button.dataset.sortLabel || button.textContent.trim();
+    const nextDirection = active
+      ? direction === "ascending" ? "descending" : "ascending"
+      : LEADERBOARD_SORT_META[key]?.numeric ? "descending" : "ascending";
+    button.setAttribute("aria-label", `Sort by ${label}, ${nextDirection}`);
+    button.title = `Sort by ${label} (${nextDirection})`;
+  });
+}
+
+function bindLeaderboardSortControls(body) {
+  const table = typeof body.closest === "function" ? body.closest("table") : null;
+  if (!table) return;
+  table.querySelectorAll("button[data-sort-key]").forEach((button) => {
+    if (button.dataset.sortBound === "true") return;
+    button.dataset.sortBound = "true";
+    button.addEventListener("click", () => {
+      const key = button.dataset.sortKey;
+      const current = getLeaderboardSortState(body);
+      const direction = current.key === key
+        ? current.direction === "ascending" ? "descending" : "ascending"
+        : LEADERBOARD_SORT_META[key]?.numeric ? "descending" : "ascending";
+      leaderboardSortStateByBody.set(body, { key, direction });
+      renderLeaderboardRows(body, leaderboardEntriesByBody.get(body) || []);
+    });
+  });
+}
+
+function formatLeaderboardScore(value, decimals = 0) {
+  if (value == null || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return decimals ? number.toFixed(decimals) : String(value);
+}
+
+function leaderboardChampion(entry) {
+  return entry.superBowl || entry.bracket?.picks?.superBowl || "";
+}
+
+function createLeaderboardChampionCell(entry) {
+  const cell = document.createElement("td");
+  cell.className = "leaderboard-champion";
+  const champion = leaderboardChampion(entry);
+  if (!champion) {
+    cell.textContent = "—";
+    cell.setAttribute("aria-label", "No Super Bowl pick");
+    return cell;
+  }
+
+  const pick = document.createElement("div");
+  pick.className = "leaderboard-champion-pick";
+  const logo = createTeamLogo(champion, "leaderboard-champion-logo");
+  logo.alt = "";
+  logo.setAttribute("aria-hidden", "true");
+  pick.appendChild(logo);
+  cell.appendChild(pick);
+  cell.setAttribute("aria-label", `Super Bowl pick: ${champion}`);
+  return cell;
+}
+
 function renderLeaderboardRows(body, entries) {
+  leaderboardEntriesByBody.set(body, entries);
+  bindLeaderboardSortControls(body);
+  const sortState = getLeaderboardSortState(body);
+  updateLeaderboardSortIndicators(body, sortState);
   body.innerHTML = "";
   const limit = Number(body.dataset.limit || 0);
-  const visibleEntries = limit > 0 ? entries.slice(0, limit) : entries;
+  const sortedEntries = sortLeaderboardEntries(entries, sortState);
+  const visibleEntries = limit > 0 ? sortedEntries.slice(0, limit) : sortedEntries;
   visibleEntries.forEach((entry) => {
     const row = document.createElement("tr");
+    row.className = "leaderboard-row";
+    row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
-    rank.textContent = entry.rank <= 3
+    rank.textContent = entry.rank >= 1 && entry.rank <= 3
       ? ["🥇", "🥈", "🥉"][entry.rank - 1]
-      : String(entry.rank);
-    rank.setAttribute("aria-label", `Rank ${entry.rank}`);
+      : String(entry.rank ?? "—");
+    rank.setAttribute("aria-label", `Rank ${entry.rank ?? "unavailable"}`);
 
     const player = document.createElement("th");
     player.scope = "row";
@@ -207,25 +384,41 @@ function renderLeaderboardRows(body, entries) {
     const viewLabel = document.createElement("span");
     viewLabel.textContent = "View bracket";
     playerButton.append(playerName, viewLabel);
-    playerButton.addEventListener("click", () => openPublicBracket(entry));
     player.appendChild(playerButton);
 
+    const champion = createLeaderboardChampionCell(entry);
     const regularSeason = document.createElement("td");
-    regularSeason.textContent = entry.regularSeason;
+    regularSeason.textContent = formatLeaderboardScore(entry.regularSeason);
     const playoffs = document.createElement("td");
-    playoffs.textContent = entry.playoffs;
+    playoffs.textContent = formatLeaderboardScore(entry.playoffs);
     const total = document.createElement("td");
     total.className = "leaderboard-total";
-    total.textContent = entry.total;
+    total.textContent = formatLeaderboardScore(
+      leaderboardScoreValue(entry, "classic", "total"),
+    );
 
-    row.append(rank, player, regularSeason, playoffs, total);
+    const bonus = document.createElement("td");
+    const upsetBonus = leaderboardScoreValue(entry, "vegas", "upsetBonus");
+    bonus.textContent = upsetBonus == null
+      ? "—"
+      : `+${formatLeaderboardScore(upsetBonus, 2)}`;
+    const upsetTotal = document.createElement("td");
+    upsetTotal.className = "leaderboard-total";
+    upsetTotal.textContent = formatLeaderboardScore(
+      leaderboardScoreValue(entry, "vegas", "total"),
+      2,
+    );
+    row.append(rank, player, champion, regularSeason, playoffs, total, bonus, upsetTotal);
     body.appendChild(row);
   });
 }
 
 function renderLeaderboard() {
   const leaderboard = state.leaderboard;
-  const entries = leaderboard?.entries || [];
+  const entries = [...(leaderboard?.entries || [])].map((entry, index) => ({
+    ...entry,
+    rank: entry.rank ?? index + 1,
+  }));
   elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
   elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
   renderLeaderboardRows(elements.leaderboardBody, entries);
@@ -300,6 +493,9 @@ async function loadLeaderboard() {
       };
       state.leaderboard.entries.forEach((entry, index) => {
         entry.bracket = createPreviewPublicBracket(entry.leaderboardName, index);
+        entry.scores = { classic: { regularSeason: 0, playoffs: 0, total: 0 },
+          vegas: { regularSeason: 0, playoffs: 0, total: 0, upsetBonus: 0 } };
+        entry.bracket.vegasScore = { total: 0, upsetBonus: 0 };
       });
     } else {
       state.leaderboard = null;
@@ -354,7 +550,7 @@ function renderGroupLeaderboard() {
   renderLeaderboardRows(elements.groupLeaderboardBody, entries);
   if (leaderboard) {
     elements.activeGroupName.textContent = leaderboard.groupName;
-    elements.groupLeaderboardStatus.textContent = leaderboard.status;
+    elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Upset Edge" : "Classic"} ranking · ${leaderboard.status}`;
     elements.groupLeaderboardStatus.title = "";
   }
 }
@@ -413,6 +609,7 @@ function openGroupDialog(mode) {
   groupDialogMode = mode;
   const creating = mode === "create";
   elements.groupForm.reset();
+  document.querySelector("#group-scoring-field").classList.toggle("hidden", !creating);
   elements.groupDialogKicker.textContent = creating ? "NEW PRIVATE GROUP" : "JOIN PRIVATE GROUP";
   elements.groupDialogTitle.textContent = creating ? "Create a group." : "Join a group.";
   elements.groupDialogDescription.textContent = creating
@@ -440,6 +637,7 @@ async function submitGroup(event) {
       body: JSON.stringify({
         groupName: elements.groupName.value,
         password: elements.groupPassword.value,
+        ...(creating ? { scoringOption: document.querySelector("#group-scoring").value } : {}),
       }),
     });
     elements.groupDialog.close();
@@ -607,7 +805,7 @@ async function shareGroupInviteNatively() {
   try {
     await navigator.share({
       title: `Join ${elements.groupInviteName.textContent}`,
-      text: "Join my Road to the Bowl private leaderboard.",
+      text: "Join my Predict Playoffs private leaderboard.",
       url: link,
     });
   } catch (error) {

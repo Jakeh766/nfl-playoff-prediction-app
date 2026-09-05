@@ -1,4 +1,4 @@
-# Road to the Bowl
+# Predict Playoffs
 
 A self-contained NFL preseason playoff predictor. Users can:
 
@@ -38,17 +38,24 @@ and the Lambda function uses the verified Cognito `sub` claim as the DynamoDB
 key. Signed-in users can permanently delete their prediction and Cognito user
 through an in-app confirmation dialog.
 
+Production verification and password-recovery messages are sent as
+`Predict Playoffs <no-reply@predictplayoffs.com>`. The domain is verified in
+Amazon SES and authenticated with DKIM, a custom MAIL FROM domain, SPF, and
+DMARC records in Cloudflare. Cognito continues to use its built-in delivery
+service so these transactional messages do not depend on SES production-access
+approval.
+
 Leaderboard profiles are stored separately from private predictions. Names are
 trimmed and reserved case-insensitively, so capitalization cannot be used to
 duplicate another account's name. New and existing accounts are prompted for a
 leaderboard name the first time they select **Save prediction**. Deleting an
 account releases its name for someone else to use.
 
-The public leaderboard returns leaderboard name, playoff-field and seeding
-points, playoff-round points, total points, and rank. Each leaderboard name
-links to a read-only view of that player's saved bracket. Public bracket views
-do not expose email addresses, Cognito identifiers, profile keys, or editing
-controls.
+The public leaderboard returns leaderboard name, Super Bowl pick, playoff-field
+and seeding points, playoff-round points, total points, and rank. Each
+leaderboard name links to a read-only view of that player's saved bracket.
+Public bracket views do not expose email addresses, Cognito identifiers,
+profile keys, or editing controls.
 
 Signed-in users can create or join multiple private groups using a unique group
 name and shared password. Group passwords are salted and hashed with PBKDF2
@@ -178,6 +185,29 @@ Terraform also creates a CloudWatch dashboard for each environment:
 session, page-view, and prediction-save summaries; traffic and page-popularity
 charts; conversion and engagement breakdowns; recent sessions; and backend
 Lambda health. Each deployment summary includes a direct link to its dashboard.
+
+## Scoring options
+
+Classic remains out of 300. Upset Edge is Classic plus a fixed, nonnegative
+Upset Bonus for each correct pick: `Classic points × (18 - win total) / 8.5`.
+Each pick's bonus is rounded half up to hundredths before summing. Every correct pick earns full Classic credit plus its bonus; lower-projected
+teams earn bigger bonuses. Incorrect or missing picks earn zero. No allocations
+or bracket normalization remain. The same team picked for the same outcome
+always earns the same points, independently of every other pick.
+
+`backend/lambda/scoring_odds.json` freezes the existing bundled 2026 market
+snapshot for everyone. Scoring never reads the live odds cache. Do not change
+this snapshot during a season. Prepare a matching snapshot when rolling over
+`season_results.json` to a new season. These are win-total bonuses, not implied
+game moneyline probabilities. Upset Edge totals can exceed 300; API `maximum` is
+null for Upset Edge and `classicMaximum` remains 300. `upsetBonus` is reported
+separately in the score and category breakdowns.
+
+Leaderboards return both totals in each entry's `scores`; the public UI can sort
+by either total or any visible scoring column. Groups store `scoringOption` (`classic` or `vegas`) at creation,
+and use it for ranking. Legacy groups default to `classic`; joining does not
+change a group's option. Run the ranking UI regression with
+`node --test backend/test_leaderboard.cjs` alongside the Python suite.
 
 ## Repository layout
 

@@ -3,17 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Compare Road to the Bowl predictions on the public leaderboard or in a private group." />
-    <title>Leaderboard — Road to the Bowl</title>
+    <meta name="description" content="Compare Predict Playoffs predictions on the public leaderboard or in a private group." />
+    <title>Leaderboard — Predict Playoffs</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/predict-playoffs-mark.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=26" />
-    <script src="/shell.js?v=2" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=32" />
+    <script src="/shell.js?v=7" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=22" defer></script>
-    <script src="/leaderboard.js?v=2" defer></script>
+    <script src="/leaderboard.js?v=7" defer></script>
     <script src="/bootstrap.js?v=3" defer></script>
   </head>
   <body data-page="leaderboard">
@@ -34,10 +35,20 @@
           </div>
         </div>
         <div class="leaderboard-view-panel" id="public-leaderboard-panel" role="tabpanel" aria-labelledby="public-leaderboard-tab">
+          <p class="input-hint leaderboard-sort-hint" id="public-leaderboard-sort-hint">Click a score column heading to sort. Super Bowl logos appear beside each player. Classic points, Upset Bonus, and Upset Edge total appear together. <a href="/scoring" data-clean-route="/scoring">Scoring rules</a></p>
           <p class="leaderboard-status" id="leaderboard-status" role="status">Loading leaderboard…</p>
           <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
-            <table class="leaderboard-table">
-              <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Total</th></tr></thead>
+            <table class="leaderboard-table" aria-describedby="public-leaderboard-sort-hint">
+              <thead><tr>
+                <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" class="leaderboard-player-heading">Player</th>
+                <th scope="col" class="leaderboard-champion-heading" aria-label="Super Bowl pick"></th>
+                <th scope="col" data-sort-key="field" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="field" data-sort-label="Field and seeding" aria-label="Sort by field and seeding, descending"><span>Field + seeding</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-sort-key="playoffs" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="playoffs" data-sort-label="Playoffs" aria-label="Sort by playoffs, descending"><span>Playoffs</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-sort-key="classic" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="classic" data-sort-label="Classic points" aria-label="Sort by Classic points, descending"><span>Classic points</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-sort-key="bonus" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="bonus" data-sort-label="Upset Bonus" aria-label="Sort by Upset Bonus, descending"><span>Upset Bonus</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-sort-key="upsetTotal" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="upsetTotal" data-sort-label="Upset Edge total" aria-label="Sort by Upset Edge total, descending"><span>Upset Edge total</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+              </tr></thead>
               <tbody id="leaderboard-body"></tbody>
             </table>
           </div>
@@ -58,9 +69,19 @@
                 <button class="button button-secondary" id="share-group-invite" type="button">Invite others</button>
               </div>
             </div>
+            <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Click a score column heading to sort this group. Super Bowl logos appear beside each player. Both scoring totals are shown together.</p>
             <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
-              <table class="leaderboard-table">
-                <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Total</th></tr></thead>
+              <table class="leaderboard-table" aria-describedby="group-leaderboard-sort-hint">
+                <thead><tr>
+                  <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" class="leaderboard-player-heading">Player</th>
+                  <th scope="col" class="leaderboard-champion-heading" aria-label="Super Bowl pick"></th>
+                  <th scope="col" data-sort-key="field" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="field" data-sort-label="Field and seeding" aria-label="Sort by field and seeding, descending"><span>Field + seeding</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" data-sort-key="playoffs" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="playoffs" data-sort-label="Playoffs" aria-label="Sort by playoffs, descending"><span>Playoffs</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" data-sort-key="classic" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="classic" data-sort-label="Classic points" aria-label="Sort by Classic points, descending"><span>Classic points</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" data-sort-key="bonus" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="bonus" data-sort-label="Upset Bonus" aria-label="Sort by Upset Bonus, descending"><span>Upset Bonus</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" data-sort-key="upsetTotal" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="upsetTotal" data-sort-label="Upset Edge total" aria-label="Sort by Upset Edge total, descending"><span>Upset Edge total</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                </tr></thead>
                 <tbody id="group-leaderboard-body"></tbody>
               </table>
             </div>

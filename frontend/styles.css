@@ -88,6 +88,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 11px;
+  min-width: 0;
   color: var(--ink);
   font-family: var(--display);
   font-weight: 700;
@@ -96,19 +97,10 @@ button {
 }
 
 .brand-mark {
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  color: white;
-  background: var(--red);
-  border-radius: 5px;
-  font-size: 12px;
-  transform: rotate(45deg);
-}
-
-.brand-mark::first-letter {
-  transform: rotate(-45deg);
+  width: 34px;
+  height: 34px;
+  display: block;
+  object-fit: contain;
 }
 
 .season-badge {
@@ -1164,14 +1156,16 @@ body.predictions-locked .predictor .final-actions button {
 
 .odds-status {
   width: fit-content;
+  max-width: 100%;
   margin: 13px 0 0 !important;
-  padding: 8px 11px;
+  padding: 11px 14px;
   color: #73520d !important;
   background: rgba(244, 185, 66, 0.13);
   border: 1px solid rgba(244, 185, 66, 0.45);
   border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .conference-grid {
@@ -1937,6 +1931,18 @@ body.predictions-locked .predictor .final-actions button {
   font-weight: 700;
 }
 
+.leaderboard-sort-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.leaderboard-sort-hint a {
+  color: var(--blue-dark);
+  text-underline-offset: 3px;
+}
+
 .leaderboard-table-shell {
   overflow-x: auto;
   background: var(--card);
@@ -1947,7 +1953,7 @@ body.predictions-locked .predictor .final-actions button {
 
 .leaderboard-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 820px;
   border-collapse: collapse;
 }
 
@@ -1959,16 +1965,113 @@ body.predictions-locked .predictor .final-actions button {
 }
 
 .leaderboard-table th:nth-child(2),
-.leaderboard-table td:nth-child(2) {
+.leaderboard-table td:nth-child(2),
+.leaderboard-table th:nth-child(3),
+.leaderboard-table td:nth-child(3) {
   text-align: left;
 }
 
+.leaderboard-champion-heading {
+  width: 72px;
+  min-width: 72px;
+  padding: 0 !important;
+  text-align: center !important;
+}
+
+.leaderboard-player-heading {
+  padding: 0 18px !important;
+  text-align: left !important;
+}
+
 .leaderboard-table thead th {
+  padding: 0;
   color: var(--muted);
   background: rgba(16, 34, 58, 0.035);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+}
+
+.leaderboard-sort-button {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: 1.25;
+  text-align: right;
+  text-transform: inherit;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.leaderboard-table thead th:first-child .leaderboard-sort-button {
+  justify-content: center;
+  text-align: center;
+}
+
+.leaderboard-table thead th:nth-child(2) .leaderboard-sort-button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.leaderboard-sort-button:hover,
+.leaderboard-sort-button:focus-visible,
+.leaderboard-table thead th[aria-sort="ascending"] .leaderboard-sort-button,
+.leaderboard-table thead th[aria-sort="descending"] .leaderboard-sort-button {
+  color: var(--blue-dark);
+  background: rgba(24, 89, 169, 0.075);
+}
+
+.leaderboard-sort-button:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.3);
+  outline-offset: -3px;
+}
+
+.leaderboard-sort-indicator {
+  position: relative;
+  width: 12px;
+  height: 14px;
+  flex: 0 0 12px;
+  display: inline-block;
+  color: currentColor;
+  opacity: 0.38;
+}
+
+.leaderboard-sort-indicator::before,
+.leaderboard-sort-indicator::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.leaderboard-sort-indicator::before {
+  top: 0;
+  border-bottom: 5px solid currentColor;
+}
+
+.leaderboard-sort-indicator::after {
+  bottom: 0;
+  border-top: 5px solid currentColor;
+}
+
+.leaderboard-table thead th[aria-sort="ascending"] .leaderboard-sort-indicator::before,
+.leaderboard-table thead th[aria-sort="descending"] .leaderboard-sort-indicator::after {
+  opacity: 1;
+}
+
+.leaderboard-table thead th[aria-sort="ascending"] .leaderboard-sort-indicator::after,
+.leaderboard-table thead th[aria-sort="descending"] .leaderboard-sort-indicator::before {
+  opacity: 0.25;
 }
 
 .leaderboard-table tbody th {
@@ -1978,6 +2081,15 @@ body.predictions-locked .predictor .final-actions button {
 .leaderboard-table tbody tr:last-child th,
 .leaderboard-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.leaderboard-row {
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.leaderboard-row:hover {
+  background: rgba(24, 89, 169, 0.04);
 }
 
 .leaderboard-player-button {
@@ -2010,6 +2122,35 @@ body.predictions-locked .predictor .final-actions button {
 .leaderboard-player-button:hover strong {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.leaderboard-player-button:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.3);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.leaderboard-champion {
+  width: 72px;
+  min-width: 72px;
+  text-align: center !important;
+}
+
+.leaderboard-champion-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.leaderboard-champion-logo {
+  width: 30px;
+  height: 30px;
+  max-width: 30px;
+  max-height: 30px;
+  flex: 0 0 30px;
+  display: block;
+  object-fit: contain;
 }
 
 .leaderboard-rank {
@@ -2148,6 +2289,37 @@ body.predictions-locked .predictor .final-actions button {
   align-items: stretch;
 }
 
+#vegas-scoring-panel .scoring-layout {
+  align-items: start;
+}
+
+#vegas-scoring-panel .scoring-table-shell {
+  overflow-x: auto;
+}
+
+#vegas-scoring-panel .scoring-table {
+  min-width: 460px;
+}
+
+#vegas-scoring-panel .scoring-table th:nth-child(2),
+#vegas-scoring-panel .scoring-table td:nth-child(2) {
+  width: 210px;
+}
+
+#vegas-scoring-panel .seed-point-tiers li {
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+#vegas-scoring-panel .seed-point-tiers span {
+  white-space: nowrap;
+}
+
+#vegas-scoring-panel .scoring-note a {
+  color: #b9d8ff;
+  text-underline-offset: 3px;
+}
+
 .scoring-table-shell {
   overflow: hidden;
   background: var(--card);
@@ -2251,6 +2423,58 @@ body.predictions-locked .predictor .final-actions button {
   margin-bottom: 0;
 }
 
+.scoring-formula {
+  margin: 0 0 20px;
+  padding: 18px 16px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+}
+
+.scoring-note p.scoring-formula-equation {
+  margin: 0 0 13px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  color: white;
+  font-family: var(--display);
+  font-size: clamp(1.3rem, 2.3vw, 1.8rem);
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.scoring-formula-equation strong {
+  color: white;
+  font-weight: 700;
+}
+
+.scoring-formula-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  color: white;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.scoring-formula-fraction span:first-child {
+  padding: 0 4px 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.scoring-formula-fraction span:last-child {
+  padding-top: 5px;
+}
+
+.scoring-note p.scoring-formula-explainer {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .saved-card-actions {
   display: flex;
   gap: 8px;
@@ -2313,15 +2537,43 @@ footer {
   font-size: 11px;
 }
 
-footer span {
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.footer-mark {
+  width: 34px;
+  height: 34px;
+  display: block;
+  object-fit: contain;
+}
+
+.footer-wordmark {
+  display: grid;
+  gap: 3px;
+}
+
+.footer-wordmark span {
   color: white;
   font-family: var(--display);
   font-size: 14px;
   letter-spacing: 0.1em;
 }
 
+.footer-wordmark small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
 footer p {
   margin: 0;
+  max-width: 390px;
+  line-height: 1.5;
+  text-align: right;
 }
 
 @media (max-width: 1080px) {
@@ -2401,8 +2653,13 @@ footer p {
     font-size: 10px;
   }
 
-  .brand > span:last-child {
+  .brand-name {
     display: none;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
   }
 
   .season-badge {
@@ -2674,6 +2931,11 @@ footer p {
     flex-direction: column;
   }
 
+  .scoring-formula-equation {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .scoring-table th,
   .scoring-table td {
     padding: 12px;
@@ -2690,6 +2952,10 @@ footer p {
     flex-direction: column;
     justify-content: center;
     gap: 9px;
+  }
+
+  footer p {
+    text-align: center;
   }
 }
 

@@ -3,7 +3,8 @@ data "aws_caller_identity" "current" {}
 locals {
   resource_prefix = coalesce(var.resource_prefix, "${var.project_name}-${var.environment}")
 
-  analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
+  cognito_email_source_arn = var.cognito_email_domain == null ? null : "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_email_domain}"
+  analytics_log_group      = "/aws/lambda/${local.resource_prefix}-backend"
   frontend_files = {
     "index.html" = {
       source       = "${var.frontend_dir}/index.html"
@@ -20,6 +21,10 @@ locals {
     "scoring" = {
       source       = "${var.frontend_dir}/scoring.html"
       content_type = "text/html; charset=utf-8"
+    }
+    "scoring.js" = {
+      source       = "${var.frontend_dir}/scoring.js"
+      content_type = "application/javascript; charset=utf-8"
     }
     "shell.js" = {
       source       = "${var.frontend_dir}/shell.js"
@@ -48,6 +53,10 @@ locals {
     "styles.css" = {
       source       = "${var.frontend_dir}/styles.css"
       content_type = "text/css; charset=utf-8"
+    }
+    "assets/predict-playoffs-mark.svg" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
+      content_type = "image/svg+xml"
     }
   }
 }
@@ -124,6 +133,16 @@ resource "aws_cognito_user_pool" "users" {
 
   admin_create_user_config {
     allow_admin_create_user_only = false
+  }
+
+  dynamic "email_configuration" {
+    for_each = var.cognito_email_domain == null ? [] : [var.cognito_email_domain]
+
+    content {
+      email_sending_account = "DEVELOPER"
+      from_email_address    = "Predict Playoffs <no-reply@${email_configuration.value}>"
+      source_arn            = local.cognito_email_source_arn
+    }
   }
 }
 
@@ -431,7 +450,7 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         width  = 24
         height = 2
         properties = {
-          markdown = "# Road to the Bowl — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
+          markdown = "# Predict Playoffs — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
         }
       },
       {

@@ -113,3 +113,17 @@ variable "acm_certificate_arn" {
   type        = string
   default     = null
 }
+
+variable "cognito_email_domain" {
+  description = "Optional SES-verified domain Cognito uses for branded verification and recovery email."
+  type        = string
+  default     = null
+
+  validation {
+    condition = (
+      var.cognito_email_domain == null ||
+      can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", var.cognito_email_domain))
+    )
+    error_message = "cognito_email_domain must be null or a lowercase domain name."
+  }
+}

@@ -6,9 +6,9 @@ const header = document.querySelector("#site-header");
 if (header) {
   header.className = "site-header";
   header.innerHTML = `
-    <a class="brand" href="/" aria-label="Road to the Bowl home">
-      <span class="brand-mark" aria-hidden="true">◆</span>
-      <span>ROAD TO THE BOWL</span>
+    <a class="brand" href="/" aria-label="Predict Playoffs home">
+      <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
+      <span class="brand-name">PREDICT PLAYOFFS</span>
     </a>
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
@@ -166,6 +166,14 @@ if (dialogs) {
           <label for="group-name">Group name</label>
           <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
           <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
+          <div id="group-scoring-field">
+            <label for="group-scoring">Scoring option</label>
+            <select id="group-scoring" name="scoring-option" aria-describedby="group-scoring-hint">
+              <option value="classic">Classic · 300 points</option>
+              <option value="vegas">Upset Edge · Classic + bonus</option>
+            </select>
+            <p class="input-hint" id="group-scoring-hint">Upset Edge adds a fixed market-based bonus for every correct pick in seeding and playoffs. Lower-projected teams earn bigger bonuses. Totals can exceed 300. This choice sets your group’s ranking and cannot be changed.</p>
+          </div>
           <label for="group-password">Group password</label>
           <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="current-password" required />
           <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
@@ -215,7 +223,16 @@ if (dialogs) {
 
 const footer = document.querySelector("#site-footer");
 if (footer) {
-  footer.innerHTML = `<span>ROAD TO THE BOWL</span><p>Your account details stay private.</p>`;
+  footer.innerHTML = `
+    <div class="footer-brand">
+      <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
+      <div class="footer-wordmark">
+        <span>PREDICT PLAYOFFS</span>
+        <small>CALL IT BEFORE KICKOFF</small>
+      </div>
+    </div>
+    <p>Your account details stay private. Not affiliated with the NFL.</p>
+  `;
 }
 
 if (localPreview) {

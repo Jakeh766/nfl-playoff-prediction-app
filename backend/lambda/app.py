@@ -12,7 +12,7 @@ import secrets
 import statistics
 import time
 import uuid
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from urllib.parse import unquote
 from urllib.request import Request, urlopen
@@ -247,7 +247,7 @@ def scan_all(table) -> list[dict]:
         scan_arguments["ExclusiveStartKey"] = last_key
 
 
-def build_leaderboard(member_ids: set[str] | None = None) -> dict:
+def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic") -> dict:
     results = load_season_results()
     profiles = {
         item["profileKey"].removeprefix("user#"): item
@@ -262,10 +262,16 @@ def build_leaderboard(member_ids: set[str] | None = None) -> dict:
         profile = profiles.get(prediction.get("profileKey"))
         if not profile:
             continue
-        score = score_prediction(prediction, results)
+        predicted_picks = prediction.get("picks") or {}
+        scores = {mode: score_prediction(prediction, results, mode)
+                  for mode in ("classic", "vegas")}
+        score = scores[scoring_option]
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
+                "superBowl": predicted_picks.get("superBowl", ""),
+                "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total", "upsetBonus")}
+                           for mode, value in scores.items()},
                 "regularSeason": score["regularSeason"],
                 "playoffs": score["playoffs"],
                 "total": score["total"],
@@ -292,8 +298,10 @@ def build_leaderboard(member_ids: set[str] | None = None) -> dict:
         "season": results.get("season"),
         "status": results.get("status", "Results unavailable"),
         "updatedAt": results.get("updatedAt"),
-        "maximum": MAX_SCORE,
+        "maximum": MAX_SCORE if scoring_option == "classic" else None,
+        "classicMaximum": MAX_SCORE,
         "entries": entries,
+        "scoringOption": scoring_option,
     }
 
 
@@ -310,6 +318,7 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
     return {
         "leaderboardName": profile["leaderboardName"],
         "savedAt": prediction.get("savedAt"),
+        "vegasScore": score_prediction(prediction, load_season_results(), "vegas"),
         "divisionWinners": {
             conference: {
                 division: division_winners.get(conference, {}).get(division, "")
@@ -375,8 +384,12 @@ def load_season_results() -> dict:
         return json.load(results_file)
 
 
-def score_prediction(prediction: dict, results: dict | None = None) -> dict:
+def score_prediction(prediction: dict, results: dict | None = None, scoring_option: str = "classic") -> dict:
     results = results or load_season_results()
+    if scoring_option == "vegas":
+        return score_vegas_prediction(prediction, results)
+    if scoring_option != "classic":
+        raise ValueError("Unknown scoring option")
     actual_seeds = results.get("seeds", {})
     actual_divisions = results.get("divisionWinners", {})
     round_winners = results.get("roundWinners", {})
@@ -526,6 +539,83 @@ def score_prediction(prediction: dict, results: dict | None = None) -> dict:
         "total": regular_season + playoffs,
         "possible": sum(category["possible"] for category in breakdown.values()),
         "maximum": MAX_SCORE,
+    }
+
+
+def score_vegas_prediction(prediction: dict, results: dict) -> dict:
+    """Classic credit plus a fixed, nonnegative bonus for each correct pick."""
+    classic = score_prediction(prediction, results)
+    with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
+        snapshot = json.load(file)
+    if snapshot["season"] != results.get("season"):
+        raise ValueError("Upset Edge scoring needs a market snapshot for this season")
+    totals = snapshot["totals"]
+    earned = {key: Decimal(0) for key in SCORING_RULES}
+    available = {key: Decimal(0) for key in SCORING_RULES}
+
+    def add(category, team, correct, base):
+        if not team:
+            return
+        if team not in totals:
+            raise ValueError(f"Missing frozen Vegas win total for {team}")
+        rate = (Decimal("18") - Decimal(str(totals[team]))) / Decimal("8.5")
+        bonus = (Decimal(base) * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        available[category] += bonus
+        if correct:
+            earned[category] += bonus
+
+    predicted_seeds = prediction.get("seeds", {})
+    actual_seeds = results.get("seeds", {})
+    predicted_field = {team for conference in ("AFC", "NFC")
+                       for team in predicted_seeds.get(conference, []) if team}
+    actual_field = {team for conference in ("AFC", "NFC")
+                    for team in actual_seeds.get(conference, []) if team}
+    for team in actual_field:
+        add("playoffField", team, team in predicted_field, 5)
+    for conference in ("AFC", "NFC"):
+        seeds = predicted_seeds.get(conference, [])
+        for index, team in enumerate(actual_seeds.get(conference, [])[:7]):
+            add("exactSeeds", team, index < len(seeds) and seeds[index] == team,
+                EXACT_SEED_POINTS[index])
+        for division in ("North", "South", "East", "West"):
+            team = results.get("divisionWinners", {}).get(conference, {}).get(division)
+            selected = prediction.get("divisionWinners", {}).get(conference, {}).get(division)
+            add("divisionWinners", team, selected == team, 5)
+
+    picks = prediction.get("picks", {})
+    winners = results.get("roundWinners", {})
+    for category, games, base in (
+        ("wildCard", ("wc-2-7", "wc-3-6", "wc-4-5"), 5),
+        ("divisional", ("div-1", "div-2"), 10),
+    ):
+        selected = {picks.get(conference, {}).get(game)
+                    for conference in ("AFC", "NFC") for game in games}
+        for team in set(winners.get(category, [])):
+            add(category, team, team in selected, base)
+    for conference in ("AFC", "NFC"):
+        team = winners.get("conferenceChampions", {}).get(conference)
+        add("conferenceChampions", team, picks.get(conference, {}).get("conf") == team, 20)
+    team = winners.get("superBowlChampion")
+    add("superBowlChampion", team, picks.get("superBowl") == team, 40)
+
+    breakdown = {}
+    for category, item in classic["breakdown"].items():
+        breakdown[category] = {
+            **item, "classicPoints": item["points"], "upsetBonus": float(earned[category]),
+            "points": float(Decimal(item["points"]) + earned[category]),
+            "possible": float(Decimal(item["possible"]) + available[category]),
+            "classicMaximum": item["maximum"], "maximum": None,
+        }
+    regular_bonus = sum(earned[key] for key in ("playoffField", "divisionWinners", "exactSeeds"))
+    bonus = sum(earned.values())
+    return {
+        **classic, "scoringOption": "vegas", "oddsSource": snapshot["source"],
+        "breakdown": breakdown, "classicScore": classic["total"], "upsetBonus": float(bonus),
+        "regularSeason": float(Decimal(classic["regularSeason"]) + regular_bonus),
+        "playoffs": float(Decimal(classic["playoffs"]) + bonus - regular_bonus),
+        "total": float(Decimal(classic["total"]) + bonus),
+        "possible": float(Decimal(classic["possible"]) + sum(available.values())),
+        "classicMaximum": MAX_SCORE, "maximum": None,
     }
 
 
@@ -807,6 +897,7 @@ def public_group(group: dict) -> dict:
         "groupId": group["groupId"],
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
+        "scoringOption": group.get("scoringOption", "classic"),
     }
 
 
@@ -862,6 +953,9 @@ def create_group(user_id: str, event: dict) -> dict:
     body = parse_body(event)
     group_name, normalized_name = normalize_group_name(body.get("groupName"))
     password = validate_group_password(body.get("password"))
+    scoring_option = body.get("scoringOption", "classic")
+    if scoring_option not in ("classic", "vegas"):
+        raise ValueError("Choose Classic or Upset Edge scoring")
     group_id = str(uuid.uuid4())
     created_at = int(time.time() * 1000)
     salt, digest = hash_group_password(password)
@@ -890,6 +984,7 @@ def create_group(user_id: str, event: dict) -> dict:
         "groupId": group_id,
         "groupName": group_name,
         "normalizedName": normalized_name,
+        "scoringOption": scoring_option,
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
@@ -1024,7 +1119,7 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
         and item.get("groupId") == group_id
     }
     return {
-        **build_leaderboard(member_ids),
+        **build_leaderboard(member_ids, group.get("scoringOption", "classic")),
         "groupId": group_id,
         "groupName": group["groupName"],
     }

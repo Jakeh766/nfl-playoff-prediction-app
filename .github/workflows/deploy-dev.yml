@@ -48,6 +48,7 @@ jobs:
           node --check frontend/leaderboard.js
           node --check frontend/monitoring.js
           node --check frontend/picks.js
+          node --check frontend/scoring.js
           node --check frontend/shell.js
           node --check frontend/auth-config.js
 

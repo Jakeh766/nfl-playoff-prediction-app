@@ -32,6 +32,9 @@ function projectedWins(team) {
   return Number(state.winTotals[team] ?? 0);
 }
 
+const PROJECTION_HELP_TEXT =
+  "The number in parentheses is each team's projected regular-season win total.";
+
 function sortTeamsByProjection(teams) {
   return [...teams].sort(
     (a, b) => projectedWins(b) - projectedWins(a) || a.localeCompare(b),
@@ -56,7 +59,7 @@ function appendDivisionGroupedOptions(select, conference, teams, selectedTeam) {
       option.textContent =
         selectedTeam === team
           ? team
-          : `${team} (${projectedWins(team).toFixed(1)} proj)`;
+          : `${team} (${projectedWins(team).toFixed(1)})`;
       option.selected = selectedTeam === team;
       group.appendChild(option);
     });
@@ -72,7 +75,7 @@ function appendProjectedOptions(select, teams, selectedTeam) {
     option.textContent =
       selectedTeam === team
         ? team
-        : `${team} (${projectedWins(team).toFixed(1)} proj)`;
+        : `${team} (${projectedWins(team).toFixed(1)})`;
     option.selected = selectedTeam === team;
     select.appendChild(option);
   });
@@ -80,7 +83,7 @@ function appendProjectedOptions(select, teams, selectedTeam) {
 
 async function loadWinTotals() {
   elements.oddsStatus.textContent =
-    "Using the bundled 2026 sportsbook snapshot while live odds load…";
+    `${PROJECTION_HELP_TEXT} Using the bundled 2026 sportsbook snapshot while live odds load…`;
 
   try {
     const response = await fetch("/api/win-totals", { cache: "no-store" });
@@ -102,13 +105,13 @@ async function loadWinTotals() {
         : data.status === "cached"
           ? "Cached"
           : "Fallback";
-    elements.oddsStatus.textContent = `${sourceLabel} projected wins from ${data.source}. Teams are ranked within each division.`;
+    elements.oddsStatus.textContent = `${PROJECTION_HELP_TEXT} ${sourceLabel} projections from ${data.source}.`;
     elements.oddsStatus.title = data.message || "";
   } catch (error) {
     const isMismatchedApi = error.message.includes("does not match");
     elements.oddsStatus.textContent = isMismatchedApi
-      ? "The odds API and frontend versions do not match. Deploy the latest dev build."
-      : "Projected wins use the bundled 2026 sportsbook snapshot because live odds are unavailable.";
+      ? `${PROJECTION_HELP_TEXT} The odds API and frontend versions do not match. Deploy the latest dev build.`
+      : `${PROJECTION_HELP_TEXT} Live odds are unavailable; using the bundled 2026 sportsbook snapshot.`;
     elements.oddsStatus.title = error.message;
   }
 

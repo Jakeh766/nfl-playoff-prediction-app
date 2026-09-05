@@ -3,33 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Learn how Road to the Bowl awards 300 points for playoff teams, seeding, and postseason winners." />
-    <title>Scoring — Road to the Bowl</title>
+    <meta name="description" content="Learn how Predict Playoffs awards 300 points for playoff teams, seeding, and postseason winners." />
+    <title>Scoring — Predict Playoffs</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/predict-playoffs-mark.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=26" />
-    <script src="/shell.js?v=2" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=31" />
+    <script src="/shell.js?v=7" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=22" defer></script>
     <script src="/bootstrap.js?v=3" defer></script>
+    <script src="/scoring.js?v=1" defer></script>
   </head>
   <body data-page="scoring">
     <header id="site-header"></header>
     <main>
       <section class="page-intro compact-page-intro">
         <p class="eyebrow">FOLLOW THE SEASON</p>
-        <h1>300 points.<br />Every call counts.</h1>
+        <h1>Accuracy.<br />Extra credit.</h1>
         <p>Build the right playoff field, nail the seeds, and predict which teams keep advancing.</p>
       </section>
       <section class="scoring-section page-section" id="scoring-section">
         <div class="section-heading compact">
-          <div><h2>How scoring works.</h2><p>A perfect preseason prediction is worth 300 points.</p></div>
+          <div><h2>Choose your scoring.</h2><p>Classic scores accuracy out of 300. Upset Edge adds a fixed bonus for bold, correct picks.</p></div>
+          <div class="leaderboard-view-tabs" role="tablist" aria-label="Scoring option">
+            <button class="leaderboard-view-tab active" id="classic-scoring-tab" type="button" role="tab" aria-selected="true" aria-controls="classic-scoring-panel">Classic</button>
+            <button class="leaderboard-view-tab" id="vegas-scoring-tab" type="button" role="tab" aria-selected="false" aria-controls="vegas-scoring-panel" tabindex="-1">Upset Edge</button>
+          </div>
         </div>
+        <div id="classic-scoring-panel" role="tabpanel" aria-labelledby="classic-scoring-tab" tabindex="0">
         <div class="scoring-layout">
           <div class="scoring-table-shell">
-            <table class="scoring-table">
+            <table class="scoring-table" aria-label="Classic scoring points">
               <thead><tr><th scope="col">Prediction</th><th scope="col">Points each</th><th scope="col">Maximum</th></tr></thead>
               <tbody>
                 <tr><td>Correct playoff team</td><td>5</td><td>70</td></tr>
@@ -50,7 +57,49 @@
             <p>A missed earlier matchup does not erase a correct conference or Super Bowl champion.</p>
           </aside>
         </div>
-        <div class="scoring-cta"><div><p class="eyebrow">READY TO CALL IT?</p><h2>Put all 300 points on the line.</h2></div><a class="button button-primary button-large" href="/picks" data-clean-route="/picks">Make My Picks</a></div>
+        </div>
+        <div class="hidden" id="vegas-scoring-panel" role="tabpanel" aria-labelledby="vegas-scoring-tab" tabindex="0" hidden>
+          <div class="scoring-layout">
+            <div class="scoring-table-shell">
+              <table class="scoring-table" aria-label="Upset Edge scoring bonuses" aria-describedby="vegas-weight-explanation">
+                <thead><tr><th scope="col">Correct prediction</th><th scope="col">Classic points</th><th scope="col">Upset Bonus</th></tr></thead>
+                <tbody>
+                  <tr><td>Playoff team</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Division winner</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Exact #1 seed</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Exact #2–#4 seed</td><td>3</td><td>3 × bonus rate</td></tr>
+                  <tr><td>Exact #5–#7 seed</td><td>2</td><td>2 × bonus rate</td></tr>
+                  <tr><td>Wild Card winner</td><td>5</td><td>5 × bonus rate</td></tr>
+                  <tr><td>Divisional winner</td><td>10</td><td>10 × bonus rate</td></tr>
+                  <tr><td>Conference champion</td><td>20</td><td>20 × bonus rate</td></tr>
+                  <tr><td>Super Bowl champion</td><td>40</td><td>40 × bonus rate</td></tr>
+                </tbody>
+                <tfoot><tr><th scope="row">Upset Edge total</th><td colspan="2">Classic + Upset Bonus</td></tr></tfoot>
+              </table>
+            </div>
+            <aside class="scoring-note">
+              <h3>Same pick. Same points.</h3>
+              <div class="scoring-formula" role="group" aria-label="Upset Edge bonus formula">
+                <p class="scoring-formula-equation">
+                  <strong>Bonus rate</strong>
+                  <span aria-hidden="true">=</span>
+                  <span class="scoring-formula-fraction" aria-label="18 minus preseason Vegas win total divided by 8.5">
+                    <span>18 − preseason Vegas win total</span>
+                    <span>8.5</span>
+                  </span>
+                </p>
+                <p class="scoring-formula-explainer" id="vegas-weight-explanation">Multiply this rate by the pick’s Classic points to get its fixed Upset Bonus.</p>
+              </div>
+              <p>Every correct pick earns its Classic points plus a bonus. Lower projected win totals earn larger bonuses; favorites earn smaller bonuses.</p>
+              <p>Minnesota at 7.5 wins: a correct Wild Card pick earns 5 Classic + 6.18 bonus = <strong>11.18 points</strong>. Everyone who makes that pick earns exactly the same amount, regardless of their other picks.</p>
+              <p>Classic remains out of 300. Upset Edge total is Classic + Upset Bonus and can exceed 300. For example, 247 Classic + 231.40 bonus = 478.40 Upset Edge points. No bracket normalization or shared point budgets.</p>
+              <p>Each pick’s bonus is rounded to the nearest hundredth before adding it to the score. Incorrect or missing picks earn zero. Later-round credit still follows the team advancing, even if you missed its matchup.</p>
+              <p>Values use the app’s fixed 2026 FanDuel/DraftKings win-total snapshot from <a href="https://www.vegasinsider.com/nfl/odds/win-totals/">VegasInsider</a>. They are set before the season; live odds and other brackets never change a pick’s value.</p>
+            </aside>
+          </div>
+        </div>
+        <p>Both totals appear on the leaderboards. Public standings show both scores together, while groups keep the scoring option chosen at creation. Existing groups use Classic.</p>
+        <div class="scoring-cta"><div><p class="eyebrow">READY TO CALL IT?</p><h2>Make every pick count.</h2></div><a class="button button-primary button-large" href="/picks" data-clean-route="/picks">Make My Picks</a></div>
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

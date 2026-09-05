@@ -172,5 +172,15 @@ by the authenticated API.
 The module also publishes `cognito_user_pool_id` and `cognito_client_id`
 outputs. Email verification is required and MFA is explicitly `OFF`.
 
+Production Cognito email uses the externally managed, SES-verified
+`predictplayoffs.com` identity and appears as
+`Predict Playoffs <no-reply@predictplayoffs.com>`. The SES identity must keep a
+sending-authorization policy that grants `email.cognito-idp.amazonaws.com`
+`ses:SendEmail` and `ses:SendRawEmail`, restricted to the production account and
+user-pool ARN. Cloudflare must keep the three SES Easy DKIM CNAME records, the
+`mail.predictplayoffs.com` MX and SPF records used by the custom MAIL FROM
+domain, and the `_dmarc.predictplayoffs.com` TXT record. These externally
+managed resources must be verified before applying production Terraform.
+
 Review AWS pricing and the target site's automated-access policy before
 deploying. These resources are not guaranteed to remain free.
