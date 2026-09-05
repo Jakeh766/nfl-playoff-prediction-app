@@ -546,7 +546,7 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
         snapshot = json.load(file)
     if snapshot["season"] != results.get("season"):
-        raise ValueError("Vegas scoring needs a market snapshot for this season")
+        raise ValueError("Upset Edge scoring needs a market snapshot for this season")
     totals = snapshot["totals"]
     earned = {key: Decimal(0) for key in SCORING_RULES}
     available = {key: Decimal(0) for key in SCORING_RULES}
@@ -953,7 +953,7 @@ def create_group(user_id: str, event: dict) -> dict:
     password = validate_group_password(body.get("password"))
     scoring_option = body.get("scoringOption", "classic")
     if scoring_option not in ("classic", "vegas"):
-        raise ValueError("Choose Classic or Vegas Upset scoring")
+        raise ValueError("Choose Classic or Upset Edge scoring")
     group_id = str(uuid.uuid4())
     created_at = int(time.time() * 1000)
     salt, digest = hash_group_password(password)

@@ -133,7 +133,7 @@ function renderPublicBracket(bracket) {
       }).format(new Date(bracket.savedAt))}`
     : "";
   elements.publicBracketStatus.textContent =
-    `Classic: ${score.total ?? 0} / 300 + ${bracket.vegasScore?.upsetBonus?.toFixed(2) ?? "—"} upset bonus = ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} Vegas Upset points${savedAt}`;
+    `Classic: ${score.total ?? 0} / 300 + ${bracket.vegasScore?.upsetBonus?.toFixed(2) ?? "—"} upset bonus = ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} Upset Edge points${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
@@ -184,18 +184,168 @@ async function openPublicBracket(entry) {
   }
 }
 
+const LEADERBOARD_SORT_META = {
+  rank: { label: "Rank", numeric: true },
+  player: { label: "Player", numeric: false },
+  field: { label: "Field and seeding", numeric: true },
+  playoffs: { label: "Playoffs", numeric: true },
+  classic: { label: "Classic points", numeric: true },
+  bonus: { label: "Upset Bonus", numeric: true },
+  upsetTotal: { label: "Upset Edge total", numeric: true },
+};
+const DEFAULT_LEADERBOARD_SORT = { key: "rank", direction: "ascending" };
+const leaderboardSortStateByBody = new WeakMap();
+const leaderboardEntriesByBody = new WeakMap();
+
+function getLeaderboardSortState(body) {
+  if (!leaderboardSortStateByBody.has(body)) {
+    leaderboardSortStateByBody.set(body, { ...DEFAULT_LEADERBOARD_SORT });
+  }
+  return leaderboardSortStateByBody.get(body);
+}
+
+function numericLeaderboardValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function leaderboardScoreValue(entry, mode, key) {
+  const score = entry.scores?.[mode];
+  if (score?.[key] != null) return score[key];
+  if (!entry.scores || entry.scoringOption === mode || (mode === "classic" && !entry.scoringOption)) {
+    return entry[key] ?? null;
+  }
+  return null;
+}
+
+function leaderboardSortValue(entry, key) {
+  switch (key) {
+    case "player":
+      return String(entry.leaderboardName || "");
+    case "rank":
+      return numericLeaderboardValue(entry.rank);
+    case "field":
+      return numericLeaderboardValue(entry.regularSeason);
+    case "playoffs":
+      return numericLeaderboardValue(entry.playoffs);
+    case "classic":
+      return numericLeaderboardValue(leaderboardScoreValue(entry, "classic", "total"));
+    case "bonus":
+      return numericLeaderboardValue(leaderboardScoreValue(entry, "vegas", "upsetBonus"));
+    case "upsetTotal":
+      return numericLeaderboardValue(leaderboardScoreValue(entry, "vegas", "total"));
+    default:
+      return null;
+  }
+}
+
+function compareLeaderboardValues(first, second, numeric, direction) {
+  const firstMissing = first == null;
+  const secondMissing = second == null;
+  if (firstMissing || secondMissing) {
+    if (firstMissing && secondMissing) return 0;
+    return firstMissing ? 1 : -1;
+  }
+  const comparison = numeric
+    ? first - second
+    : String(first).localeCompare(String(second), undefined, { sensitivity: "base" });
+  return comparison * direction;
+}
+
+function sortLeaderboardEntries(entries, sortState = DEFAULT_LEADERBOARD_SORT) {
+  const meta = LEADERBOARD_SORT_META[sortState.key] || LEADERBOARD_SORT_META.rank;
+  const direction = sortState.direction === "descending" ? -1 : 1;
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((first, second) => {
+      const comparison = compareLeaderboardValues(
+        leaderboardSortValue(first.entry, sortState.key),
+        leaderboardSortValue(second.entry, sortState.key),
+        meta.numeric,
+        direction,
+      );
+      if (comparison) return comparison;
+
+      const rankComparison = compareLeaderboardValues(
+        leaderboardSortValue(first.entry, "rank"),
+        leaderboardSortValue(second.entry, "rank"),
+        true,
+        1,
+      );
+      if (rankComparison) return rankComparison;
+
+      const playerComparison = compareLeaderboardValues(
+        leaderboardSortValue(first.entry, "player"),
+        leaderboardSortValue(second.entry, "player"),
+        false,
+        1,
+      );
+      return playerComparison || first.index - second.index;
+    })
+    .map(({ entry }) => entry);
+}
+
+function updateLeaderboardSortIndicators(body, sortState) {
+  const table = typeof body.closest === "function" ? body.closest("table") : null;
+  if (!table) return;
+  table.querySelectorAll("th[data-sort-key]").forEach((header) => {
+    const key = header.dataset.sortKey;
+    const active = key === sortState.key;
+    const direction = active ? sortState.direction : "none";
+    header.setAttribute("aria-sort", direction);
+    const button = header.querySelector("button[data-sort-key]");
+    if (!button) return;
+    const label = button.dataset.sortLabel || button.textContent.trim();
+    const nextDirection = active
+      ? direction === "ascending" ? "descending" : "ascending"
+      : LEADERBOARD_SORT_META[key]?.numeric ? "descending" : "ascending";
+    button.setAttribute("aria-label", `Sort by ${label}, ${nextDirection}`);
+    button.title = `Sort by ${label} (${nextDirection})`;
+  });
+}
+
+function bindLeaderboardSortControls(body) {
+  const table = typeof body.closest === "function" ? body.closest("table") : null;
+  if (!table) return;
+  table.querySelectorAll("button[data-sort-key]").forEach((button) => {
+    if (button.dataset.sortBound === "true") return;
+    button.dataset.sortBound = "true";
+    button.addEventListener("click", () => {
+      const key = button.dataset.sortKey;
+      const current = getLeaderboardSortState(body);
+      const direction = current.key === key
+        ? current.direction === "ascending" ? "descending" : "ascending"
+        : LEADERBOARD_SORT_META[key]?.numeric ? "descending" : "ascending";
+      leaderboardSortStateByBody.set(body, { key, direction });
+      renderLeaderboardRows(body, leaderboardEntriesByBody.get(body) || []);
+    });
+  });
+}
+
+function formatLeaderboardScore(value, decimals = 0) {
+  if (value == null || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return decimals ? number.toFixed(decimals) : String(value);
+}
+
 function renderLeaderboardRows(body, entries) {
+  leaderboardEntriesByBody.set(body, entries);
+  bindLeaderboardSortControls(body);
+  const sortState = getLeaderboardSortState(body);
+  updateLeaderboardSortIndicators(body, sortState);
   body.innerHTML = "";
   const limit = Number(body.dataset.limit || 0);
-  const visibleEntries = limit > 0 ? entries.slice(0, limit) : entries;
+  const sortedEntries = sortLeaderboardEntries(entries, sortState);
+  const visibleEntries = limit > 0 ? sortedEntries.slice(0, limit) : sortedEntries;
   visibleEntries.forEach((entry) => {
     const row = document.createElement("tr");
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
-    rank.textContent = entry.rank <= 3
+    rank.textContent = entry.rank >= 1 && entry.rank <= 3
       ? ["🥇", "🥈", "🥉"][entry.rank - 1]
-      : String(entry.rank);
-    rank.setAttribute("aria-label", `Rank ${entry.rank}`);
+      : String(entry.rank ?? "—");
+    rank.setAttribute("aria-label", `Rank ${entry.rank ?? "unavailable"}`);
 
     const player = document.createElement("th");
     player.scope = "row";
@@ -211,36 +361,37 @@ function renderLeaderboardRows(body, entries) {
     player.appendChild(playerButton);
 
     const regularSeason = document.createElement("td");
-    regularSeason.textContent = entry.regularSeason;
+    regularSeason.textContent = formatLeaderboardScore(entry.regularSeason);
     const playoffs = document.createElement("td");
-    playoffs.textContent = entry.playoffs;
+    playoffs.textContent = formatLeaderboardScore(entry.playoffs);
     const total = document.createElement("td");
     total.className = "leaderboard-total";
-    total.textContent = entry.total;
+    total.textContent = formatLeaderboardScore(
+      leaderboardScoreValue(entry, "classic", "total"),
+    );
 
-    const vegas = document.createElement("td");
-    vegas.className = "leaderboard-total";
-    vegas.textContent = entry.scores?.vegas?.total?.toFixed(2) ?? "—";
-    total.textContent = entry.scores?.classic?.total ?? entry.total;
     const bonus = document.createElement("td");
-    bonus.textContent = entry.scores?.vegas?.upsetBonus == null ? "—" : `+${entry.scores.vegas.upsetBonus.toFixed(2)}`;
-    row.append(rank, player, regularSeason, playoffs, total, bonus, vegas);
+    const upsetBonus = leaderboardScoreValue(entry, "vegas", "upsetBonus");
+    bonus.textContent = upsetBonus == null
+      ? "—"
+      : `+${formatLeaderboardScore(upsetBonus, 2)}`;
+    const upsetTotal = document.createElement("td");
+    upsetTotal.className = "leaderboard-total";
+    upsetTotal.textContent = formatLeaderboardScore(
+      leaderboardScoreValue(entry, "vegas", "total"),
+      2,
+    );
+    row.append(rank, player, regularSeason, playoffs, total, bonus, upsetTotal);
     body.appendChild(row);
   });
 }
 
 function renderLeaderboard() {
   const leaderboard = state.leaderboard;
-  const mode = document.querySelector("#public-scoring")?.value || "classic";
-  const entries = [...(leaderboard?.entries || [])].map((entry) => ({
-    ...entry, ...(entry.scores?.[mode] || {}),
-  })).sort((a, b) => b.total - a.total || b.regularSeason - a.regularSeason ||
-    b.playoffs - a.playoffs || a.leaderboardName.localeCompare(b.leaderboardName));
-  let rank = 0;
-  entries.forEach((entry, index) => {
-    if (!index || entry.total !== entries[index - 1].total) rank = index + 1;
-    entry.rank = rank;
-  });
+  const entries = [...(leaderboard?.entries || [])].map((entry, index) => ({
+    ...entry,
+    rank: entry.rank ?? index + 1,
+  }));
   elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
   elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
   renderLeaderboardRows(elements.leaderboardBody, entries);
@@ -372,7 +523,7 @@ function renderGroupLeaderboard() {
   renderLeaderboardRows(elements.groupLeaderboardBody, entries);
   if (leaderboard) {
     elements.activeGroupName.textContent = leaderboard.groupName;
-    elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Vegas Upset" : "Classic"} ranking · ${leaderboard.status}`;
+    elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Upset Edge" : "Classic"} ranking · ${leaderboard.status}`;
     elements.groupLeaderboardStatus.title = "";
   }
 }
@@ -636,5 +787,3 @@ async function shareGroupInviteNatively() {
     }
   }
 }
-
-document.querySelector("#public-scoring")?.addEventListener("change", renderLeaderboard);

@@ -1937,6 +1937,18 @@ body.predictions-locked .predictor .final-actions button {
   font-weight: 700;
 }
 
+.leaderboard-sort-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.leaderboard-sort-hint a {
+  color: var(--blue-dark);
+  text-underline-offset: 3px;
+}
+
 .leaderboard-table-shell {
   overflow-x: auto;
   background: var(--card);
@@ -1947,7 +1959,7 @@ body.predictions-locked .predictor .final-actions button {
 
 .leaderboard-table {
   width: 100%;
-  min-width: 620px;
+  min-width: 760px;
   border-collapse: collapse;
 }
 
@@ -1964,11 +1976,94 @@ body.predictions-locked .predictor .final-actions button {
 }
 
 .leaderboard-table thead th {
+  padding: 0;
   color: var(--muted);
   background: rgba(16, 34, 58, 0.035);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+}
+
+.leaderboard-sort-button {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: 1.25;
+  text-align: right;
+  text-transform: inherit;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.leaderboard-table thead th:first-child .leaderboard-sort-button {
+  justify-content: center;
+  text-align: center;
+}
+
+.leaderboard-table thead th:nth-child(2) .leaderboard-sort-button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.leaderboard-sort-button:hover,
+.leaderboard-sort-button:focus-visible,
+.leaderboard-table thead th[aria-sort="ascending"] .leaderboard-sort-button,
+.leaderboard-table thead th[aria-sort="descending"] .leaderboard-sort-button {
+  color: var(--blue-dark);
+  background: rgba(24, 89, 169, 0.075);
+}
+
+.leaderboard-sort-button:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.3);
+  outline-offset: -3px;
+}
+
+.leaderboard-sort-indicator {
+  position: relative;
+  width: 12px;
+  height: 14px;
+  flex: 0 0 12px;
+  display: inline-block;
+  color: currentColor;
+  opacity: 0.38;
+}
+
+.leaderboard-sort-indicator::before,
+.leaderboard-sort-indicator::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.leaderboard-sort-indicator::before {
+  top: 0;
+  border-bottom: 5px solid currentColor;
+}
+
+.leaderboard-sort-indicator::after {
+  bottom: 0;
+  border-top: 5px solid currentColor;
+}
+
+.leaderboard-table thead th[aria-sort="ascending"] .leaderboard-sort-indicator::before,
+.leaderboard-table thead th[aria-sort="descending"] .leaderboard-sort-indicator::after {
+  opacity: 1;
+}
+
+.leaderboard-table thead th[aria-sort="ascending"] .leaderboard-sort-indicator::after,
+.leaderboard-table thead th[aria-sort="descending"] .leaderboard-sort-indicator::before {
+  opacity: 0.25;
 }
 
 .leaderboard-table tbody th {
@@ -2280,6 +2375,58 @@ body.predictions-locked .predictor .final-actions button {
 
 .scoring-note p:last-child {
   margin-bottom: 0;
+}
+
+.scoring-formula {
+  margin: 0 0 20px;
+  padding: 18px 16px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+}
+
+.scoring-note p.scoring-formula-equation {
+  margin: 0 0 13px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  color: white;
+  font-family: var(--display);
+  font-size: clamp(1.3rem, 2.3vw, 1.8rem);
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.scoring-formula-equation strong {
+  color: white;
+  font-weight: 700;
+}
+
+.scoring-formula-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  color: white;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.scoring-formula-fraction span:first-child {
+  padding: 0 4px 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.scoring-formula-fraction span:last-child {
+  padding-top: 5px;
+}
+
+.scoring-note p.scoring-formula-explainer {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .saved-card-actions {
@@ -2702,6 +2849,11 @@ footer p {
 
   .group-leaderboard-heading-actions {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scoring-formula-equation {
+    align-items: flex-start;
     flex-direction: column;
   }
 
