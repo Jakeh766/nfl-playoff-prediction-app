@@ -186,6 +186,26 @@ session, page-view, and prediction-save summaries; traffic and page-popularity
 charts; conversion and engagement breakdowns; recent sessions; and backend
 Lambda health. Each deployment summary includes a direct link to its dashboard.
 
+## Scoring options
+
+Classic and Vegas Upset each have a 300-point maximum. Vegas Upset weights
+each Classic pick value by `18 - preseason win total`, then allocates exactly
+150 points to field/division/seeding picks and 150 to playoff picks. Allocation
+uses integer hundredths and largest remainders. Missing picks retain the
+maximum weight and earn nothing; later-round credit remains independent.
+
+`backend/lambda/scoring_odds.json` freezes the existing bundled 2026 market
+snapshot for everyone. Scoring never reads the live odds cache. Do not change
+this snapshot during a season: doing so would change everyone's allocation.
+Prepare a matching snapshot when rolling over `season_results.json` to a new
+season. These are win-total weights, not implied game moneyline probabilities.
+
+Leaderboards return both totals in each entry's `scores`; the public UI can
+rank by either. Groups store `scoringOption` (`classic` or `vegas`) at creation,
+and use it for ranking. Legacy groups default to `classic`; joining does not
+change a group's option. Run the ranking UI regression with
+`node --test backend/test_leaderboard.cjs` alongside the Python suite.
+
 ## Repository layout
 
 ```text

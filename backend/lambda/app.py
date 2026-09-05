@@ -247,7 +247,7 @@ def scan_all(table) -> list[dict]:
         scan_arguments["ExclusiveStartKey"] = last_key
 
 
-def build_leaderboard(member_ids: set[str] | None = None) -> dict:
+def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic") -> dict:
     results = load_season_results()
     profiles = {
         item["profileKey"].removeprefix("user#"): item
@@ -262,10 +262,14 @@ def build_leaderboard(member_ids: set[str] | None = None) -> dict:
         profile = profiles.get(prediction.get("profileKey"))
         if not profile:
             continue
-        score = score_prediction(prediction, results)
+        scores = {mode: score_prediction(prediction, results, mode)
+                  for mode in ("classic", "vegas")}
+        score = scores[scoring_option]
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
+                "scores": {mode: {key: value[key] for key in ("regularSeason", "playoffs", "total")}
+                           for mode, value in scores.items()},
                 "regularSeason": score["regularSeason"],
                 "playoffs": score["playoffs"],
                 "total": score["total"],
@@ -294,6 +298,7 @@ def build_leaderboard(member_ids: set[str] | None = None) -> dict:
         "updatedAt": results.get("updatedAt"),
         "maximum": MAX_SCORE,
         "entries": entries,
+        "scoringOption": scoring_option,
     }
 
 
@@ -310,6 +315,7 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
     return {
         "leaderboardName": profile["leaderboardName"],
         "savedAt": prediction.get("savedAt"),
+        "vegasScore": score_prediction(prediction, load_season_results(), "vegas"),
         "divisionWinners": {
             conference: {
                 division: division_winners.get(conference, {}).get(division, "")
@@ -375,8 +381,12 @@ def load_season_results() -> dict:
         return json.load(results_file)
 
 
-def score_prediction(prediction: dict, results: dict | None = None) -> dict:
+def score_prediction(prediction: dict, results: dict | None = None, scoring_option: str = "classic") -> dict:
     results = results or load_season_results()
+    if scoring_option == "vegas":
+        return score_vegas_prediction(prediction, results)
+    if scoring_option != "classic":
+        raise ValueError("Unknown scoring option")
     actual_seeds = results.get("seeds", {})
     actual_divisions = results.get("divisionWinners", {})
     round_winners = results.get("roundWinners", {})
@@ -527,6 +537,95 @@ def score_prediction(prediction: dict, results: dict | None = None) -> dict:
         "possible": sum(category["possible"] for category in breakdown.values()),
         "maximum": MAX_SCORE,
     }
+
+
+def score_vegas_prediction(prediction: dict, results: dict) -> dict:
+    """Allocate each bracket's two 150-point budgets using frozen market totals.
+
+    Missing/unknown picks retain the largest weight, so blanking a pick cannot
+    increase the value of the remaining picks. Duplicate teams never earn twice
+    in a field or round. Integer hundredths keep the maximum exactly 300.
+    """
+    with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
+        snapshot = json.load(file)
+    if snapshot["season"] != results.get("season"):
+        raise ValueError("Vegas scoring needs a market snapshot for this season")
+    totals = snapshot["totals"]
+    slots = []
+
+    def add(category, team, correct, settled, base):
+        weight = base * (18 - totals[team]) if team in totals else base * 18
+        slots.append((category, weight, bool(team in totals and correct), bool(settled)))
+
+    actual_seeds = results.get("seeds", {})
+    divisions = results.get("divisionWinners", {})
+    winners = results.get("roundWinners", {})
+    for conference in ("AFC", "NFC"):
+        seeds = prediction.get("seeds", {}).get(conference, [])
+        actual = actual_seeds.get(conference, [])
+        seen = set()
+        for index, base in enumerate(EXACT_SEED_POINTS):
+            team = seeds[index] if index < len(seeds) else ""
+            add("playoffField", team, team in actual and team not in seen,
+                team in actual or len([t for t in actual if t]) == 7, 5)
+            add("exactSeeds", team, index < len(actual) and team == actual[index],
+                index < len(actual) and actual[index], base)
+            seen.add(team)
+        for division in ("North", "South", "East", "West"):
+            team = prediction.get("divisionWinners", {}).get(conference, {}).get(division, "")
+            actual_team = divisions.get(conference, {}).get(division)
+            add("divisionWinners", team, team == actual_team, actual_team, 5)
+
+    regular_count = len(slots)
+    for category, games, base, count in (
+        ("wildCard", ("wc-2-7", "wc-3-6", "wc-4-5"), 5, 6),
+        ("divisional", ("div-1", "div-2"), 10, 4),
+        ("conferenceChampions", ("conf",), 20, 2),
+    ):
+        actual = winners.get(category, {} if category == "conferenceChampions" else [])
+        seen = set()
+        for conference in ("AFC", "NFC"):
+            for game in games:
+                team = prediction.get("picks", {}).get(conference, {}).get(game, "")
+                correct = (team == actual.get(conference) if isinstance(actual, dict)
+                           else team in actual)
+                settled = (bool(actual.get(conference)) if isinstance(actual, dict)
+                           else correct or len([t for t in actual if t]) == count)
+                add(category, team, correct and team not in seen, settled, base)
+                seen.add(team)
+    champion = winners.get("superBowlChampion")
+    add("superBowlChampion", prediction.get("picks", {}).get("superBowl", ""),
+        prediction.get("picks", {}).get("superBowl") == champion, champion, 40)
+
+    breakdown = {key: {"label": rule["label"], "hits": 0, "settled": 0,
+                       "points": 0, "possible": 0, "maximum": 0}
+                 for key, rule in SCORING_RULES.items()}
+    phase_points = []
+    for phase in (slots[:regular_count], slots[regular_count:]):
+        total_weight = sum(slot[1] for slot in phase)
+        raw = [Decimal(str(slot[1])) * 15000 / Decimal(str(total_weight)) for slot in phase]
+        allocations = [int(value) for value in raw]
+        order = sorted(range(len(raw)), key=lambda i: raw[i] - allocations[i], reverse=True)
+        for index in order[:15000 - sum(allocations)]:
+            allocations[index] += 1
+        phase_points.append(sum(value for value, slot in zip(allocations, phase) if slot[2]))
+        for (category, _, correct, settled), value in zip(phase, allocations):
+            item = breakdown[category]
+            item["hits"] += int(correct)
+            item["settled"] += int(settled)
+            item["points"] += value if correct else 0
+            item["possible"] += value if settled else 0
+            item["maximum"] += value
+    for item in breakdown.values():
+        for key in ("points", "possible", "maximum"):
+            item[key] = item[key] / 100
+    return {"season": results.get("season"), "status": results.get("status"),
+            "updatedAt": results.get("updatedAt"), "scoringOption": "vegas",
+            "oddsSource": snapshot["source"], "breakdown": breakdown,
+            "regularSeason": phase_points[0] / 100, "playoffs": phase_points[1] / 100,
+            "total": sum(phase_points) / 100,
+            "possible": round(sum(item["possible"] for item in breakdown.values()), 2),
+            "maximum": MAX_SCORE}
 
 
 def fetch_live_totals() -> dict[str, float]:
@@ -807,6 +906,7 @@ def public_group(group: dict) -> dict:
         "groupId": group["groupId"],
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
+        "scoringOption": group.get("scoringOption", "classic"),
     }
 
 
@@ -862,6 +962,9 @@ def create_group(user_id: str, event: dict) -> dict:
     body = parse_body(event)
     group_name, normalized_name = normalize_group_name(body.get("groupName"))
     password = validate_group_password(body.get("password"))
+    scoring_option = body.get("scoringOption", "classic")
+    if scoring_option not in ("classic", "vegas"):
+        raise ValueError("Choose Classic or Vegas Upset scoring")
     group_id = str(uuid.uuid4())
     created_at = int(time.time() * 1000)
     salt, digest = hash_group_password(password)
@@ -890,6 +993,7 @@ def create_group(user_id: str, event: dict) -> dict:
         "groupId": group_id,
         "groupName": group_name,
         "normalizedName": normalized_name,
+        "scoringOption": scoring_option,
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
@@ -1024,7 +1128,7 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
         and item.get("groupId") == group_id
     }
     return {
-        **build_leaderboard(member_ids),
+        **build_leaderboard(member_ids, group.get("scoringOption", "classic")),
         "groupId": group_id,
         "groupName": group["groupName"],
     }

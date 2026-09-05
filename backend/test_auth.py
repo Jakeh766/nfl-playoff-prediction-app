@@ -385,7 +385,7 @@ class PrivateGroupTests(unittest.TestCase):
             "status": "In progress",
             "updatedAt": "2026-12-01",
         }
-        lambda_app.score_prediction = lambda prediction, _results: {
+        lambda_app.score_prediction = lambda prediction, _results, scoring_option="classic": {
             "status": "In progress",
             "regularSeason": prediction["testScore"],
             "playoffs": 0,
@@ -439,6 +439,20 @@ class PrivateGroupTests(unittest.TestCase):
         )
 
         self.assertEqual(result["statusCode"], 401)
+
+    def test_vegas_group_option_is_saved_and_used(self):
+        result = lambda_app.handler(event("POST", user_id="user-123", path="/api/groups",
+            body={"groupName": "Vegas Crew", "password": "secret1", "scoringOption": "vegas"}), None)
+        created = json.loads(result["body"])
+        self.assertEqual(created["scoringOption"], "vegas")
+        board = lambda_app.get_group_leaderboard(created["groupId"], "user-123")
+        self.assertEqual(board["scoringOption"], "vegas")
+        self.assertEqual(set(board["entries"][0]["scores"]), {"classic", "vegas"})
+
+    def test_invalid_group_scoring_is_rejected(self):
+        result = lambda_app.handler(event("POST", user_id="user-123", path="/api/groups",
+            body={"groupName": "Vegas Crew", "password": "secret1", "scoringOption": "unknown"}), None)
+        self.assertEqual(result["statusCode"], 400)
 
     def test_create_hashes_password_and_reserves_unique_name(self):
         created = self.create()
@@ -593,7 +607,7 @@ class PublicLeaderboardTests(unittest.TestCase):
             "status": "In progress",
             "updatedAt": "2026-12-01",
         }
-        lambda_app.score_prediction = lambda prediction, _results: {
+        lambda_app.score_prediction = lambda prediction, _results, scoring_option="classic": {
             "status": "In progress",
             "regularSeason": prediction["testScore"],
             "playoffs": 0,

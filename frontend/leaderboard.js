@@ -133,7 +133,7 @@ function renderPublicBracket(bracket) {
       }).format(new Date(bracket.savedAt))}`
     : "";
   elements.publicBracketStatus.textContent =
-    `${score.total ?? 0} / ${score.maximum ?? 300} points${savedAt}`;
+    `Classic: ${score.total ?? 0} / 300 · Vegas Upset: ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} / 300${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
@@ -218,14 +218,27 @@ function renderLeaderboardRows(body, entries) {
     total.className = "leaderboard-total";
     total.textContent = entry.total;
 
-    row.append(rank, player, regularSeason, playoffs, total);
+    const vegas = document.createElement("td");
+    vegas.className = "leaderboard-total";
+    vegas.textContent = entry.scores?.vegas?.total?.toFixed(2) ?? "—";
+    total.textContent = entry.scores?.classic?.total ?? entry.total;
+    row.append(rank, player, regularSeason, playoffs, total, vegas);
     body.appendChild(row);
   });
 }
 
 function renderLeaderboard() {
   const leaderboard = state.leaderboard;
-  const entries = leaderboard?.entries || [];
+  const mode = document.querySelector("#public-scoring")?.value || "classic";
+  const entries = [...(leaderboard?.entries || [])].map((entry) => ({
+    ...entry, ...(entry.scores?.[mode] || {}),
+  })).sort((a, b) => b.total - a.total || b.regularSeason - a.regularSeason ||
+    b.playoffs - a.playoffs || a.leaderboardName.localeCompare(b.leaderboardName));
+  let rank = 0;
+  entries.forEach((entry, index) => {
+    if (!index || entry.total !== entries[index - 1].total) rank = index + 1;
+    entry.rank = rank;
+  });
   elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
   elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
   renderLeaderboardRows(elements.leaderboardBody, entries);
@@ -300,6 +313,9 @@ async function loadLeaderboard() {
       };
       state.leaderboard.entries.forEach((entry, index) => {
         entry.bracket = createPreviewPublicBracket(entry.leaderboardName, index);
+        entry.scores = { classic: { regularSeason: 0, playoffs: 0, total: 0 },
+          vegas: { regularSeason: 0, playoffs: 0, total: 0 } };
+        entry.bracket.vegasScore = { total: 0 };
       });
     } else {
       state.leaderboard = null;
@@ -354,7 +370,7 @@ function renderGroupLeaderboard() {
   renderLeaderboardRows(elements.groupLeaderboardBody, entries);
   if (leaderboard) {
     elements.activeGroupName.textContent = leaderboard.groupName;
-    elements.groupLeaderboardStatus.textContent = leaderboard.status;
+    elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Vegas Upset" : "Classic"} ranking · ${leaderboard.status}`;
     elements.groupLeaderboardStatus.title = "";
   }
 }
@@ -413,6 +429,7 @@ function openGroupDialog(mode) {
   groupDialogMode = mode;
   const creating = mode === "create";
   elements.groupForm.reset();
+  document.querySelector("#group-scoring-field").classList.toggle("hidden", !creating);
   elements.groupDialogKicker.textContent = creating ? "NEW PRIVATE GROUP" : "JOIN PRIVATE GROUP";
   elements.groupDialogTitle.textContent = creating ? "Create a group." : "Join a group.";
   elements.groupDialogDescription.textContent = creating
@@ -440,6 +457,7 @@ async function submitGroup(event) {
       body: JSON.stringify({
         groupName: elements.groupName.value,
         password: elements.groupPassword.value,
+        ...(creating ? { scoringOption: document.querySelector("#group-scoring").value } : {}),
       }),
     });
     elements.groupDialog.close();
@@ -616,3 +634,5 @@ async function shareGroupInviteNatively() {
     }
   }
 }
+
+document.querySelector("#public-scoring")?.addEventListener("change", renderLeaderboard);

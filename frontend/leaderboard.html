@@ -9,11 +9,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css?v=26" />
-    <script src="/shell.js?v=2" defer></script>
+    <script src="/shell.js?v=3" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=22" defer></script>
-    <script src="/leaderboard.js?v=2" defer></script>
+    <script src="/leaderboard.js?v=3" defer></script>
     <script src="/bootstrap.js?v=3" defer></script>
   </head>
   <body data-page="leaderboard">
@@ -34,10 +34,13 @@
           </div>
         </div>
         <div class="leaderboard-view-panel" id="public-leaderboard-panel" role="tabpanel" aria-labelledby="public-leaderboard-tab">
+          <label for="public-scoring">Rank and show phase points by</label>
+          <select id="public-scoring"><option value="classic">Classic</option><option value="vegas">Vegas Upset</option></select>
+          <p class="input-hint">Both totals are shown. Field + seeding and Playoffs follow the selected scoring option. <a href="/scoring" data-clean-route="/scoring">Scoring rules</a></p>
           <p class="leaderboard-status" id="leaderboard-status" role="status">Loading leaderboard…</p>
           <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
             <table class="leaderboard-table">
-              <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Total</th></tr></thead>
+              <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Classic / 300</th><th scope="col">Vegas Upset / 300</th></tr></thead>
               <tbody id="leaderboard-body"></tbody>
             </table>
           </div>
@@ -60,7 +63,7 @@
             </div>
             <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
               <table class="leaderboard-table">
-                <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Total</th></tr></thead>
+                <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Field + seeding</th><th scope="col">Playoffs</th><th scope="col">Classic / 300</th><th scope="col">Vegas Upset / 300</th></tr></thead>
                 <tbody id="group-leaderboard-body"></tbody>
               </table>
             </div>

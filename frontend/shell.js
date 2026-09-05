@@ -166,6 +166,14 @@ if (dialogs) {
           <label for="group-name">Group name</label>
           <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
           <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
+          <div id="group-scoring-field">
+            <label for="group-scoring">Scoring option</label>
+            <select id="group-scoring" name="scoring-option" aria-describedby="group-scoring-hint">
+              <option value="classic">Classic · 300 points</option>
+              <option value="vegas">Vegas Upset · 300 points</option>
+            </select>
+            <p class="input-hint" id="group-scoring-hint">Vegas Upset gives more weight to lower Vegas win totals in seeding and playoffs. This choice sets your group’s ranking and cannot be changed.</p>
+          </div>
           <label for="group-password">Group password</label>
           <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="current-password" required />
           <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>

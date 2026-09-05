@@ -108,6 +108,47 @@ def completed_results():
 
 
 class PredictionScoringTests(unittest.TestCase):
+    def test_vegas_perfect_bracket_and_allocations_equal_300(self):
+        score = lambda_app.score_prediction(perfect_prediction(), completed_results(), "vegas")
+        self.assertEqual(score["total"], 300)
+        self.assertEqual(score["possible"], 300)
+        self.assertEqual(score["regularSeason"], 150)
+        self.assertEqual(score["playoffs"], 150)
+        self.assertAlmostEqual(sum(v["maximum"] for v in score["breakdown"].values()), 300)
+
+    def test_vegas_rewards_lower_market_total_in_seeding_and_playoffs(self):
+        prediction = perfect_prediction()
+        results = completed_results()
+        # Vikings (7.5) carry more weight than Rams (11.5), in equal-value slots.
+        full = lambda_app.score_prediction(prediction, results, "vegas")
+        import copy
+        losses = {}
+        for team, index, game in (("Minnesota Vikings", 1, "wc-2-7"),
+                                  ("Los Angeles Rams", 2, "wc-3-6")):
+            partial = copy.deepcopy(results)
+            partial["seeds"]["NFC"][index] = ""
+            partial["roundWinners"]["wildCard"].remove(team)
+            score = lambda_app.score_prediction(prediction, partial, "vegas")
+            losses[team] = (full["regularSeason"] - score["regularSeason"],
+                            full["playoffs"] - score["playoffs"])
+        self.assertGreater(losses["Minnesota Vikings"][0], losses["Los Angeles Rams"][0])
+        self.assertGreater(losses["Minnesota Vikings"][1], losses["Los Angeles Rams"][1])
+
+    def test_vegas_blank_picks_do_not_inflate_remaining_credit(self):
+        prediction = perfect_prediction()
+        prediction["picks"]["NFC"]["wc-2-7"] = "wrong"
+        wrong = lambda_app.score_prediction(prediction, completed_results(), "vegas")
+        prediction["picks"]["NFC"]["wc-2-7"] = ""
+        blank = lambda_app.score_prediction(prediction, completed_results(), "vegas")
+        self.assertEqual(blank["total"], wrong["total"])
+        self.assertLess(blank["total"], 300)
+        self.assertEqual(lambda_app.score_prediction({}, completed_results(), "vegas")["total"], 0)
+
+    def test_vegas_preseason_has_no_earned_or_settled_points(self):
+        score = lambda_app.score_prediction(perfect_prediction(), {"season": 2026}, "vegas")
+        self.assertEqual(score["total"], 0)
+        self.assertEqual(score["possible"], 0)
+
     def test_perfect_bracket_scores_300_points(self):
         score = lambda_app.score_prediction(perfect_prediction(), completed_results())
 
