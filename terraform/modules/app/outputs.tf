@@ -50,10 +50,10 @@ output "cognito_client_id" {
 
 output "analytics_dashboard_name" {
   description = "CloudWatch analytics dashboard name for environments where analytics are enabled."
-  value       = try(aws_cloudwatch_dashboard.analytics[0].dashboard_name, null)
+  value       = aws_cloudwatch_dashboard.analytics[0].dashboard_name
 }
 
 output "analytics_dashboard_url" {
   description = "AWS console URL for the CloudWatch analytics dashboard."
-  value       = var.environment == "dev" ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.analytics[0].dashboard_name}" : null
+  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.analytics[0].dashboard_name}"
 }

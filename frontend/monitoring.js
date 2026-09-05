@@ -2,7 +2,7 @@
   try {
     const config = window.AUTH_CONFIG || {};
     if (
-      config.environment !== "dev" ||
+      !["dev", "prod"].includes(config.environment) ||
       navigator.doNotTrack === "1" ||
       navigator.globalPrivacyControl
     ) {

@@ -146,16 +146,17 @@ These are DynamoDB-only demo participants rather than Cognito login accounts.
 They exist to populate global and group standings without requiring disposable
 email inboxes or verification codes. Production is never seeded.
 
-## Development site analytics
+## Site analytics
 
-The deployed dev site records privacy-conscious, first-party analytics in the
-existing backend Lambda log group. It uses random browser and tab-session IDs,
-does not send email addresses, IP addresses, query strings, or referrers, and
-honors the browser's Do Not Track and Global Privacy Control settings.
-Monitoring is disabled in local previews and production.
+The deployed dev and production sites record privacy-conscious, first-party
+analytics in their existing backend Lambda log groups. They use random browser
+and tab-session IDs, do not send email addresses, IP addresses, query strings,
+or referrers, and honor the browser's Do Not Track and Global Privacy Control
+settings. Monitoring remains disabled in local previews.
 
-In CloudWatch Logs Insights, select
-`/aws/lambda/nfl-playoff-predictor-dev-backend` and use this query for daily
+In CloudWatch Logs Insights, select the environment's backend log group
+(`/aws/lambda/nfl-playoff-predictor-dev-backend` or
+`/aws/lambda/nfl-playoff-predictor-backend`) and use this query for daily
 traffic:
 
 ```text
@@ -178,11 +179,12 @@ fields event, page, sessionId
 The tracked conversion events are account creation, sign-in, prediction save,
 group creation, password-based group join, and invite-based group join.
 
-Terraform also creates the `nfl-playoff-predictor-dev-analytics` CloudWatch
-dashboard. It opens on a seven-day view with visitor, session, page-view, and
-prediction-save summaries; traffic and page-popularity charts; conversion and
-engagement breakdowns; recent sessions; and backend Lambda health. The dev
-deployment summary includes a direct link to the dashboard.
+Terraform also creates a CloudWatch dashboard for each environment:
+`nfl-playoff-predictor-dev-analytics` and
+`nfl-playoff-predictor-analytics`. Each opens on a seven-day view with visitor,
+session, page-view, and prediction-save summaries; traffic and page-popularity
+charts; conversion and engagement breakdowns; recent sessions; and backend
+Lambda health. Each deployment summary includes a direct link to its dashboard.
 
 ## Repository layout
 

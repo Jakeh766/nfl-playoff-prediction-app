@@ -698,7 +698,7 @@ def record_analytics_event(event: dict) -> None:
         json.dumps(
             {
                 "type": "site_analytics",
-                "environment": "dev",
+                "environment": os.environ.get("ENVIRONMENT"),
                 "event": event_name,
                 "page": page,
                 "sessionId": session_id,
@@ -1054,7 +1054,7 @@ def handler(event, context):
     path = event.get("rawPath")
 
     if method == "POST" and path == "/api/analytics":
-        if os.environ.get("ENVIRONMENT") != "dev":
+        if os.environ.get("ENVIRONMENT") not in {"dev", "prod"}:
             return response(404, {"message": "Not found"})
         try:
             record_analytics_event(event)

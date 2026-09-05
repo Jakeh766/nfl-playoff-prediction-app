@@ -134,6 +134,7 @@ jobs:
             echo ""
             echo "- App: $(terraform -chdir=terraform/envs/prod output -raw app_url)"
             echo "- API: $(terraform -chdir=terraform/envs/prod output -raw api_url)"
+            echo "- Analytics dashboard: $(terraform -chdir=terraform/envs/prod output -raw analytics_dashboard_url)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
