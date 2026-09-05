@@ -43,6 +43,7 @@ module "nfl_app" {
   api_throttling_rate_limit  = var.api_throttling_rate_limit
   api_throttling_burst_limit = var.api_throttling_burst_limit
   cloudfront_price_class     = var.cloudfront_price_class
+  cognito_email_domain       = "predictplayoffs.com"
   frontend_dir               = abspath("${path.root}/../../../frontend")
   lambda_source_dir          = abspath("${path.root}/../../../backend/lambda")
   lambda_zip_path            = abspath("${path.root}/lambda.zip")
