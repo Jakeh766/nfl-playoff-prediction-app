@@ -1,4 +1,4 @@
-"""Tests for privacy-conscious development-site analytics."""
+"""Tests for privacy-conscious first-party site analytics."""
 
 from __future__ import annotations
 
@@ -38,14 +38,15 @@ class AnalyticsTests(unittest.TestCase):
         "visitorId": "23f1dc60-e4a2-4a12-b31c-1be61e25b455",
     }
 
-    def test_dev_event_is_logged_without_request_metadata(self):
+    def test_event_is_logged_without_request_metadata(self):
         output = StringIO()
-        with patch.dict(os.environ, {"ENVIRONMENT": "dev"}), redirect_stdout(output):
+        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), redirect_stdout(output):
             result = lambda_app.handler(analytics_event(self.valid_body), None)
 
         record = json.loads(output.getvalue())
         self.assertEqual(result["statusCode"], 202)
         self.assertEqual(record["type"], "site_analytics")
+        self.assertEqual(record["environment"], "prod")
         self.assertEqual(record["event"], "page_view")
         self.assertNotIn("email", record)
         self.assertNotIn("ip", record)
@@ -57,8 +58,8 @@ class AnalyticsTests(unittest.TestCase):
 
         self.assertEqual(result["statusCode"], 400)
 
-    def test_analytics_route_is_disabled_outside_dev(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}):
+    def test_analytics_route_is_disabled_for_unknown_environment(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "preview"}):
             result = lambda_app.handler(analytics_event(self.valid_body), None)
 
         self.assertEqual(result["statusCode"], 404)

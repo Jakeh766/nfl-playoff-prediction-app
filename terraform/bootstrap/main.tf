@@ -16,6 +16,7 @@ locals {
 
   prod_frontend_bucket = "${var.project_name}-frontend-${local.account_id}"
   prod_lambda_role     = "${var.project_name}-lambda-role"
+  prod_dashboard_name  = "${var.project_name}-analytics"
 
   github_oidc_subject      = "repo:${var.github_repository}:environment:${var.github_environment}"
   github_prod_oidc_subject = "repo:${var.github_repository}:environment:${var.github_prod_environment}"
@@ -561,6 +562,22 @@ data "aws_iam_policy_document" "github_prod_deploy" {
       "arn:aws:cloudfront::${local.account_id}:origin-access-control/${var.prod_cloudfront_oac_id}",
       "arn:aws:cloudfront::${local.account_id}:cache-policy/${var.prod_cloudfront_cache_policy_id}",
     ]
+  }
+
+  statement {
+    sid = "ManageProdAnalyticsDashboard"
+    actions = [
+      "cloudwatch:DeleteDashboards",
+      "cloudwatch:GetDashboard",
+      "cloudwatch:PutDashboard",
+    ]
+    resources = ["arn:aws:cloudwatch::${local.account_id}:dashboard/${local.prod_dashboard_name}"]
+  }
+
+  statement {
+    sid       = "ListCloudWatchDashboards"
+    actions   = ["cloudwatch:ListDashboards"]
+    resources = ["*"]
   }
 
   statement {

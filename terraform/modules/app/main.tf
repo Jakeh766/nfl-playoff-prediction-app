@@ -299,7 +299,7 @@ resource "aws_apigatewayv2_route" "prediction_window" {
 }
 
 resource "aws_apigatewayv2_route" "analytics" {
-  count = var.environment == "dev" ? 1 : 0
+  count = contains(["dev", "prod"], var.environment) ? 1 : 0
 
   api_id    = aws_apigatewayv2_api.api.id
   route_key = "POST /api/analytics"
@@ -418,7 +418,7 @@ resource "aws_apigatewayv2_stage" "default" {
 }
 
 resource "aws_cloudwatch_dashboard" "analytics" {
-  count = var.environment == "dev" ? 1 : 0
+  count = contains(["dev", "prod"], var.environment) ? 1 : 0
 
   dashboard_name = "${local.resource_prefix}-analytics"
   dashboard_body = jsonencode({
@@ -432,7 +432,7 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         width  = 24
         height = 2
         properties = {
-          markdown = "# Road to the Bowl — Dev Analytics\nAnonymous product analytics for the development site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
+          markdown = "# Road to the Bowl — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
         }
       },
       {
