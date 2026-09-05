@@ -1978,6 +1978,11 @@ body.predictions-locked .predictor .final-actions button {
   text-align: center !important;
 }
 
+.leaderboard-player-heading {
+  padding: 0 18px !important;
+  text-align: left !important;
+}
+
 .leaderboard-table thead th {
   padding: 0;
   color: var(--muted);
