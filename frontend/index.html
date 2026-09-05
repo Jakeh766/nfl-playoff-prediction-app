@@ -14,7 +14,7 @@
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=22" defer></script>
-    <script src="/leaderboard.js?v=6" defer></script>
+    <script src="/leaderboard.js?v=7" defer></script>
     <script src="/bootstrap.js?v=3" defer></script>
   </head>
   <body data-page="home">
@@ -97,14 +97,14 @@
           <a class="button button-secondary" href="/leaderboard" data-clean-route="/leaderboard">View full leaderboard</a>
         </div>
         <div id="public-leaderboard-panel">
-          <p class="leaderboard-sort-hint" id="home-leaderboard-sort-hint">Click a score column heading to sort. Super Bowl picks appear beside each player.</p>
+          <p class="leaderboard-sort-hint" id="home-leaderboard-sort-hint">Click a score column heading to sort. Super Bowl logos appear beside each player.</p>
           <p class="leaderboard-status" id="leaderboard-status" role="status">Loading leaderboard…</p>
           <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
             <table class="leaderboard-table" aria-describedby="home-leaderboard-sort-hint">
               <thead><tr>
                 <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                 <th scope="col" data-sort-key="player" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="player" data-sort-label="Player" aria-label="Sort by player, ascending"><span>Player</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
-                <th scope="col" class="leaderboard-champion-heading"><span>Super Bowl pick</span></th>
+                <th scope="col" class="leaderboard-champion-heading" aria-label="Super Bowl pick"></th>
                 <th scope="col" data-sort-key="field" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="field" data-sort-label="Field and seeding" aria-label="Sort by field and seeding, descending"><span>Field + seeding</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                 <th scope="col" data-sort-key="playoffs" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="playoffs" data-sort-label="Playoffs" aria-label="Sort by playoffs, descending"><span>Playoffs</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                 <th scope="col" data-sort-key="classic" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="classic" data-sort-label="Classic points" aria-label="Sort by Classic points, descending"><span>Classic points</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>

@@ -1953,7 +1953,7 @@ body.predictions-locked .predictor .final-actions button {
 
 .leaderboard-table {
   width: 100%;
-  min-width: 920px;
+  min-width: 820px;
   border-collapse: collapse;
 }
 
@@ -1972,8 +1972,10 @@ body.predictions-locked .predictor .final-actions button {
 }
 
 .leaderboard-champion-heading {
-  padding: 0 18px !important;
-  text-align: left !important;
+  width: 72px;
+  min-width: 72px;
+  padding: 0 !important;
+  text-align: center !important;
 }
 
 .leaderboard-table thead th {
@@ -2076,6 +2078,15 @@ body.predictions-locked .predictor .final-actions button {
   border-bottom: 0;
 }
 
+.leaderboard-row {
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.leaderboard-row:hover {
+  background: rgba(24, 89, 169, 0.04);
+}
+
 .leaderboard-player-button {
   padding: 0;
   color: var(--blue-dark);
@@ -2108,9 +2119,16 @@ body.predictions-locked .predictor .final-actions button {
   text-underline-offset: 3px;
 }
 
+.leaderboard-player-button:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.3);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
 .leaderboard-champion {
-  min-width: 176px;
-  white-space: nowrap;
+  width: 72px;
+  min-width: 72px;
+  text-align: center !important;
 }
 
 .leaderboard-champion-pick {
@@ -2128,15 +2146,6 @@ body.predictions-locked .predictor .final-actions button {
   flex: 0 0 30px;
   display: block;
   object-fit: contain;
-}
-
-.leaderboard-champion-pick span {
-  max-width: 175px;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: normal;
 }
 
 .leaderboard-rank {

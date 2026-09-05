@@ -348,9 +348,7 @@ function createLeaderboardChampionCell(entry) {
   const logo = createTeamLogo(champion, "leaderboard-champion-logo");
   logo.alt = "";
   logo.setAttribute("aria-hidden", "true");
-  const name = document.createElement("span");
-  name.textContent = champion;
-  pick.append(logo, name);
+  pick.appendChild(logo);
   cell.appendChild(pick);
   cell.setAttribute("aria-label", `Super Bowl pick: ${champion}`);
   return cell;
@@ -367,6 +365,8 @@ function renderLeaderboardRows(body, entries) {
   const visibleEntries = limit > 0 ? sortedEntries.slice(0, limit) : sortedEntries;
   visibleEntries.forEach((entry) => {
     const row = document.createElement("tr");
+    row.className = "leaderboard-row";
+    row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
     rank.textContent = entry.rank >= 1 && entry.rank <= 3
@@ -384,7 +384,6 @@ function renderLeaderboardRows(body, entries) {
     const viewLabel = document.createElement("span");
     viewLabel.textContent = "View bracket";
     playerButton.append(playerName, viewLabel);
-    playerButton.addEventListener("click", () => openPublicBracket(entry));
     player.appendChild(playerButton);
 
     const champion = createLeaderboardChampionCell(entry);
