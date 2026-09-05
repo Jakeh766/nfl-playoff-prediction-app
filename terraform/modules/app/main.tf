@@ -566,8 +566,8 @@ resource "aws_cloudwatch_dashboard" "analytics" {
           stat    = "Sum"
           stacked = false
           metrics = [
-            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.backend.function_name, { label = "Invocations", color = "2F855A" }],
-            [".", "Errors", ".", ".", { label = "Errors", color = "C53030" }],
+            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.backend.function_name],
+            [".", "Errors", ".", "."],
           ]
           yAxis = {
             left = {
