@@ -38,6 +38,13 @@ and the Lambda function uses the verified Cognito `sub` claim as the DynamoDB
 key. Signed-in users can permanently delete their prediction and Cognito user
 through an in-app confirmation dialog.
 
+Production verification and password-recovery messages are sent as
+`Road to the Bowl <no-reply@predictplayoffs.com>`. The domain is verified in
+Amazon SES and authenticated with DKIM, a custom MAIL FROM domain, SPF, and
+DMARC records in Cloudflare. Cognito continues to use its built-in delivery
+service so these transactional messages do not depend on SES production-access
+approval.
+
 Leaderboard profiles are stored separately from private predictions. Names are
 trimmed and reserved case-insensitively, so capitalization cannot be used to
 duplicate another account's name. New and existing accounts are prompted for a

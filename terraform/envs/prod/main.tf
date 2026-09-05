@@ -63,6 +63,7 @@ module "nfl_app" {
   cloudfront_price_class     = var.cloudfront_price_class
   cloudfront_aliases         = [var.site_domain_name, "www.${var.site_domain_name}"]
   acm_certificate_arn        = aws_acm_certificate.site.arn
+  cognito_email_domain       = var.site_domain_name
   frontend_dir               = abspath("${path.root}/../../../frontend")
   lambda_source_dir          = abspath("${path.root}/../../../backend/lambda")
   lambda_zip_path            = abspath("${path.root}/lambda.zip")
