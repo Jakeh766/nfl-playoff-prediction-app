@@ -3,8 +3,7 @@ data "aws_caller_identity" "current" {}
 locals {
   resource_prefix = coalesce(var.resource_prefix, "${var.project_name}-${var.environment}")
 
-  cognito_email_source_arn = var.cognito_email_domain == null ? null : "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.cognito_email_domain}"
-  analytics_log_group      = "/aws/lambda/${local.resource_prefix}-backend"
+  analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
   frontend_files = {
     "index.html" = {
       source       = "${var.frontend_dir}/index.html"
