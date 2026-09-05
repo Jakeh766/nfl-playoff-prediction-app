@@ -40,6 +40,11 @@ resource "aws_acm_certificate" "site" {
   }
 }
 
+import {
+  to = aws_acm_certificate.site
+  id = "arn:aws:acm:us-east-1:410533922944:certificate/88d94836-8995-4c91-b901-a59668b8da96"
+}
+
 module "nfl_app" {
   source = "../../modules/app"
 
