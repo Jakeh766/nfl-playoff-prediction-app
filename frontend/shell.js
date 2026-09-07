@@ -82,8 +82,7 @@ if (dialogs) {
           <h3>Confirm your account.</h3>
           <p class="auth-description">Enter the verification code sent to your email.</p>
           <form class="auth-form" id="confirm-account-form" method="post">
-            <label for="confirm-email">Email address</label>
-            <input id="confirm-email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+            <input id="confirm-email" name="username" type="hidden" />
             <label for="confirmation-code">Verification code</label>
             <input id="confirmation-code" name="one-time-code" type="text" inputmode="numeric" autocomplete="one-time-code" required />
             <button class="button button-primary auth-button" type="submit">Confirm account</button>
