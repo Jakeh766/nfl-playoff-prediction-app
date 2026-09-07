@@ -55,6 +55,12 @@ jobs:
       - name: Check backend Python syntax
         run: python -m py_compile backend/lambda/app.py
 
+      - name: Install custom email sender dependencies
+        run: npm ci --prefix backend/custom-email-sender
+
+      - name: Test custom email sender
+        run: npm test --prefix backend/custom-email-sender
+
       - name: Test authenticated prediction ownership
         run: python -m unittest discover -s backend -p "test_*.py"
 
@@ -78,6 +84,7 @@ jobs:
     env:
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -87,11 +94,20 @@ jobs:
         with:
           terraform_version: "1.15.7"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       - name: Check deployment configuration
         shell: bash
         run: |
           test -n "$AWS_ROLE_ARN" || { echo "AWS_ROLE_ARN is not configured in the dev environment."; exit 1; }
           test -n "$TF_STATE_BUCKET" || { echo "TF_STATE_BUCKET is not configured in the dev environment."; exit 1; }
+          test -n "$TF_VAR_resend_api_key" || { echo "RESEND_API_KEY is not configured in the dev environment."; exit 1; }
+
+      - name: Install production custom email sender dependencies
+        run: npm ci --omit=dev --prefix backend/custom-email-sender
 
       - name: Configure temporary AWS credentials
         uses: aws-actions/configure-aws-credentials@v6

@@ -9,14 +9,16 @@ locals {
   prod_state_key    = "${var.project_name}/prod/terraform.tfstate"
   prod_lock_key     = "${local.prod_state_key}.tflock"
 
-  dev_prefix          = "${var.project_name}-dev"
-  dev_frontend_bucket = "${local.dev_prefix}-frontend-${local.account_id}"
-  dev_lambda_role     = "${local.dev_prefix}-lambda-role"
-  dev_dashboard_name  = "${local.dev_prefix}-analytics"
+  dev_prefix            = "${var.project_name}-dev"
+  dev_frontend_bucket   = "${local.dev_prefix}-frontend-${local.account_id}"
+  dev_lambda_role       = "${local.dev_prefix}-lambda-role"
+  dev_email_sender_role = "${local.dev_prefix}-email-sender-role"
+  dev_dashboard_name    = "${local.dev_prefix}-analytics"
 
-  prod_frontend_bucket = "${var.project_name}-frontend-${local.account_id}"
-  prod_lambda_role     = "${var.project_name}-lambda-role"
-  prod_dashboard_name  = "${var.project_name}-analytics"
+  prod_frontend_bucket   = "${var.project_name}-frontend-${local.account_id}"
+  prod_lambda_role       = "${var.project_name}-lambda-role"
+  prod_email_sender_role = "${var.project_name}-email-sender-role"
+  prod_dashboard_name    = "${var.project_name}-analytics"
 
   github_oidc_subject      = "repo:${var.github_repository}:environment:${var.github_environment}"
   github_prod_oidc_subject = "repo:${var.github_repository}:environment:${var.github_prod_environment}"
@@ -185,9 +187,94 @@ data "aws_iam_policy_document" "github_dev_deploy" {
   }
 
   statement {
-    sid       = "DevLambdaFunction"
-    actions   = ["lambda:*"]
-    resources = ["arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-backend"]
+    sid     = "DevLambdaFunction"
+    actions = ["lambda:*"]
+    resources = [
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-backend",
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-email-sender",
+    ]
+  }
+
+  statement {
+    sid       = "CreateDevEmailKmsKey"
+    actions   = ["kms:CreateKey"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Environment"
+      values   = ["dev"]
+    }
+  }
+
+  statement {
+    sid = "ManageDevEmailKmsKey"
+    actions = [
+      "kms:CancelKeyDeletion",
+      "kms:CreateGrant",
+      "kms:DescribeKey",
+      "kms:DisableKey",
+      "kms:DisableKeyRotation",
+      "kms:EnableKey",
+      "kms:EnableKeyRotation",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+      "kms:ListGrants",
+      "kms:ListResourceTags",
+      "kms:PutKeyPolicy",
+      "kms:RetireGrant",
+      "kms:RevokeGrant",
+      "kms:ScheduleKeyDeletion",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:UpdateKeyDescription",
+    ]
+    resources = ["arn:aws:kms:${var.aws_region}:${local.account_id}:key/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
+      values   = ["dev"]
+    }
+  }
+
+  statement {
+    sid = "ManageDevResendSecret"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:ListSecretVersionIds",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:RestoreSecret",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret",
+    ]
+    resources = ["arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${local.dev_prefix}/resend/api-key-*"]
+  }
+
+  statement {
+    sid = "ReadEmailResourceInventory"
+    actions = [
+      "kms:ListKeys",
+      "secretsmanager:ListSecrets",
+    ]
+    resources = ["*"]
   }
 
   statement {
@@ -270,13 +357,19 @@ data "aws_iam_policy_document" "github_dev_deploy" {
       "iam:UntagRole",
       "iam:UpdateAssumeRolePolicy",
     ]
-    resources = ["arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.dev_email_sender_role}",
+    ]
   }
 
   statement {
-    sid       = "PassDevLambdaRole"
-    actions   = ["iam:PassRole"]
-    resources = ["arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}"]
+    sid     = "PassDevLambdaRole"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.dev_email_sender_role}",
+    ]
 
     condition {
       test     = "StringEquals"
@@ -435,9 +528,94 @@ data "aws_iam_policy_document" "github_prod_deploy" {
   }
 
   statement {
-    sid       = "ProdLambdaFunction"
-    actions   = ["lambda:*"]
-    resources = ["arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-backend"]
+    sid     = "ProdLambdaFunction"
+    actions = ["lambda:*"]
+    resources = [
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-backend",
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-email-sender",
+    ]
+  }
+
+  statement {
+    sid       = "CreateProdEmailKmsKey"
+    actions   = ["kms:CreateKey"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Environment"
+      values   = ["prod"]
+    }
+  }
+
+  statement {
+    sid = "ManageProdEmailKmsKey"
+    actions = [
+      "kms:CancelKeyDeletion",
+      "kms:CreateGrant",
+      "kms:DescribeKey",
+      "kms:DisableKey",
+      "kms:DisableKeyRotation",
+      "kms:EnableKey",
+      "kms:EnableKeyRotation",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+      "kms:ListGrants",
+      "kms:ListResourceTags",
+      "kms:PutKeyPolicy",
+      "kms:RetireGrant",
+      "kms:RevokeGrant",
+      "kms:ScheduleKeyDeletion",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:UpdateKeyDescription",
+    ]
+    resources = ["arn:aws:kms:${var.aws_region}:${local.account_id}:key/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
+      values   = ["prod"]
+    }
+  }
+
+  statement {
+    sid = "ManageProdResendSecret"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:ListSecretVersionIds",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:RestoreSecret",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret",
+    ]
+    resources = ["arn:aws:secretsmanager:${var.aws_region}:${local.account_id}:secret:${var.project_name}/resend/api-key-*"]
+  }
+
+  statement {
+    sid = "ReadEmailResourceInventory"
+    actions = [
+      "kms:ListKeys",
+      "secretsmanager:ListSecrets",
+    ]
+    resources = ["*"]
   }
 
   statement {
@@ -520,13 +698,19 @@ data "aws_iam_policy_document" "github_prod_deploy" {
       "iam:UntagRole",
       "iam:UpdateAssumeRolePolicy",
     ]
-    resources = ["arn:aws:iam::${local.account_id}:role/${local.prod_lambda_role}"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${local.prod_lambda_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.prod_email_sender_role}",
+    ]
   }
 
   statement {
-    sid       = "PassProdLambdaRole"
-    actions   = ["iam:PassRole"]
-    resources = ["arn:aws:iam::${local.account_id}:role/${local.prod_lambda_role}"]
+    sid     = "PassProdLambdaRole"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:aws:iam::${local.account_id}:role/${local.prod_lambda_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.prod_email_sender_role}",
+    ]
 
     condition {
       test     = "StringEquals"

@@ -38,12 +38,15 @@ and the Lambda function uses the verified Cognito `sub` claim as the DynamoDB
 key. Signed-in users can permanently delete their prediction and Cognito user
 through an in-app confirmation dialog.
 
-Production verification and password-recovery messages are sent as
-`Predict Playoffs <no-reply@predictplayoffs.com>`. The domain is verified in
-Amazon SES and authenticated with DKIM, a custom MAIL FROM domain, SPF, and
-DMARC records in Cloudflare. Cognito continues to use its built-in delivery
-service so these transactional messages do not depend on SES production-access
-approval.
+Verification and password-recovery messages are sent as
+`Predict Playoffs <no-reply@predictplayoffs.com>` through Resend. Cognito invokes
+a dedicated custom email sender Lambda and encrypts every confirmation code or
+temporary password with an environment-specific KMS key. The Lambda decrypts
+the value just before delivery and reads the Resend API key from AWS Secrets
+Manager. The API key is supplied to Terraform as an ephemeral GitHub Actions
+secret and is not stored in the repository, a Terraform plan, or Terraform
+state. The `predictplayoffs.com` domain must remain verified in Resend with its
+Resend-provided DNS records in Cloudflare.
 
 Leaderboard profiles are stored separately from private predictions. Names are
 trimmed and reserved case-insensitively, so capitalization cannot be used to
@@ -108,6 +111,8 @@ node --check frontend/bootstrap.js
 node --check frontend/leaderboard.js
 node --check frontend/picks.js
 node --check frontend/shell.js
+npm ci --prefix backend/custom-email-sender
+npm test --prefix backend/custom-email-sender
 python -m py_compile backend/lambda/app.py
 python -m unittest discover -s backend -p "test_*.py"
 terraform fmt -check -recursive terraform

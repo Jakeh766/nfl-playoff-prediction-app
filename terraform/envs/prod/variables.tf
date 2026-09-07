@@ -37,3 +37,10 @@ variable "site_domain_name" {
   description = "Apex domain name served by the production CloudFront distribution."
   type        = string
 }
+
+variable "resend_api_key" {
+  description = "Resend API key supplied by the GitHub environment during deployment."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+}
