@@ -71,7 +71,20 @@ class FakeGroupTable:
             raise ConditionalCheckFailed()
         self.items[Item["groupKey"]] = Item
 
-    def delete_item(self, *, Key):
+    def delete_item(
+        self,
+        *,
+        Key,
+        ConditionExpression=None,
+        ExpressionAttributeValues=None,
+    ):
+        existing = self.items.get(Key["groupKey"])
+        if ConditionExpression:
+            values = ExpressionAttributeValues or {}
+            attribute = "createdBy" if "createdBy" in ConditionExpression else "groupId"
+            value_key = ":creator" if attribute == "createdBy" else ":groupId"
+            if not existing or existing.get(attribute) != values.get(value_key):
+                raise ConditionalCheckFailed()
         self.items.pop(Key["groupKey"], None)
 
     def update_item(
@@ -410,6 +423,16 @@ class PrivateGroupTests(unittest.TestCase):
             None,
         )
 
+    def delete(self, group_id, user_id="user-123"):
+        return lambda_app.handler(
+            event(
+                "DELETE",
+                user_id=user_id,
+                path=f"/api/groups/{group_id}",
+            ),
+            None,
+        )
+
     def join(self, user_id="user-456", name="Sunday Crew", password="secret1"):
         return lambda_app.handler(
             event(
@@ -460,6 +483,8 @@ class PrivateGroupTests(unittest.TestCase):
         group = self.groups.items[f"group#{payload['groupId']}"]
 
         self.assertEqual(created["statusCode"], 201)
+        self.assertEqual(group["createdBy"], "user-123")
+        self.assertTrue(payload["isCreator"])
         self.assertNotIn("password", payload)
         self.assertNotEqual(group["passwordHash"], "secret1")
         self.assertNotIn("password", group)
@@ -471,6 +496,76 @@ class PrivateGroupTests(unittest.TestCase):
 
         duplicate = self.create(user_id="user-456", name="  sunday crew  ")
         self.assertEqual(duplicate["statusCode"], 400)
+
+    def test_group_creator_can_delete_group_and_release_its_name(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        deleted = self.delete(group_id)
+        self.assertEqual(deleted["statusCode"], 200)
+        self.assertNotIn(f"group#{group_id}", self.groups.items)
+        self.assertNotIn("name#sunday crew", self.groups.items)
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-123",
+            self.groups.items,
+        )
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-456",
+            self.groups.items,
+        )
+
+        recreated = self.create(user_id="user-456")
+        self.assertEqual(recreated["statusCode"], 201)
+
+    def test_group_member_cannot_delete_group(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        rejected = self.delete(group_id, user_id="user-456")
+
+        self.assertEqual(rejected["statusCode"], 403)
+        self.assertIn(f"group#{group_id}", self.groups.items)
+        self.assertIn("name#sunday crew", self.groups.items)
+
+    def test_legacy_group_creator_can_delete_when_membership_is_unambiguous(self):
+        group_id = "00000000-0000-4000-8000-000000000000"
+        self.groups.items = {
+            f"name#legacy crew": {
+                "groupKey": "name#legacy crew",
+                "recordType": "groupName",
+                "normalizedName": "legacy crew",
+                "groupId": group_id,
+            },
+            f"group#{group_id}": {
+                "groupKey": f"group#{group_id}",
+                "recordType": "group",
+                "groupId": group_id,
+                "groupName": "Legacy Crew",
+                "normalizedName": "legacy crew",
+                "createdAt": 100,
+            },
+            f"membership#{group_id}#user#user-123": {
+                "groupKey": f"membership#{group_id}#user#user-123",
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": "user-123",
+                "joinedAt": 100,
+            },
+            f"membership#{group_id}#user#user-456": {
+                "groupKey": f"membership#{group_id}#user#user-456",
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": "user-456",
+                "joinedAt": 200,
+            },
+        }
+
+        deleted = self.delete(group_id)
+
+        self.assertEqual(deleted["statusCode"], 200)
+        self.assertNotIn(f"group#{group_id}", self.groups.items)
 
     def test_join_requires_the_correct_password(self):
         created = json.loads(self.create()["body"])
@@ -504,7 +599,9 @@ class PrivateGroupTests(unittest.TestCase):
 
         self.assertEqual(len(creator_payload["groups"]), 1)
         self.assertEqual(creator_payload["groups"][0]["groupName"], "Sunday Crew")
+        self.assertTrue(creator_payload["groups"][0]["isCreator"])
         self.assertNotIn("passwordHash", creator_payload["groups"][0])
+        self.assertNotIn("createdBy", creator_payload["groups"][0])
         self.assertNotIn("inviteCode", creator_payload["groups"][0])
         self.assertEqual(json.loads(outsider_list["body"])["groups"], [])
 

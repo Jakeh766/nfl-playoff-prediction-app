@@ -52,6 +52,11 @@ class DevSeedTests(unittest.TestCase):
             self.assertNotIn("password", group)
             self.assertEqual(len(group["passwordSalt"]), 32)
             self.assertEqual(len(group["passwordHash"]), 64)
+            self.assertIn(group["createdBy"], {
+                membership["userId"]
+                for membership in memberships
+                if membership["groupId"] == group["groupId"]
+            })
 
     def test_demo_downstream_picks_follow_their_generated_matchups(self):
         for prediction in self.data["predictions"]:

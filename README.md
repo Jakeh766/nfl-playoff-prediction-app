@@ -9,6 +9,7 @@ A self-contained NFL preseason playoff predictor. Users can:
 - Track a 300-point score as official results become available.
 - Create or join private groups with their own member-only leaderboards.
 - Invite other players to a group with a private share link.
+- Delete private groups you created.
 - Save, reopen, update, and delete one prediction per account.
 - Create or change predictions only until the first regular-season kickoff; the
   backend enforces the deadline and the home page shows a live countdown.
@@ -66,6 +67,10 @@ before storage. Members can also copy a private invite link; an authenticated
 recipient who accepts the link joins without entering the shared password. A
 group leaderboard can only be loaded by a current member and uses the same live
 scoring as the global leaderboard, filtered to members with saved predictions.
+The creator can permanently delete the group, which removes its invite link,
+leaderboard, name reservation, and memberships for everyone. Groups created
+before creator tracking was added use their original creator membership when it
+can be identified unambiguously.
 Deleting an account removes all of its group memberships.
 
 Win-total projections, leaderboard scores, and read-only leaderboard brackets

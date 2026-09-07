@@ -302,6 +302,7 @@ const elements = {
   cancelGroup: document.querySelector("#cancel-group"),
   submitGroup: document.querySelector("#submit-group"),
   shareGroupInvite: document.querySelector("#share-group-invite"),
+  deleteGroup: document.querySelector("#delete-group"),
   groupInviteDialog: document.querySelector("#group-invite-dialog"),
   groupInviteName: document.querySelector("#group-invite-name"),
   groupInviteLink: document.querySelector("#group-invite-link"),
@@ -309,6 +310,14 @@ const elements = {
   closeGroupInvite: document.querySelector("#close-group-invite"),
   copyGroupInvite: document.querySelector("#copy-group-invite"),
   shareGroupInviteNative: document.querySelector("#share-group-invite-native"),
+  deleteGroupDialog: document.querySelector("#delete-group-dialog"),
+  deleteGroupForm: document.querySelector("#delete-group-form"),
+  deleteGroupName: document.querySelector("#delete-group-name"),
+  deleteGroupConfirmationName: document.querySelector("#delete-group-confirmation-name"),
+  deleteGroupConfirmation: document.querySelector("#delete-group-confirmation"),
+  deleteGroupMessage: document.querySelector("#delete-group-message"),
+  cancelDeleteGroup: document.querySelector("#cancel-delete-group"),
+  confirmDeleteGroup: document.querySelector("#confirm-delete-group"),
   leaderboardStatus: document.querySelector("#leaderboard-status"),
   leaderboardTableShell: document.querySelector("#leaderboard-table-shell"),
   leaderboardBody: document.querySelector("#leaderboard-body"),
@@ -347,6 +356,8 @@ const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
 const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 let deleteAccountPending = false;
+let deleteGroupPending = false;
+let deleteGroupId = "";
 let pendingPredictionSave = false;
 let publicBracketRequest = 0;
 let groupDialogMode = "create";

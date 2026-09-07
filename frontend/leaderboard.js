@@ -515,6 +515,18 @@ function renderGroups() {
   const activeGroup = state.groups.find(
     (group) => group.groupId === state.activeGroupId,
   );
+  elements.deleteGroup?.classList.toggle(
+    "hidden",
+    !activeGroup?.isCreator,
+  );
+  if (activeGroup?.isCreator) {
+    elements.deleteGroup.setAttribute(
+      "aria-label",
+      `Delete ${activeGroup.groupName}`,
+    );
+  } else {
+    elements.deleteGroup?.removeAttribute("aria-label");
+  }
   elements.groupTabs.innerHTML = "";
   elements.emptyGroups.classList.toggle("hidden", Boolean(state.groups.length));
   elements.groupLeaderboard.classList.toggle("hidden", !activeGroup);
@@ -602,6 +614,91 @@ async function refreshGroups(preferredGroupId = state.activeGroupId) {
     elements.emptyGroups.textContent =
       "Your groups could not be loaded. Please refresh and try again.";
     elements.emptyGroups.title = error.message;
+  }
+}
+
+function groupConfirmationMatches(value, groupName) {
+  return Boolean(groupName) &&
+    value.trim().toLowerCase() === groupName.trim().toLowerCase();
+}
+
+function resetDeleteGroupDialog() {
+  deleteGroupPending = false;
+  deleteGroupId = "";
+  elements.deleteGroupName.textContent = "";
+  elements.deleteGroupConfirmationName.textContent = "";
+  elements.deleteGroupConfirmation.value = "";
+  elements.deleteGroupMessage.textContent = "";
+  elements.confirmDeleteGroup.disabled = true;
+  elements.confirmDeleteGroup.removeAttribute("aria-busy");
+  elements.confirmDeleteGroup.textContent = "Delete group";
+}
+
+function openDeleteGroupDialog(group) {
+  if (!group?.isCreator || !elements.deleteGroupDialog) return;
+  deleteGroupId = group.groupId;
+  elements.deleteGroupName.textContent = group.groupName;
+  elements.deleteGroupConfirmationName.textContent = group.groupName;
+  elements.deleteGroupConfirmation.value = "";
+  elements.deleteGroupMessage.textContent = "";
+  elements.confirmDeleteGroup.disabled = true;
+  elements.deleteGroupDialog.showModal();
+  elements.deleteGroupConfirmation.focus();
+}
+
+function updateDeleteGroupConfirmation() {
+  elements.confirmDeleteGroup.disabled =
+    deleteGroupPending ||
+    !groupConfirmationMatches(
+      elements.deleteGroupConfirmation.value,
+      elements.deleteGroupConfirmationName.textContent,
+    );
+}
+
+async function submitDeleteGroup(event) {
+  event.preventDefault();
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === deleteGroupId,
+  );
+  if (
+    deleteGroupPending ||
+    !group?.isCreator ||
+    !groupConfirmationMatches(
+      elements.deleteGroupConfirmation.value,
+      group.groupName,
+    )
+  ) {
+    return;
+  }
+
+  deleteGroupPending = true;
+  elements.confirmDeleteGroup.disabled = true;
+  elements.confirmDeleteGroup.setAttribute("aria-busy", "true");
+  elements.confirmDeleteGroup.textContent = "Deleting…";
+  elements.deleteGroupMessage.textContent =
+    "Removing the group for every member…";
+
+  try {
+    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`, {
+      method: "DELETE",
+    });
+    state.groups = state.groups.filter(
+      (candidate) => candidate.groupId !== group.groupId,
+    );
+    state.activeGroupId = state.groups[0]?.groupId || "";
+    state.groupLeaderboard = null;
+    elements.deleteGroupDialog.close();
+    renderGroups();
+    if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
+    showToast(`Deleted ${group.groupName}.`);
+  } catch (error) {
+    elements.deleteGroupMessage.textContent =
+      `Could not delete the group: ${error.message}`;
+  } finally {
+    deleteGroupPending = false;
+    elements.confirmDeleteGroup.removeAttribute("aria-busy");
+    elements.confirmDeleteGroup.textContent = "Delete group";
+    updateDeleteGroupConfirmation();
   }
 }
 

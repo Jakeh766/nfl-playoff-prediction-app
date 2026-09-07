@@ -39,6 +39,12 @@ elements.groupDialog?.addEventListener("close", () => {
   elements.groupDialogMessage.textContent = "";
 });
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+elements.deleteGroup?.addEventListener("click", () => {
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === state.activeGroupId,
+  );
+  if (group) openDeleteGroupDialog(group);
+});
 elements.copyGroupInvite?.addEventListener("click", copyGroupInviteLink);
 elements.shareGroupInviteNative?.addEventListener("click", shareGroupInviteNatively);
 elements.closeGroupInvite?.addEventListener("click", () => {
@@ -49,6 +55,18 @@ elements.groupInviteDialog?.addEventListener("close", () => {
   elements.groupInviteMessage.textContent = "";
   elements.copyGroupInvite.textContent = "Copy invite link";
 });
+elements.deleteGroupForm?.addEventListener("submit", submitDeleteGroup);
+elements.deleteGroupConfirmation?.addEventListener(
+  "input",
+  updateDeleteGroupConfirmation,
+);
+elements.cancelDeleteGroup?.addEventListener("click", () => {
+  if (!deleteGroupPending) elements.deleteGroupDialog.close();
+});
+elements.deleteGroupDialog?.addEventListener("cancel", (event) => {
+  if (deleteGroupPending) event.preventDefault();
+});
+elements.deleteGroupDialog?.addEventListener("close", resetDeleteGroupDialog);
 elements.changeLeaderboardName.addEventListener("click", () => {
   elements.accountDialog.close();
   openLeaderboardNameDialog(false);

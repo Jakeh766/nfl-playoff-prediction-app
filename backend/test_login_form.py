@@ -270,6 +270,25 @@ class LoginFormTests(unittest.TestCase):
         groups_permissions = terraform[:groups_resource_index].rsplit("{", 1)[-1]
         self.assertIn('"dynamodb:UpdateItem"', groups_permissions)
 
+    def test_group_deletion_is_creator_only_and_confirmed(self):
+        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        app_javascript = "\n".join(
+            (
+                self.app_javascript,
+                self.leaderboard_javascript,
+                self.bootstrap_javascript,
+            )
+        )
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="delete-group"', html)
+        self.assertIn('id="delete-group-dialog"', self.shell)
+        self.assertIn("activeGroup?.isCreator", app_javascript)
+        self.assertIn("apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`", app_javascript)
+        self.assertIn('route_key          = "DELETE /api/groups/{groupId}"', terraform)
+
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         picks = (FRONTEND_DIR / "picks.html").read_text(encoding="utf-8")

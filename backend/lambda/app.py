@@ -892,12 +892,34 @@ def new_group_invite_code() -> str:
     return secrets.token_urlsafe(24)
 
 
-def public_group(group: dict) -> dict:
+def legacy_group_creator(group: dict, memberships: list[dict]) -> str | None:
+    """Recover the creator for groups created before createdBy was stored."""
+    created_at = group.get("createdAt")
+    if created_at is None:
+        return None
+    creator_ids = {
+        item.get("userId")
+        for item in memberships
+        if item.get("recordType") == "membership"
+        and item.get("groupId") == group.get("groupId")
+        and item.get("joinedAt") == created_at
+        and isinstance(item.get("userId"), str)
+    }
+    return next(iter(creator_ids)) if len(creator_ids) == 1 else None
+
+
+def public_group(
+    group: dict,
+    user_id: str | None = None,
+    creator_id: str | None = None,
+) -> dict:
+    creator_id = creator_id or group.get("createdBy")
     return {
         "groupId": group["groupId"],
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
         "scoringOption": group.get("scoringOption", "classic"),
+        "isCreator": bool(user_id and creator_id == user_id),
     }
 
 
@@ -933,9 +955,10 @@ def is_group_member(group_id: str, user_id: str) -> bool:
 
 def list_groups(user_id: str) -> dict:
     table = groups_table()
+    items = scan_all(table)
     memberships = [
         item
-        for item in scan_all(table)
+        for item in items
         if item.get("recordType") == "membership" and item.get("userId") == user_id
     ]
     groups = []
@@ -944,7 +967,13 @@ def list_groups(user_id: str) -> dict:
             Key={"groupKey": group_item_key(membership["groupId"])}
         ).get("Item")
         if group and group.get("recordType") == "group":
-            groups.append(public_group(group))
+            groups.append(
+                public_group(
+                    group,
+                    user_id,
+                    legacy_group_creator(group, items),
+                )
+            )
     groups.sort(key=lambda group: group["groupName"].casefold())
     return {"groups": groups}
 
@@ -984,6 +1013,7 @@ def create_group(user_id: str, event: dict) -> dict:
         "groupId": group_id,
         "groupName": group_name,
         "normalizedName": normalized_name,
+        "createdBy": user_id,
         "scoringOption": scoring_option,
         "passwordSalt": salt,
         "passwordHash": digest,
@@ -1007,7 +1037,7 @@ def create_group(user_id: str, event: dict) -> dict:
         table.delete_item(Key={"groupKey": group_key})
         table.delete_item(Key={"groupKey": name_key})
         raise
-    return public_group(group)
+    return public_group(group, user_id)
 
 
 def join_group(user_id: str, event: dict) -> dict:
@@ -1031,7 +1061,7 @@ def join_group(user_id: str, event: dict) -> dict:
         raise ValueError("Group name or password is incorrect")
 
     add_group_membership(group["groupId"], user_id)
-    return public_group(group)
+    return public_group(group, user_id)
 
 
 def add_group_membership(group_id: str, user_id: str) -> None:
@@ -1105,7 +1135,7 @@ def join_group_by_invite(user_id: str, event: dict) -> dict:
         raise ValueError("That group invite link is invalid")
 
     add_group_membership(group_id, user_id)
-    return public_group(group)
+    return public_group(group, user_id)
 
 
 def get_group_leaderboard(group_id: str, user_id: str) -> dict:
@@ -1123,6 +1153,39 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
         "groupId": group_id,
         "groupName": group["groupName"],
     }
+
+
+def delete_group(group_id: str, user_id: str) -> None:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    table = groups_table()
+    items = scan_all(table)
+    creator_id = group.get("createdBy") or legacy_group_creator(group, items)
+    if creator_id != user_id:
+        raise PermissionError("Only the group creator can delete this group")
+
+    for item in items:
+        if item.get("recordType") == "membership" and item.get("groupId") == group_id:
+            table.delete_item(Key={"groupKey": item["groupKey"]})
+
+    try:
+        table.delete_item(
+            Key={"groupKey": group_name_item_key(group["normalizedName"])},
+            ConditionExpression="groupId = :groupId",
+            ExpressionAttributeValues={":groupId": group_id},
+        )
+    except Exception as error:
+        if not is_conditional_failure(error):
+            raise
+
+    group_delete = {"Key": {"groupKey": group_item_key(group_id)}}
+    if group.get("createdBy"):
+        group_delete.update(
+            ConditionExpression="createdBy = :creator",
+            ExpressionAttributeValues={":creator": user_id},
+        )
+    table.delete_item(**group_delete)
 
 
 def delete_group_memberships(user_id: str) -> None:
@@ -1183,13 +1246,14 @@ def handler(event, context):
     group_invite_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/invite", path or ""
     )
+    group_delete_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})", path or "")
     if path not in (
         "/api/prediction",
         "/api/profile",
         "/api/groups",
         "/api/groups/join",
         "/api/groups/join-invite",
-    ) and not group_leaderboard_match and not group_invite_match:
+    ) and not group_leaderboard_match and not group_invite_match and not group_delete_match:
         return response(404, {"message": "Not found"})
 
     user_id = authenticated_user_id(event)
@@ -1221,6 +1285,17 @@ def handler(event, context):
             except ValueError as error:
                 return response(400, {"message": str(error)})
         return response(404, {"message": "Not found"})
+
+    if group_delete_match:
+        if method != "DELETE":
+            return response(404, {"message": "Not found"})
+        try:
+            delete_group(group_delete_match.group(1), user_id)
+            return response(200, {"deleted": True})
+        except ValueError as error:
+            return response(404, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
 
     if group_invite_match:
         if method != "GET":
