@@ -18,6 +18,7 @@ Browser
   -> CloudFront
        -> private S3 bucket (index.html, app.js, styles.css, generated auth-config.js)
        -> Cognito user pool APIs (in-app email/password forms)
+            -> custom email sender Lambda -> Resend
        -> API Gateway
             -> public /api/win-totals -> Lambda -> VegasInsider
                                                   -> DynamoDB scrape cache
@@ -85,22 +86,34 @@ The GitHub environment named `dev` must define these environment variables:
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-dev-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
+It must also define the encrypted environment secret `RESEND_API_KEY` with a
+Resend sending key that begins with `re_`.
+
 The GitHub environment named `prod` must define:
 
 - `AWS_ROLE_ARN` =
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-prod-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
+The `prod` environment must also define its encrypted `RESEND_API_KEY` secret.
+The environments may use the same restricted sending key, but separate keys
+make rotation and revocation safer.
+
 ## One-time production automation setup
 
 Apply the bootstrap root with separately authenticated AWS administrator
-credentials so the production GitHub Actions role exists:
+credentials so the GitHub Actions roles exist and can manage the custom sender
+Lambda, KMS key, and Resend secret:
 
 ```powershell
 terraform -chdir=terraform/bootstrap init
 terraform -chdir=terraform/bootstrap plan
 terraform -chdir=terraform/bootstrap apply
 ```
+
+Reapply this root once after adding the Resend integration, before running the
+first updated `dev` deployment. The environment deployment role intentionally
+cannot expand its own IAM permissions.
 
 Then migrate the existing local production state into the shared state bucket.
 Do this from the checkout that contains the existing
@@ -123,6 +136,7 @@ From the repository root:
 
 ```powershell
 terraform -chdir=terraform/envs/dev init
+npm ci --omit=dev --prefix backend/custom-email-sender
 terraform -chdir=terraform/envs/dev plan
 terraform -chdir=terraform/envs/dev apply
 ```
@@ -172,15 +186,36 @@ by the authenticated API.
 The module also publishes `cognito_user_pool_id` and `cognito_client_id`
 outputs. Email verification is required and MFA is explicitly `OFF`.
 
-Production Cognito email uses the externally managed, SES-verified
-`predictplayoffs.com` identity and appears as
-`Predict Playoffs <no-reply@predictplayoffs.com>`. The SES identity must keep a
-sending-authorization policy that grants `email.cognito-idp.amazonaws.com`
-`ses:SendEmail` and `ses:SendRawEmail`, restricted to the production account and
-user-pool ARN. Cloudflare must keep the three SES Easy DKIM CNAME records, the
-`mail.predictplayoffs.com` MX and SPF records used by the custom MAIL FROM
-domain, and the `_dmarc.predictplayoffs.com` TXT record. These externally
-managed resources must be verified before applying production Terraform.
+## Resend email delivery
+
+Cognito routes all account-confirmation, resend-code, password-reset, email
+verification, authentication-code, administrator-created-user, and account
+security messages to a dedicated Node.js Lambda. Cognito encrypts codes with a
+customer-managed KMS key; the Lambda uses the AWS Encryption SDK to decrypt
+them and sends both HTML and plain-text messages through Resend. The Lambda
+never logs codes, API keys, or full recipient addresses.
+
+Before the first deployment:
+
+1. Add `predictplayoffs.com` in Resend and publish the exact SPF and DKIM records
+   Resend supplies in Cloudflare. Wait until Resend reports the domain as
+   verified. Existing SES DNS records can remain while SES approval is pending,
+   provided Cloudflare contains only one SPF TXT record per hostname.
+2. Create a Resend API key with sending access. Store it as the encrypted GitHub
+   environment secret `RESEND_API_KEY` in both `dev` and `prod` (or use separate
+   keys in each environment).
+3. Apply `terraform/bootstrap` once with AWS administrator credentials to grant
+   the existing GitHub deployment roles permission to manage the new Lambda,
+   KMS, Secrets Manager, and IAM resources.
+4. Push or rerun the `dev` workflow. Its configuration check fails before
+   Terraform changes anything if `RESEND_API_KEY` is missing.
+5. Create a dev account, resend its confirmation code, and exercise password
+   recovery before promoting the change to `prod`.
+
+Terraform writes the API key to Secrets Manager with the provider's write-only
+field. The root and module variables are ephemeral, so the value is absent from
+saved plans and state. To rotate the key later, replace the GitHub secret and
+increment `resend_api_key_version` in the relevant module call.
 
 Review AWS pricing and the target site's automated-access policy before
 deploying. These resources are not guaranteed to remain free.

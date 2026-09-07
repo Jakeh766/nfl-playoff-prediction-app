@@ -45,6 +45,39 @@ variable "lambda_zip_path" {
   type        = string
 }
 
+variable "custom_email_sender_source_dir" {
+  description = "Absolute path to the Node.js custom email sender Lambda source and installed dependencies."
+  type        = string
+}
+
+variable "custom_email_sender_zip_path" {
+  description = "Environment-specific output path for the custom email sender Lambda archive."
+  type        = string
+}
+
+variable "resend_api_key" {
+  description = "Resend API key written directly to Secrets Manager without being persisted in Terraform state."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+
+  validation {
+    condition     = startswith(var.resend_api_key, "re_")
+    error_message = "resend_api_key must be a Resend API key beginning with re_."
+  }
+}
+
+variable "resend_api_key_version" {
+  description = "Increment this value when rotating the write-only Resend API key."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.resend_api_key_version >= 1 && floor(var.resend_api_key_version) == var.resend_api_key_version
+    error_message = "resend_api_key_version must be a positive whole number."
+  }
+}
+
 variable "cache_ttl_seconds" {
   description = "How long a successful sportsbook scrape is reused before refreshing."
   type        = number
@@ -115,15 +148,11 @@ variable "acm_certificate_arn" {
 }
 
 variable "cognito_email_domain" {
-  description = "Optional SES-verified domain Cognito uses for branded verification and recovery email."
+  description = "Verified Resend domain used for branded Cognito verification and recovery email."
   type        = string
-  default     = null
 
   validation {
-    condition = (
-      var.cognito_email_domain == null ||
-      can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", var.cognito_email_domain))
-    )
-    error_message = "cognito_email_domain must be null or a lowercase domain name."
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", var.cognito_email_domain))
+    error_message = "cognito_email_domain must be a lowercase domain name."
   }
 }

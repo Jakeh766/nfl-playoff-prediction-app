@@ -1,0 +1,13 @@
+{
+  "name": "predict-playoffs-custom-email-sender",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ../test_custom_email_sender.mjs"
+  },
+  "dependencies": {
+    "@aws-crypto/client-node": "^4.2.1",
+    "@aws-sdk/client-secrets-manager": "^3.883.0"
+  }
+}
