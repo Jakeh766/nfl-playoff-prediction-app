@@ -74,7 +74,10 @@ elements.createAccount.addEventListener("click", (event) => {
   elements.createEmail.focus();
 });
 elements.createAccountBack.addEventListener("click", () => showAuthPanel("signIn"));
-elements.confirmAccountBack.addEventListener("click", () => showAuthPanel("signIn"));
+elements.confirmAccountBack.addEventListener("click", () => {
+  pendingAccountCredentials = null;
+  showAuthPanel("signIn");
+});
 elements.forgotPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
 elements.resetPasswordBack.addEventListener("click", () => showAuthPanel("signIn"));
 elements.resendConfirmation.addEventListener("click", resendConfirmationCode);

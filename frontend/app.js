@@ -351,6 +351,7 @@ let pendingPredictionSave = false;
 let publicBracketRequest = 0;
 let groupDialogMode = "create";
 let pendingGroupAction = "";
+let pendingAccountCredentials = null;
 
 function groupInviteFromUrl() {
   const value = new URLSearchParams(window.location.search).get("invite") || "";
@@ -466,6 +467,33 @@ async function requestPasswordSignIn(username, password) {
   return payload.AuthenticationResult;
 }
 
+async function finishPasswordSignIn(email, password) {
+  const authentication = await requestPasswordSignIn(email, password);
+  saveAuthSession({
+    access_token: authentication.AccessToken,
+    id_token: authentication.IdToken,
+    refresh_token: authentication.RefreshToken,
+    expires_in: authentication.ExpiresIn,
+  });
+  pendingAccountCredentials = null;
+  window.siteAnalytics?.track("sign_in");
+  elements.loginPassword.value = "";
+  elements.authMessage.textContent = "";
+  renderAuthentication(true);
+  if (elements.accountDialog.open) elements.accountDialog.close();
+
+  await refreshProfile();
+  if (PAGE === "picks") {
+    await refreshSavedPrediction();
+    if (loadAuthSession() && !state.bracketBuilt) openPrediction();
+  } else if (PAGE === "leaderboard") {
+    await refreshGroups();
+  }
+  if (typeof resumePendingGroupAction === "function") {
+    await resumePendingGroupAction();
+  }
+}
+
 function signInErrorMessage(error) {
   if (["NotAuthorizedException", "UserNotFoundException"].includes(error.code)) {
     return "Incorrect email or password.";
@@ -498,36 +526,18 @@ async function submitSignIn(event) {
   elements.signIn.textContent = "Signing in…";
   elements.authMessage.textContent = "Signing in securely…";
 
+  const email = elements.loginEmail.value.trim();
+  const password = elements.loginPassword.value;
   try {
-    const authentication = await requestPasswordSignIn(
-      elements.loginEmail.value.trim(),
-      elements.loginPassword.value,
-    );
-    saveAuthSession({
-      access_token: authentication.AccessToken,
-      id_token: authentication.IdToken,
-      refresh_token: authentication.RefreshToken,
-      expires_in: authentication.ExpiresIn,
-    });
-    window.siteAnalytics?.track("sign_in");
-    elements.loginPassword.value = "";
-    elements.authMessage.textContent = "";
-    renderAuthentication(true);
-    await refreshProfile();
-    if (PAGE === "picks") {
-      await refreshSavedPrediction();
-      if (loadAuthSession() && !state.bracketBuilt) openPrediction();
-    } else if (PAGE === "leaderboard") {
-      await refreshGroups();
-    }
-    if (typeof resumePendingGroupAction === "function") {
-      await resumePendingGroupAction();
-    }
+    await finishPasswordSignIn(email, password);
   } catch (error) {
     console.error("Could not sign in with Cognito.", error);
     if (error.code === "UserNotConfirmedException") {
-      elements.confirmEmail.value = elements.loginEmail.value.trim();
+      pendingAccountCredentials = { email, password };
+      elements.loginPassword.value = "";
+      elements.confirmEmail.value = email;
       showAuthPanel("confirmAccount", "Confirm your email before signing in.");
+      elements.confirmationCode.focus();
     } else {
       elements.authMessage.textContent = signInErrorMessage(error);
     }
@@ -573,6 +583,7 @@ function cognitoErrorMessage(error) {
 async function submitCreateAccount(event) {
   event.preventDefault();
   const email = elements.createEmail.value.trim();
+  const password = elements.createPassword.value;
   elements.authMessage.textContent = "Creating your account…";
 
   try {
@@ -580,10 +591,11 @@ async function submitCreateAccount(event) {
     const result = await requestCognito("SignUp", {
       ClientId: config.clientId,
       Username: email,
-      Password: elements.createPassword.value,
+      Password: password,
       UserAttributes: [{ Name: "email", Value: email }],
     });
     window.siteAnalytics?.track("account_created");
+    pendingAccountCredentials = { email, password };
     elements.createPassword.value = "";
     elements.confirmEmail.value = email;
     if (result.UserConfirmed) {
@@ -610,12 +622,31 @@ async function submitConfirmAccount(event) {
       Username: email,
       ConfirmationCode: elements.confirmationCode.value.trim(),
     });
-    elements.confirmationCode.value = "";
-    elements.loginEmail.value = email;
-    showAuthPanel("signIn", "Email confirmed. You can sign in now.");
-    elements.loginPassword.focus();
   } catch (error) {
     elements.authMessage.textContent = cognitoErrorMessage(error);
+    return;
+  }
+
+  elements.confirmationCode.value = "";
+  elements.loginEmail.value = email;
+  const credentials = pendingAccountCredentials;
+  pendingAccountCredentials = null;
+  if (!credentials || credentials.email !== email) {
+    showAuthPanel("signIn", "Email confirmed. Sign in to continue.");
+    elements.loginPassword.focus();
+    return;
+  }
+
+  elements.authMessage.textContent = "Email confirmed. Signing you in…";
+  try {
+    await finishPasswordSignIn(credentials.email, credentials.password);
+  } catch (error) {
+    console.error("Could not sign in after confirming the account.", error);
+    showAuthPanel(
+      "signIn",
+      `Email confirmed. ${signInErrorMessage(error)}`,
+    );
+    elements.loginPassword.focus();
   }
 }
 

@@ -102,6 +102,30 @@ class LoginFormTests(unittest.TestCase):
         self.assertNotIn("allowed_oauth_flows                  =", terraform)
         self.assertNotIn("/oauth2/", app_javascript)
 
+    def test_confirmation_reuses_the_initial_password_and_closes_the_dialog(self):
+        confirmation_panel = self.shell[
+            self.shell.index('id="confirm-account-panel"') :
+            self.shell.index('id="forgot-password-panel"')
+        ]
+
+        self.assertIn(
+            'id="confirm-email" name="username" type="hidden"',
+            confirmation_panel,
+        )
+        self.assertNotIn('for="confirm-email"', confirmation_panel)
+        self.assertIn(
+            "pendingAccountCredentials = { email, password };",
+            self.app_javascript,
+        )
+        self.assertIn(
+            "await finishPasswordSignIn(credentials.email, credentials.password);",
+            self.app_javascript,
+        )
+        self.assertIn(
+            "if (elements.accountDialog.open) elements.accountDialog.close();",
+            self.app_javascript,
+        )
+
     def test_account_deletion_requires_confirmation_and_removes_saved_data_first(self):
         html = self.shell
         app_javascript = self.app_javascript
