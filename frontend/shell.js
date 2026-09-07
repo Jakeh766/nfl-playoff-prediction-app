@@ -174,7 +174,7 @@ if (dialogs) {
             <p class="input-hint" id="group-scoring-hint">Upset Edge adds a fixed market-based bonus for every correct pick in seeding and playoffs. Lower-projected teams earn bigger bonuses. Totals can exceed 300. This choice sets your group’s ranking and cannot be changed.</p>
           </div>
           <label for="group-password">Group password</label>
-          <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="current-password" required />
+          <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" required />
           <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
           <p class="dialog-message" id="group-dialog-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">

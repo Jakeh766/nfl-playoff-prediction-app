@@ -230,6 +230,10 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="join-group"', html)
         self.assertIn('id="group-password"', html)
         self.assertIn('type="password"', html)
+        self.assertIn(
+            'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off"',
+            html,
+        )
         self.assertIn('apiRequest("/api/groups")', app_javascript)
         self.assertIn('"/api/groups/join"', app_javascript)
         self.assertIn("/leaderboard`", app_javascript)
