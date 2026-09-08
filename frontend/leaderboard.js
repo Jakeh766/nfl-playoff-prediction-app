@@ -122,9 +122,10 @@ function createPublicConferenceBracket(conference, bracket) {
   return section;
 }
 
-function renderPublicBracket(bracket) {
+function renderPublicBracket(bracket, scoringMode = "classic") {
   elements.publicBracketContent.innerHTML = "";
-  const score = bracket.score || {};
+  const score = scoringMode === "vegas" ? bracket.vegasScore || {} : bracket.score || {};
+  const scoreLabel = scoringMode === "vegas" ? "Upset Edge" : "Classic";
   const savedAt = bracket.savedAt
     ? ` · Saved ${new Intl.DateTimeFormat(undefined, {
         month: "short",
@@ -132,8 +133,9 @@ function renderPublicBracket(bracket) {
         year: "numeric",
       }).format(new Date(bracket.savedAt))}`
     : "";
-  elements.publicBracketStatus.textContent =
-    `Classic: ${score.total ?? 0} / 300 + ${bracket.vegasScore?.upsetBonus?.toFixed(2) ?? "—"} upset bonus = ${bracket.vegasScore?.total?.toFixed(2) ?? "—"} Upset Edge points${savedAt}`;
+  elements.publicBracketStatus.textContent = scoringMode === "vegas"
+    ? `${scoreLabel}: ${formatLeaderboardScore(score.total, 2)} points${savedAt}`
+    : `${scoreLabel}: ${formatLeaderboardScore(score.total)} / 300${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
@@ -160,6 +162,7 @@ function renderPublicBracket(bracket) {
 
 async function openPublicBracket(entry) {
   const requestId = ++publicBracketRequest;
+  const scoringMode = entry.scoringMode || state.leaderboardScoringMode || "classic";
   elements.publicBracketTitle.textContent = `${entry.leaderboardName}'s bracket.`;
   elements.publicBracketStatus.textContent = "Loading saved bracket…";
   elements.publicBracketContent.innerHTML = "";
@@ -175,7 +178,7 @@ async function openPublicBracket(entry) {
     ) {
       return;
     }
-    renderPublicBracket(bracket);
+    renderPublicBracket(bracket, scoringMode);
   } catch (error) {
     if (requestId !== publicBracketRequest) return;
     elements.publicBracketStatus.textContent =
@@ -189,13 +192,12 @@ const LEADERBOARD_SORT_META = {
   player: { label: "Player", numeric: false },
   field: { label: "Field and seeding", numeric: true },
   playoffs: { label: "Playoffs", numeric: true },
-  classic: { label: "Classic points", numeric: true },
-  bonus: { label: "Upset Bonus", numeric: true },
-  upsetTotal: { label: "Upset Edge total", numeric: true },
+  total: { label: "Total", numeric: true },
 };
 const DEFAULT_LEADERBOARD_SORT = { key: "rank", direction: "ascending" };
 const leaderboardSortStateByBody = new WeakMap();
 const leaderboardEntriesByBody = new WeakMap();
+const leaderboardModeByBody = new WeakMap();
 
 function getLeaderboardSortState(body) {
   if (!leaderboardSortStateByBody.has(body)) {
@@ -209,31 +211,28 @@ function numericLeaderboardValue(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function leaderboardScoreValue(entry, mode, key) {
+function leaderboardScore(entry, mode) {
   const score = entry.scores?.[mode];
-  if (score?.[key] != null) return score[key];
+  if (score) return score;
   if (!entry.scores || entry.scoringOption === mode || (mode === "classic" && !entry.scoringOption)) {
-    return entry[key] ?? null;
+    return entry;
   }
-  return null;
+  return {};
 }
 
-function leaderboardSortValue(entry, key) {
+function leaderboardSortValue(entry, key, mode = "classic") {
+  const score = leaderboardScore(entry, mode);
   switch (key) {
     case "player":
       return String(entry.leaderboardName || "");
     case "rank":
       return numericLeaderboardValue(entry.rank);
     case "field":
-      return numericLeaderboardValue(entry.regularSeason);
+      return numericLeaderboardValue(score.regularSeason);
     case "playoffs":
-      return numericLeaderboardValue(entry.playoffs);
-    case "classic":
-      return numericLeaderboardValue(leaderboardScoreValue(entry, "classic", "total"));
-    case "bonus":
-      return numericLeaderboardValue(leaderboardScoreValue(entry, "vegas", "upsetBonus"));
-    case "upsetTotal":
-      return numericLeaderboardValue(leaderboardScoreValue(entry, "vegas", "total"));
+      return numericLeaderboardValue(score.playoffs);
+    case "total":
+      return numericLeaderboardValue(score.total);
     default:
       return null;
   }
@@ -252,37 +251,65 @@ function compareLeaderboardValues(first, second, numeric, direction) {
   return comparison * direction;
 }
 
-function sortLeaderboardEntries(entries, sortState = DEFAULT_LEADERBOARD_SORT) {
+function sortLeaderboardEntries(entries, sortState = DEFAULT_LEADERBOARD_SORT, mode = "classic") {
   const meta = LEADERBOARD_SORT_META[sortState.key] || LEADERBOARD_SORT_META.rank;
   const direction = sortState.direction === "descending" ? -1 : 1;
   return entries
     .map((entry, index) => ({ entry, index }))
     .sort((first, second) => {
       const comparison = compareLeaderboardValues(
-        leaderboardSortValue(first.entry, sortState.key),
-        leaderboardSortValue(second.entry, sortState.key),
+        leaderboardSortValue(first.entry, sortState.key, mode),
+        leaderboardSortValue(second.entry, sortState.key, mode),
         meta.numeric,
         direction,
       );
       if (comparison) return comparison;
 
       const rankComparison = compareLeaderboardValues(
-        leaderboardSortValue(first.entry, "rank"),
-        leaderboardSortValue(second.entry, "rank"),
+        leaderboardSortValue(first.entry, "rank", mode),
+        leaderboardSortValue(second.entry, "rank", mode),
         true,
         1,
       );
       if (rankComparison) return rankComparison;
 
       const playerComparison = compareLeaderboardValues(
-        leaderboardSortValue(first.entry, "player"),
-        leaderboardSortValue(second.entry, "player"),
+        leaderboardSortValue(first.entry, "player", mode),
+        leaderboardSortValue(second.entry, "player", mode),
         false,
         1,
       );
       return playerComparison || first.index - second.index;
     })
     .map(({ entry }) => entry);
+}
+
+function rankLeaderboardEntries(entries, mode = "classic") {
+  const ordered = [...entries].sort((first, second) => {
+    for (const key of ["total", "field", "playoffs"]) {
+      const comparison = compareLeaderboardValues(
+        leaderboardSortValue(first, key, mode),
+        leaderboardSortValue(second, key, mode),
+        true,
+        -1,
+      );
+      if (comparison) return comparison;
+    }
+    return compareLeaderboardValues(
+      leaderboardSortValue(first, "player", mode),
+      leaderboardSortValue(second, "player", mode),
+      false,
+      1,
+    );
+  });
+  let previousTotal = null;
+  let currentRank = 0;
+  return ordered.map((entry, index) => {
+    const total = leaderboardSortValue(entry, "total", mode);
+    if (index === 0 || total !== previousTotal) currentRank = index + 1;
+    previousTotal = total;
+    return { ...entry, rank: currentRank, scoringMode: mode };
+  });
 }
 
 function updateLeaderboardSortIndicators(body, sortState) {
@@ -317,7 +344,11 @@ function bindLeaderboardSortControls(body) {
         ? current.direction === "ascending" ? "descending" : "ascending"
         : LEADERBOARD_SORT_META[key]?.numeric ? "descending" : "ascending";
       leaderboardSortStateByBody.set(body, { key, direction });
-      renderLeaderboardRows(body, leaderboardEntriesByBody.get(body) || []);
+      renderLeaderboardRows(
+        body,
+        leaderboardEntriesByBody.get(body) || [],
+        leaderboardModeByBody.get(body) || "classic",
+      );
     });
   });
 }
@@ -354,14 +385,15 @@ function createLeaderboardChampionCell(entry) {
   return cell;
 }
 
-function renderLeaderboardRows(body, entries) {
+function renderLeaderboardRows(body, entries, mode = "classic") {
   leaderboardEntriesByBody.set(body, entries);
+  leaderboardModeByBody.set(body, mode);
   bindLeaderboardSortControls(body);
   const sortState = getLeaderboardSortState(body);
   updateLeaderboardSortIndicators(body, sortState);
   body.innerHTML = "";
   const limit = Number(body.dataset.limit || 0);
-  const sortedEntries = sortLeaderboardEntries(entries, sortState);
+  const sortedEntries = sortLeaderboardEntries(entries, sortState, mode);
   const visibleEntries = limit > 0 ? sortedEntries.slice(0, limit) : sortedEntries;
   visibleEntries.forEach((entry) => {
     const row = document.createElement("tr");
@@ -387,41 +419,53 @@ function renderLeaderboardRows(body, entries) {
     player.appendChild(playerButton);
 
     const champion = createLeaderboardChampionCell(entry);
+    const score = leaderboardScore(entry, mode);
+    const decimals = mode === "vegas" ? 2 : 0;
     const regularSeason = document.createElement("td");
-    regularSeason.textContent = formatLeaderboardScore(entry.regularSeason);
+    regularSeason.textContent = formatLeaderboardScore(score.regularSeason, decimals);
     const playoffs = document.createElement("td");
-    playoffs.textContent = formatLeaderboardScore(entry.playoffs);
+    playoffs.textContent = formatLeaderboardScore(score.playoffs, decimals);
     const total = document.createElement("td");
     total.className = "leaderboard-total";
-    total.textContent = formatLeaderboardScore(
-      leaderboardScoreValue(entry, "classic", "total"),
-    );
-
-    const bonus = document.createElement("td");
-    const upsetBonus = leaderboardScoreValue(entry, "vegas", "upsetBonus");
-    bonus.textContent = upsetBonus == null
-      ? "—"
-      : `+${formatLeaderboardScore(upsetBonus, 2)}`;
-    const upsetTotal = document.createElement("td");
-    upsetTotal.className = "leaderboard-total";
-    upsetTotal.textContent = formatLeaderboardScore(
-      leaderboardScoreValue(entry, "vegas", "total"),
-      2,
-    );
-    row.append(rank, player, champion, regularSeason, playoffs, total, bonus, upsetTotal);
+    total.textContent = formatLeaderboardScore(score.total, decimals);
+    row.append(rank, player, champion, regularSeason, playoffs, total);
     body.appendChild(row);
   });
 }
 
+function updateLeaderboardScoreHeading(body, mode) {
+  const table = typeof body.closest === "function" ? body.closest("table") : null;
+  const button = table?.querySelector('button[data-sort-key="total"]');
+  if (!button) return;
+  const label = mode === "vegas" ? "Upset Edge total" : "Classic total";
+  const visibleLabel = button.querySelector("[data-score-label]");
+  if (visibleLabel) visibleLabel.textContent = label;
+  button.dataset.sortLabel = label;
+}
+
+function selectLeaderboardScoringMode(mode) {
+  if (!(["classic", "vegas"].includes(mode))) return;
+  state.leaderboardScoringMode = mode;
+  for (const [button, buttonMode] of [
+    [elements.classicLeaderboardMode, "classic"],
+    [elements.upsetLeaderboardMode, "vegas"],
+  ]) {
+    if (!button) continue;
+    const selected = mode === buttonMode;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+  renderLeaderboard();
+}
+
 function renderLeaderboard() {
   const leaderboard = state.leaderboard;
-  const entries = [...(leaderboard?.entries || [])].map((entry, index) => ({
-    ...entry,
-    rank: entry.rank ?? index + 1,
-  }));
+  const mode = state.leaderboardScoringMode || "classic";
+  const entries = rankLeaderboardEntries(leaderboard?.entries || [], mode);
   elements.leaderboardTableShell.classList.toggle("hidden", !entries.length);
   elements.emptyLeaderboard.classList.toggle("hidden", Boolean(entries.length));
-  renderLeaderboardRows(elements.leaderboardBody, entries);
+  updateLeaderboardScoreHeading(elements.leaderboardBody, mode);
+  renderLeaderboardRows(elements.leaderboardBody, entries, mode);
 
   if (leaderboard) elements.leaderboardStatus.textContent = leaderboard.status;
 }
@@ -494,8 +538,8 @@ async function loadLeaderboard() {
       state.leaderboard.entries.forEach((entry, index) => {
         entry.bracket = createPreviewPublicBracket(entry.leaderboardName, index);
         entry.scores = { classic: { regularSeason: 0, playoffs: 0, total: 0 },
-          vegas: { regularSeason: 0, playoffs: 0, total: 0, upsetBonus: 0 } };
-        entry.bracket.vegasScore = { total: 0, upsetBonus: 0 };
+          vegas: { regularSeason: 0, playoffs: 0, total: 0 } };
+        entry.bracket.vegasScore = { total: 0 };
       });
     } else {
       state.leaderboard = null;
@@ -556,10 +600,12 @@ function renderGroups() {
 
 function renderGroupLeaderboard() {
   const leaderboard = state.groupLeaderboard;
-  const entries = leaderboard?.entries || [];
+  const mode = leaderboard?.scoringOption || "classic";
+  const entries = rankLeaderboardEntries(leaderboard?.entries || [], mode);
   elements.groupLeaderboardTableShell.classList.toggle("hidden", !entries.length);
   elements.emptyGroupLeaderboard.classList.toggle("hidden", Boolean(entries.length));
-  renderLeaderboardRows(elements.groupLeaderboardBody, entries);
+  updateLeaderboardScoreHeading(elements.groupLeaderboardBody, mode);
+  renderLeaderboardRows(elements.groupLeaderboardBody, entries, mode);
   if (leaderboard) {
     elements.activeGroupName.textContent = leaderboard.groupName;
     elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Upset Edge" : "Classic"} ranking · ${leaderboard.status}`;

@@ -27,6 +27,12 @@ elements.groupsLeaderboardTab?.addEventListener("click", () => {
 });
 elements.publicLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
 elements.groupsLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
+elements.classicLeaderboardMode?.addEventListener("click", () => {
+  selectLeaderboardScoringMode("classic");
+});
+elements.upsetLeaderboardMode?.addEventListener("click", () => {
+  selectLeaderboardScoringMode("vegas");
+});
 elements.createGroup?.addEventListener("click", () => openGroupAction("create"));
 elements.joinGroup?.addEventListener("click", () => openGroupAction("join"));
 elements.homeCreateGroup?.addEventListener("click", () => openGroupAction("create"));
