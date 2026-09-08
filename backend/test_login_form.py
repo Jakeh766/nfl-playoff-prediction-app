@@ -189,6 +189,8 @@ class LoginFormTests(unittest.TestCase):
 
         self.assertIn('id="leaderboard-name-form"', html)
         self.assertIn('id="leaderboard-name"', html)
+        self.assertIn("apostrophes, underscores, and hyphens", self.shell)
+        self.assertIn("explainNameValidation", self.bootstrap_javascript)
         self.assertIn('maxlength="24"', html)
         self.assertIn('apiRequest("/api/profile", {', app_javascript)
         self.assertIn("openLeaderboardNameDialog(true);", picks_javascript)

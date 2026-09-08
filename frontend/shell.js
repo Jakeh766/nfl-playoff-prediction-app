@@ -148,8 +148,8 @@ if (dialogs) {
         <h2 id="leaderboard-name-title">Choose your name.</h2>
         <p id="leaderboard-name-description">Choose the public name that identifies your saved prediction and read-only bracket. Every name is unique, ignoring capitalization.</p>
         <label for="leaderboard-name">Leaderboard name</label>
-        <input id="leaderboard-name" name="leaderboard-name" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="nickname" autocapitalize="words" spellcheck="false" required />
-        <p class="input-hint">3–24 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
+        <input id="leaderboard-name" name="leaderboard-name" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9][A-Za-z0-9 ._'’\\-]*[A-Za-z0-9]" autocomplete="nickname" autocapitalize="words" spellcheck="false" required />
+        <p class="input-hint">3–24 characters. Letters, numbers, spaces, periods, apostrophes, underscores, and hyphens.</p>
         <p class="dialog-message" id="leaderboard-name-message" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
           <button class="button button-secondary" id="cancel-leaderboard-name" type="button">Cancel</button>
@@ -165,8 +165,8 @@ if (dialogs) {
           <h2 id="group-dialog-title">Create a group.</h2>
           <p id="group-dialog-description">Pick a unique group name. You can invite people with a private link or the group password.</p>
           <label for="group-name">Group name</label>
-          <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
-          <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
+          <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._'’\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
+          <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, apostrophes, underscores, and hyphens.</p>
           <div id="group-scoring-field">
             <label for="group-scoring">Scoring option</label>
             <select id="group-scoring" name="scoring-option" aria-describedby="group-scoring-hint">

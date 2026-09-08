@@ -162,7 +162,7 @@ class NameNormalizationTests(unittest.TestCase):
             ("A", "Leaderboard name must be between 3 and 24 characters"),
             (
                 "Jake🏈",
-                "Leaderboard name may use letters, numbers, spaces, periods, underscores, and hyphens",
+                "Leaderboard name may use letters, numbers, spaces, periods, apostrophes, underscores, and hyphens",
             ),
         )
 
@@ -178,7 +178,7 @@ class NameNormalizationTests(unittest.TestCase):
             ("A", "Group name must be between 3 and 40 characters"),
             (
                 "Crew🏈",
-                "Group name may use letters, numbers, spaces, periods, underscores, and hyphens",
+                "Group name may use letters, numbers, spaces, periods, apostrophes, underscores, and hyphens",
             ),
         )
 
@@ -187,6 +187,17 @@ class NameNormalizationTests(unittest.TestCase):
                 ValueError, f"^{message}$"
             ):
                 lambda_app.normalize_group_name(value)
+
+    def test_names_allow_straight_and_typographic_apostrophes(self):
+        straight = lambda_app.normalize_leaderboard_name("Jake's bracket")
+        typographic = lambda_app.normalize_leaderboard_name("Jake’s bracket")
+        self.assertEqual(straight[0], "Jake's bracket")
+        self.assertEqual(typographic[0], "Jake’s bracket")
+        self.assertEqual(straight[1], typographic[1])
+        self.assertEqual(
+            lambda_app.normalize_group_name("Jake's Crew")[0],
+            "Jake's Crew",
+        )
 
 
 class PredictionAuthorizationTests(unittest.TestCase):

@@ -27,7 +27,7 @@ PREDICTION_LOCK_AT = os.environ.get(
     "PREDICTION_LOCK_AT", "2099-12-31T23:59:59Z"
 )
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
-NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
+NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._'’-]*[A-Za-z0-9]")
 ANALYTICS_ID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
     re.IGNORECASE,
@@ -135,9 +135,10 @@ def normalize_name(
         )
     if not NAME_PATTERN.fullmatch(display_name):
         raise ValueError(
-            f"{label} name may use letters, numbers, spaces, periods, underscores, and hyphens"
+            f"{label} name may use letters, numbers, spaces, periods, apostrophes, underscores, and hyphens"
         )
-    return display_name, display_name.casefold()
+    normalized_name = display_name.casefold().replace("’", "'")
+    return display_name, normalized_name
 
 
 def normalize_leaderboard_name(value) -> tuple[str, str]:

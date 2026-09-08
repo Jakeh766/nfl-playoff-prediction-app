@@ -19,6 +19,28 @@ elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
 elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
 elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
 elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
+function explainNameValidation(input, maximumLength) {
+  input.setCustomValidity("");
+  if (input.validity.tooShort || input.validity.tooLong) {
+    input.setCustomValidity(`Use 3–${maximumLength} characters.`);
+  } else if (input.validity.patternMismatch) {
+    input.setCustomValidity(
+      "Use letters, numbers, spaces, periods, apostrophes, underscores, or hyphens.",
+    );
+  }
+}
+elements.leaderboardNameInput.addEventListener("invalid", () => {
+  explainNameValidation(elements.leaderboardNameInput, 24);
+});
+elements.leaderboardNameInput.addEventListener("input", () => {
+  elements.leaderboardNameInput.setCustomValidity("");
+});
+elements.groupName?.addEventListener("invalid", () => {
+  explainNameValidation(elements.groupName, 40);
+});
+elements.groupName?.addEventListener("input", () => {
+  elements.groupName.setCustomValidity("");
+});
 elements.publicLeaderboardTab?.addEventListener("click", () => {
   renderLeaderboardView("public");
 });
