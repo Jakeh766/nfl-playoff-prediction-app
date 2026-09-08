@@ -313,6 +313,35 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn("/leaderboard`", app_javascript)
         self.assertIn('path.startsWith("/api/groups")', app_javascript)
 
+    def test_password_fields_share_an_accessible_visibility_toggle(self):
+        password_ids = (
+            "login-password",
+            "create-password",
+            "reset-password",
+            "group-password",
+        )
+        for password_id in password_ids:
+            self.assertIn(f'id="{password_id}"', self.shell)
+            self.assertIn(
+                f'data-password-toggle aria-controls="{password_id}" '
+                'aria-label="Show password" aria-pressed="false"',
+                self.shell,
+            )
+
+        self.assertEqual(self.shell.count('class="password-toggle" type="button"'), 4)
+        self.assertIn(
+            'document.querySelectorAll("[data-password-toggle]")',
+            self.bootstrap_javascript,
+        )
+        toggle_flow = self.bootstrap_javascript[
+            self.bootstrap_javascript.index("function setPasswordVisibility") :
+            self.bootstrap_javascript.index("function resetPasswordVisibility")
+        ]
+        self.assertIn('input.type = visible ? "text" : "password";', toggle_flow)
+        self.assertIn('visible ? "Hide password" : "Show password"', toggle_flow)
+        self.assertIn('toggle.setAttribute("aria-pressed", String(visible));', toggle_flow)
+        self.assertNotIn("input.value", toggle_flow)
+
     def test_homepage_exposes_group_actions_and_link_invites(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         app_javascript = "\n".join(

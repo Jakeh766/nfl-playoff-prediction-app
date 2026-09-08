@@ -57,7 +57,12 @@ if (dialogs) {
             <label for="login-email">Email address</label>
             <input id="login-email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
             <label for="login-password">Password</label>
-            <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+            <div class="password-field">
+              <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+              <button class="password-toggle" type="button" data-password-toggle aria-controls="login-password" aria-label="Show password" aria-pressed="false">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/><path class="password-toggle-slash" d="m4 4 16 16"/></svg>
+              </button>
+            </div>
             <button class="button button-primary auth-button" id="sign-in" type="submit">Sign in</button>
           </form>
           <div class="auth-links">
@@ -73,7 +78,12 @@ if (dialogs) {
             <label for="create-email">Email address</label>
             <input id="create-email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
             <label for="create-password">Password</label>
-            <input id="create-password" name="new-password" type="password" autocomplete="new-password" minlength="6" required />
+            <div class="password-field">
+              <input id="create-password" name="new-password" type="password" autocomplete="new-password" minlength="6" required />
+              <button class="password-toggle" type="button" data-password-toggle aria-controls="create-password" aria-label="Show password" aria-pressed="false">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/><path class="password-toggle-slash" d="m4 4 16 16"/></svg>
+              </button>
+            </div>
             <button class="button button-primary auth-button" type="submit">Create account</button>
           </form>
           <button class="auth-back" id="create-account-back" type="button">Back to sign in</button>
@@ -114,7 +124,12 @@ if (dialogs) {
             <label for="reset-code">Verification code</label>
             <input id="reset-code" name="one-time-code" type="text" inputmode="numeric" autocomplete="one-time-code" required />
             <label for="reset-password">New password</label>
-            <input id="reset-password" name="new-password" type="password" autocomplete="new-password" minlength="6" required />
+            <div class="password-field">
+              <input id="reset-password" name="new-password" type="password" autocomplete="new-password" minlength="6" required />
+              <button class="password-toggle" type="button" data-password-toggle aria-controls="reset-password" aria-label="Show password" aria-pressed="false">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/><path class="password-toggle-slash" d="m4 4 16 16"/></svg>
+              </button>
+            </div>
             <button class="button button-primary auth-button" type="submit">Save new password</button>
           </form>
           <button class="auth-back" id="reset-password-back" type="button">Back to sign in</button>
@@ -176,7 +191,12 @@ if (dialogs) {
             <p class="input-hint" id="group-scoring-hint">Upset Edge multiplies each correct pick by the team’s fixed preseason win-total weight. An 8.5-win team is neutral; each win below or above changes the value by 10%. This choice sets your group’s ranking and cannot be changed.</p>
           </div>
           <label for="group-password">Group password</label>
-          <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true" required />
+          <div class="password-field">
+            <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true" required />
+            <button class="password-toggle" type="button" data-password-toggle aria-controls="group-password" aria-label="Show password" aria-pressed="false">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/><path class="password-toggle-slash" d="m4 4 16 16"/></svg>
+            </button>
+          </div>
           <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
           <p class="dialog-message" id="group-dialog-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">

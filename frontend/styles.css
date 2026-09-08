@@ -315,6 +315,57 @@ input {
   -webkit-text-fill-color: var(--ink);
 }
 
+.password-field {
+  position: relative;
+  min-width: 0;
+}
+
+.password-field input {
+  padding-inline-end: 52px;
+}
+
+.password-toggle {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-end: 3px;
+  width: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--blue-dark);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  background: rgba(24, 89, 169, 0.08);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.password-toggle svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.password-toggle-slash {
+  display: none;
+}
+
+.password-toggle[aria-pressed="true"] .password-toggle-slash {
+  display: block;
+}
+
 select {
   padding: 0 40px 0 13px;
   appearance: none;

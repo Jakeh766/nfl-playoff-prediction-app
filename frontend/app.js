@@ -659,6 +659,7 @@ const authPanels = {
 function showAuthPanel(name, message = "") {
   Object.entries(authPanels).forEach(([panelName, panel]) => {
     panel.classList.toggle("hidden", panelName !== name);
+    if (panelName !== name) resetPasswordVisibility(panel);
   });
   elements.authMessage.textContent = message;
 }
