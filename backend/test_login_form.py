@@ -359,6 +359,12 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="home-create-group"', home)
         self.assertIn('id="home-join-group"', home)
         self.assertIn('id="home-accept-invite"', home)
+        self.assertLess(
+            home.index('id="home-invite-callout"'),
+            home.index('class="home-hero"'),
+        )
+        self.assertIn('document.body.classList.toggle("has-group-invite"', app_javascript)
+        self.assertIn('"Sign in to join group"', app_javascript)
         self.assertIn('id="group-invite-dialog"', self.shell)
         leaderboard = (FRONTEND_DIR / "leaderboard.html").read_text(
             encoding="utf-8"

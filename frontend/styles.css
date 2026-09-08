@@ -777,6 +777,7 @@ select:focus {
 }
 
 .home-hero,
+.home-invite-hero,
 .how-it-works,
 .home-groups,
 .home-leaderboard,
@@ -785,6 +786,85 @@ select:focus {
   margin: 0 auto;
   padding-left: 5vw;
   padding-right: 5vw;
+}
+
+.home-invite-hero {
+  min-height: 520px;
+  padding-top: clamp(64px, 9vw, 112px);
+  padding-bottom: clamp(64px, 9vw, 112px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: clamp(44px, 8vw, 110px);
+  align-items: center;
+  color: white;
+  background: var(--ink);
+  box-shadow: 50vw 0 0 var(--ink), -50vw 0 0 var(--ink);
+}
+
+.home-invite-title {
+  max-width: 780px;
+  margin-bottom: 22px;
+  color: white;
+  font-family: var(--display);
+  font-size: clamp(3rem, 6.4vw, 5.6rem);
+  letter-spacing: -0.025em;
+  line-height: 0.98;
+  text-transform: uppercase;
+}
+
+.home-invite-copy > p:first-of-type {
+  max-width: 620px;
+  margin-bottom: 30px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: clamp(16px, 1.8vw, 19px);
+  line-height: 1.65;
+}
+
+.home-invite-status {
+  min-height: 21px;
+  margin: 16px 0 0;
+  color: #ffd88b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.home-invite-mark {
+  min-height: 285px;
+  padding: 38px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+  transform: rotate(2deg);
+}
+
+.home-invite-mark span {
+  margin-bottom: 18px;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.home-invite-mark strong {
+  font-family: var(--display);
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.home-invite-mark i {
+  width: 72px;
+  height: 4px;
+  margin-top: 28px;
+  background: var(--red);
+}
+
+body.has-group-invite .home-hero {
+  display: none;
 }
 
 .home-hero {
@@ -1104,36 +1184,6 @@ body.predictions-locked .predictor .final-actions button {
   color: rgba(255, 255, 255, 0.74);
   font-size: 14px;
   line-height: 1.6;
-}
-
-.home-invite-callout {
-  margin-top: 16px;
-  padding: 22px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  color: white;
-  background: var(--ink);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-}
-
-.home-invite-callout .card-kicker {
-  margin-bottom: 7px;
-  color: var(--gold);
-}
-
-.home-invite-callout strong {
-  font-family: var(--display);
-  font-size: 21px;
-  text-transform: uppercase;
-}
-
-.home-invite-callout p:last-child {
-  margin: 5px 0 0;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 13px;
 }
 
 .steps-list {
@@ -2822,6 +2872,7 @@ footer p {
   }
 
   .home-hero,
+  .home-invite-hero,
   .page-intro {
     padding-top: 62px;
     padding-bottom: 68px;
@@ -2829,6 +2880,22 @@ footer p {
 
   .home-hero {
     min-height: auto;
+  }
+
+  .home-invite-hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 38px;
+  }
+
+  .home-invite-copy .button {
+    width: 100%;
+  }
+
+  .home-invite-mark {
+    min-height: 210px;
+    padding: 28px;
+    transform: none;
   }
 
   .hero-actions,
@@ -2915,11 +2982,6 @@ footer p {
   .home-group-actions .text-link {
     margin: 8px 0 0;
     text-align: center;
-  }
-
-  .home-invite-callout {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   body.signed-in .hero {

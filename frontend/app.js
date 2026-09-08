@@ -292,6 +292,7 @@ const elements = {
   homeGroupStatus: document.querySelector("#home-group-status"),
   homeInviteCallout: document.querySelector("#home-invite-callout"),
   homeAcceptInvite: document.querySelector("#home-accept-invite"),
+  homeInviteStatus: document.querySelector("#home-invite-status"),
   groupDialog: document.querySelector("#group-dialog"),
   groupForm: document.querySelector("#group-form"),
   groupDialogKicker: document.querySelector("#group-dialog-kicker"),
