@@ -71,7 +71,24 @@ class FakeGroupTable:
             raise ConditionalCheckFailed()
         self.items[Item["groupKey"]] = Item
 
-    def delete_item(self, *, Key):
+    def delete_item(
+        self,
+        *,
+        Key,
+        ConditionExpression=None,
+        ExpressionAttributeValues=None,
+    ):
+        existing = self.items.get(Key["groupKey"])
+        if ConditionExpression:
+            values = ExpressionAttributeValues or {}
+            if "commissionerId" in ConditionExpression:
+                attribute, value_key = "commissionerId", ":commissioner"
+            elif "createdBy" in ConditionExpression:
+                attribute, value_key = "createdBy", ":creator"
+            else:
+                attribute, value_key = "groupId", ":groupId"
+            if not existing or existing.get(attribute) != values.get(value_key):
+                raise ConditionalCheckFailed()
         self.items.pop(Key["groupKey"], None)
 
     def update_item(
@@ -84,11 +101,24 @@ class FakeGroupTable:
         ReturnValues=None,
     ):
         item = self.items[Key["groupKey"]]
-        if ConditionExpression and "inviteCode" in item:
-            raise ConditionalCheckFailed()
-        if UpdateExpression != "SET inviteCode = :inviteCode":
+        values = ExpressionAttributeValues or {}
+        if UpdateExpression == "SET inviteCode = :inviteCode":
+            if ConditionExpression and "inviteCode" in item:
+                raise ConditionalCheckFailed()
+            item["inviteCode"] = values[":inviteCode"]
+        elif UpdateExpression == "SET commissionerId = :newCommissioner":
+            current = values[":currentCommissioner"]
+            if "commissionerId = :currentCommissioner" == ConditionExpression:
+                if item.get("commissionerId") != current:
+                    raise ConditionalCheckFailed()
+            elif "createdBy = :currentCommissioner" in (ConditionExpression or ""):
+                if "commissionerId" in item or item.get("createdBy") != current:
+                    raise ConditionalCheckFailed()
+            elif "commissionerId" in item or "createdBy" in item:
+                raise ConditionalCheckFailed()
+            item["commissionerId"] = values[":newCommissioner"]
+        else:
             raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
-        item["inviteCode"] = ExpressionAttributeValues[":inviteCode"]
         return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
 
     def scan(self, **_arguments):
@@ -132,7 +162,7 @@ class NameNormalizationTests(unittest.TestCase):
             ("A", "Leaderboard name must be between 3 and 24 characters"),
             (
                 "Jake🏈",
-                "Leaderboard name may use letters, numbers, spaces, periods, underscores, and hyphens",
+                "Leaderboard name may use letters, numbers, spaces, periods, apostrophes, underscores, and hyphens",
             ),
         )
 
@@ -148,7 +178,7 @@ class NameNormalizationTests(unittest.TestCase):
             ("A", "Group name must be between 3 and 40 characters"),
             (
                 "Crew🏈",
-                "Group name may use letters, numbers, spaces, periods, underscores, and hyphens",
+                "Group name may use letters, numbers, spaces, periods, apostrophes, underscores, and hyphens",
             ),
         )
 
@@ -157,6 +187,17 @@ class NameNormalizationTests(unittest.TestCase):
                 ValueError, f"^{message}$"
             ):
                 lambda_app.normalize_group_name(value)
+
+    def test_names_allow_straight_and_typographic_apostrophes(self):
+        straight = lambda_app.normalize_leaderboard_name("Jake's bracket")
+        typographic = lambda_app.normalize_leaderboard_name("Jake’s bracket")
+        self.assertEqual(straight[0], "Jake's bracket")
+        self.assertEqual(typographic[0], "Jake’s bracket")
+        self.assertEqual(straight[1], typographic[1])
+        self.assertEqual(
+            lambda_app.normalize_group_name("Jake's Crew")[0],
+            "Jake's Crew",
+        )
 
 
 class PredictionAuthorizationTests(unittest.TestCase):
@@ -410,6 +451,32 @@ class PrivateGroupTests(unittest.TestCase):
             None,
         )
 
+    def delete(self, group_id, user_id="user-123"):
+        return lambda_app.handler(
+            event(
+                "DELETE",
+                user_id=user_id,
+                path=f"/api/groups/{group_id}",
+            ),
+            None,
+        )
+
+    def leave(self, group_id, user_id="user-456", new_commissioner_id=None):
+        body = (
+            {"newCommissionerId": new_commissioner_id}
+            if new_commissioner_id is not None
+            else {}
+        )
+        return lambda_app.handler(
+            event(
+                "DELETE",
+                user_id=user_id,
+                body=body,
+                path=f"/api/groups/{group_id}/membership",
+            ),
+            None,
+        )
+
     def join(self, user_id="user-456", name="Sunday Crew", password="secret1"):
         return lambda_app.handler(
             event(
@@ -447,7 +514,7 @@ class PrivateGroupTests(unittest.TestCase):
         self.assertEqual(created["scoringOption"], "vegas")
         board = lambda_app.get_group_leaderboard(created["groupId"], "user-123")
         self.assertEqual(board["scoringOption"], "vegas")
-        self.assertEqual(set(board["entries"][0]["scores"]), {"classic", "vegas"})
+        self.assertEqual(set(board["entries"][0]["scores"]), {"vegas"})
 
     def test_invalid_group_scoring_is_rejected(self):
         result = lambda_app.handler(event("POST", user_id="user-123", path="/api/groups",
@@ -460,6 +527,8 @@ class PrivateGroupTests(unittest.TestCase):
         group = self.groups.items[f"group#{payload['groupId']}"]
 
         self.assertEqual(created["statusCode"], 201)
+        self.assertEqual(group["createdBy"], "user-123")
+        self.assertTrue(payload["isCreator"])
         self.assertNotIn("password", payload)
         self.assertNotEqual(group["passwordHash"], "secret1")
         self.assertNotIn("password", group)
@@ -471,6 +540,180 @@ class PrivateGroupTests(unittest.TestCase):
 
         duplicate = self.create(user_id="user-456", name="  sunday crew  ")
         self.assertEqual(duplicate["statusCode"], 400)
+
+    def test_group_creator_can_delete_group_and_release_its_name(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        deleted = self.delete(group_id)
+        self.assertEqual(deleted["statusCode"], 200)
+        self.assertNotIn(f"group#{group_id}", self.groups.items)
+        self.assertNotIn("name#sunday crew", self.groups.items)
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-123",
+            self.groups.items,
+        )
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-456",
+            self.groups.items,
+        )
+
+        recreated = self.create(user_id="user-456")
+        self.assertEqual(recreated["statusCode"], 201)
+
+    def test_group_member_cannot_delete_group(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        rejected = self.delete(group_id, user_id="user-456")
+
+        self.assertEqual(rejected["statusCode"], 403)
+        self.assertIn(f"group#{group_id}", self.groups.items)
+        self.assertIn("name#sunday crew", self.groups.items)
+
+    def test_group_member_can_leave_without_affecting_the_group(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        result = self.leave(group_id)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-456",
+            self.groups.items,
+        )
+        self.assertIn(f"group#{group_id}", self.groups.items)
+
+    def test_commissioner_must_transfer_role_before_leaving(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        rejected = self.leave(group_id, user_id="user-123")
+        transferred = self.leave(
+            group_id,
+            user_id="user-123",
+            new_commissioner_id="user-456",
+        )
+        group = self.groups.items[f"group#{group_id}"]
+
+        self.assertEqual(rejected["statusCode"], 400)
+        self.assertEqual(transferred["statusCode"], 200)
+        self.assertEqual(group["commissionerId"], "user-456")
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-123",
+            self.groups.items,
+        )
+        listed = lambda_app.handler(
+            event("GET", user_id="user-456", path="/api/groups"),
+            None,
+        )
+        self.assertTrue(json.loads(listed["body"])["groups"][0]["isCommissioner"])
+
+        old_commissioner_delete = self.delete(group_id, user_id="user-123")
+        new_commissioner_delete = self.delete(group_id, user_id="user-456")
+        self.assertEqual(old_commissioner_delete["statusCode"], 403)
+        self.assertEqual(new_commissioner_delete["statusCode"], 200)
+
+    def test_commissioner_can_only_transfer_to_another_member(self):
+        created = json.loads(self.create()["body"])
+
+        result = self.leave(
+            created["groupId"],
+            user_id="user-123",
+            new_commissioner_id="outsider",
+        )
+
+        self.assertEqual(result["statusCode"], 400)
+        self.assertIn(
+            f"membership#{created['groupId']}#user#user-123",
+            self.groups.items,
+        )
+
+    def test_group_members_endpoint_is_member_only(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        allowed = lambda_app.handler(
+            event("GET", path=f"/api/groups/{group_id}/members"),
+            None,
+        )
+        forbidden = lambda_app.handler(
+            event(
+                "GET",
+                user_id="outsider",
+                path=f"/api/groups/{group_id}/members",
+            ),
+            None,
+        )
+
+        members = json.loads(allowed["body"])["members"]
+        self.assertEqual(allowed["statusCode"], 200)
+        self.assertEqual(forbidden["statusCode"], 403)
+        self.assertEqual(
+            {member["userId"] for member in members},
+            {"user-123", "user-456"},
+        )
+        creator = next(
+            member for member in members if member["userId"] == "user-123"
+        )
+        self.assertTrue(creator["isCommissioner"])
+
+    def test_account_deletion_is_blocked_while_user_manages_a_group(self):
+        self.create()
+
+        result = lambda_app.handler(
+            event("DELETE", path="/api/profile"),
+            None,
+        )
+
+        self.assertEqual(result["statusCode"], 409)
+        self.assertIn(
+            "appoint a new commissioner",
+            json.loads(result["body"])["message"],
+        )
+
+    def test_legacy_group_creator_can_delete_when_membership_is_unambiguous(self):
+        group_id = "00000000-0000-4000-8000-000000000000"
+        self.groups.items = {
+            f"name#legacy crew": {
+                "groupKey": "name#legacy crew",
+                "recordType": "groupName",
+                "normalizedName": "legacy crew",
+                "groupId": group_id,
+            },
+            f"group#{group_id}": {
+                "groupKey": f"group#{group_id}",
+                "recordType": "group",
+                "groupId": group_id,
+                "groupName": "Legacy Crew",
+                "normalizedName": "legacy crew",
+                "createdAt": 100,
+            },
+            f"membership#{group_id}#user#user-123": {
+                "groupKey": f"membership#{group_id}#user#user-123",
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": "user-123",
+                "joinedAt": 100,
+            },
+            f"membership#{group_id}#user#user-456": {
+                "groupKey": f"membership#{group_id}#user#user-456",
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": "user-456",
+                "joinedAt": 200,
+            },
+        }
+
+        deleted = self.delete(group_id)
+
+        self.assertEqual(deleted["statusCode"], 200)
+        self.assertNotIn(f"group#{group_id}", self.groups.items)
 
     def test_join_requires_the_correct_password(self):
         created = json.loads(self.create()["body"])
@@ -504,7 +747,9 @@ class PrivateGroupTests(unittest.TestCase):
 
         self.assertEqual(len(creator_payload["groups"]), 1)
         self.assertEqual(creator_payload["groups"][0]["groupName"], "Sunday Crew")
+        self.assertTrue(creator_payload["groups"][0]["isCreator"])
         self.assertNotIn("passwordHash", creator_payload["groups"][0])
+        self.assertNotIn("createdBy", creator_payload["groups"][0])
         self.assertNotIn("inviteCode", creator_payload["groups"][0])
         self.assertEqual(json.loads(outsider_list["body"])["groups"], [])
 
@@ -638,6 +883,7 @@ class PublicLeaderboardTests(unittest.TestCase):
         )
         self.assertEqual([entry["rank"] for entry in payload["entries"]], [1, 2])
         self.assertEqual(payload["entries"][0]["superBowl"], "Detroit Lions")
+        self.assertEqual(set(payload["entries"][0]["scores"]), {"classic", "vegas"})
         self.assertNotIn("profileKey", payload["entries"][0])
         self.assertNotIn("picks", payload["entries"][0])
 

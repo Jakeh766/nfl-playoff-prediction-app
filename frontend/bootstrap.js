@@ -19,6 +19,28 @@ elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
 elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
 elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
 elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
+function explainNameValidation(input, maximumLength) {
+  input.setCustomValidity("");
+  if (input.validity.tooShort || input.validity.tooLong) {
+    input.setCustomValidity(`Use 3–${maximumLength} characters.`);
+  } else if (input.validity.patternMismatch) {
+    input.setCustomValidity(
+      "Use letters, numbers, spaces, periods, apostrophes, underscores, or hyphens.",
+    );
+  }
+}
+elements.leaderboardNameInput.addEventListener("invalid", () => {
+  explainNameValidation(elements.leaderboardNameInput, 24);
+});
+elements.leaderboardNameInput.addEventListener("input", () => {
+  elements.leaderboardNameInput.setCustomValidity("");
+});
+elements.groupName?.addEventListener("invalid", () => {
+  explainNameValidation(elements.groupName, 40);
+});
+elements.groupName?.addEventListener("input", () => {
+  elements.groupName.setCustomValidity("");
+});
 elements.publicLeaderboardTab?.addEventListener("click", () => {
   renderLeaderboardView("public");
 });
@@ -27,6 +49,12 @@ elements.groupsLeaderboardTab?.addEventListener("click", () => {
 });
 elements.publicLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
 elements.groupsLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
+elements.classicLeaderboardMode?.addEventListener("click", () => {
+  selectLeaderboardScoringMode("classic");
+});
+elements.upsetLeaderboardMode?.addEventListener("click", () => {
+  selectLeaderboardScoringMode("vegas");
+});
 elements.createGroup?.addEventListener("click", () => openGroupAction("create"));
 elements.joinGroup?.addEventListener("click", () => openGroupAction("join"));
 elements.homeCreateGroup?.addEventListener("click", () => openGroupAction("create"));
@@ -39,6 +67,18 @@ elements.groupDialog?.addEventListener("close", () => {
   elements.groupDialogMessage.textContent = "";
 });
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+elements.leaveGroup?.addEventListener("click", () => {
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === state.activeGroupId,
+  );
+  if (group) openLeaveGroupDialog(group);
+});
+elements.deleteGroup?.addEventListener("click", () => {
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === state.activeGroupId,
+  );
+  if (group) openDeleteGroupDialog(group);
+});
 elements.copyGroupInvite?.addEventListener("click", copyGroupInviteLink);
 elements.shareGroupInviteNative?.addEventListener("click", shareGroupInviteNatively);
 elements.closeGroupInvite?.addEventListener("click", () => {
@@ -49,8 +89,28 @@ elements.groupInviteDialog?.addEventListener("close", () => {
   elements.groupInviteMessage.textContent = "";
   elements.copyGroupInvite.textContent = "Copy invite link";
 });
+elements.leaveGroupForm?.addEventListener("submit", submitLeaveGroup);
+elements.cancelLeaveGroup?.addEventListener("click", () => {
+  if (!leaveGroupPending) elements.leaveGroupDialog.close();
+});
+elements.leaveGroupDialog?.addEventListener("cancel", (event) => {
+  if (leaveGroupPending) event.preventDefault();
+});
+elements.leaveGroupDialog?.addEventListener("close", resetLeaveGroupDialog);
+elements.deleteGroupForm?.addEventListener("submit", submitDeleteGroup);
+elements.deleteGroupConfirmation?.addEventListener(
+  "input",
+  updateDeleteGroupConfirmation,
+);
+elements.cancelDeleteGroup?.addEventListener("click", () => {
+  if (!deleteGroupPending) elements.deleteGroupDialog.close();
+});
+elements.deleteGroupDialog?.addEventListener("cancel", (event) => {
+  if (deleteGroupPending) event.preventDefault();
+});
+elements.deleteGroupDialog?.addEventListener("close", resetDeleteGroupDialog);
 elements.changeLeaderboardName.addEventListener("click", () => {
-  elements.accountDialog.close();
+  closeAccountModal({ restoreFocus: false });
   openLeaderboardNameDialog(false);
 });
 elements.cancelLeaderboardName.addEventListener("click", closeLeaderboardNameDialog);
@@ -92,17 +152,17 @@ elements.publicBracketDialog?.addEventListener("close", () => {
   elements.publicBracketContent.innerHTML = "";
 });
 elements.headerAccount.addEventListener("click", () => {
-  elements.accountDialog.showModal();
+  openAccountModal();
 });
 elements.closeAccountDialog.addEventListener("click", () => {
-  elements.accountDialog.close();
+  closeAccountModal();
 });
 elements.accountDialog.addEventListener("close", () => {
   if (!state.signedIn) pendingGroupAction = "";
 });
 elements.accountSignOut.addEventListener("click", signOut);
 elements.deleteAccount.addEventListener("click", () => {
-  elements.accountDialog.close();
+  closeAccountModal({ restoreFocus: false });
   openDeleteAccountDialog();
 });
 elements.deleteAccountForm.addEventListener("submit", submitDeleteAccount);

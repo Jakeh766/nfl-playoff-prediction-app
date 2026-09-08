@@ -190,6 +190,7 @@ const state = {
   savedAt: null,
   savedPrediction: null,
   leaderboard: null,
+  leaderboardScoringMode: "classic",
   leaderboardView: "public",
   groups: [],
   activeGroupId: "",
@@ -302,6 +303,8 @@ const elements = {
   cancelGroup: document.querySelector("#cancel-group"),
   submitGroup: document.querySelector("#submit-group"),
   shareGroupInvite: document.querySelector("#share-group-invite"),
+  leaveGroup: document.querySelector("#leave-group"),
+  deleteGroup: document.querySelector("#delete-group"),
   groupInviteDialog: document.querySelector("#group-invite-dialog"),
   groupInviteName: document.querySelector("#group-invite-name"),
   groupInviteLink: document.querySelector("#group-invite-link"),
@@ -309,10 +312,29 @@ const elements = {
   closeGroupInvite: document.querySelector("#close-group-invite"),
   copyGroupInvite: document.querySelector("#copy-group-invite"),
   shareGroupInviteNative: document.querySelector("#share-group-invite-native"),
+  leaveGroupDialog: document.querySelector("#leave-group-dialog"),
+  leaveGroupForm: document.querySelector("#leave-group-form"),
+  leaveGroupTitle: document.querySelector("#leave-group-title"),
+  leaveGroupDescription: document.querySelector("#leave-group-description"),
+  newCommissionerField: document.querySelector("#new-commissioner-field"),
+  newCommissioner: document.querySelector("#new-commissioner"),
+  leaveGroupMessage: document.querySelector("#leave-group-message"),
+  cancelLeaveGroup: document.querySelector("#cancel-leave-group"),
+  confirmLeaveGroup: document.querySelector("#confirm-leave-group"),
+  deleteGroupDialog: document.querySelector("#delete-group-dialog"),
+  deleteGroupForm: document.querySelector("#delete-group-form"),
+  deleteGroupName: document.querySelector("#delete-group-name"),
+  deleteGroupConfirmationName: document.querySelector("#delete-group-confirmation-name"),
+  deleteGroupConfirmation: document.querySelector("#delete-group-confirmation"),
+  deleteGroupMessage: document.querySelector("#delete-group-message"),
+  cancelDeleteGroup: document.querySelector("#cancel-delete-group"),
+  confirmDeleteGroup: document.querySelector("#confirm-delete-group"),
   leaderboardStatus: document.querySelector("#leaderboard-status"),
   leaderboardTableShell: document.querySelector("#leaderboard-table-shell"),
   leaderboardBody: document.querySelector("#leaderboard-body"),
   emptyLeaderboard: document.querySelector("#empty-leaderboard"),
+  classicLeaderboardMode: document.querySelector("#classic-leaderboard-mode"),
+  upsetLeaderboardMode: document.querySelector("#upset-leaderboard-mode"),
   publicBracketDialog: document.querySelector("#public-bracket-dialog"),
   publicBracketTitle: document.querySelector("#public-bracket-title"),
   publicBracketStatus: document.querySelector("#public-bracket-status"),
@@ -331,6 +353,79 @@ const elements = {
   predictionLockMessage: document.querySelector("#prediction-lock-message"),
 };
 
+let accountModalReturnFocus = null;
+
+function accountModalIsOpen() {
+  return !elements.accountDialog.hidden;
+}
+
+function accountModalFocusableElements() {
+  return Array.from(elements.accountDialog.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => !element.closest(".hidden") && !element.hidden);
+}
+
+function setAccountModalBackgroundInert(isInert) {
+  document.querySelectorAll("body > :not(#site-dialogs)").forEach((element) => {
+    if (isInert) {
+      if (!element.inert) {
+        element.inert = true;
+        element.dataset.accountModalInert = "true";
+      }
+    } else if (element.dataset.accountModalInert === "true") {
+      element.inert = false;
+      delete element.dataset.accountModalInert;
+    }
+  });
+}
+
+function openAccountModal(initialFocus = null) {
+  if (accountModalIsOpen()) return;
+  accountModalReturnFocus = document.activeElement;
+  elements.accountDialog.hidden = false;
+  elements.accountDialog.setAttribute("aria-hidden", "false");
+  document.body.classList.add("account-modal-open");
+  setAccountModalBackgroundInert(true);
+  const focusTarget = initialFocus || elements.closeAccountDialog;
+  requestAnimationFrame(() => focusTarget?.focus());
+}
+
+function closeAccountModal({ restoreFocus = true } = {}) {
+  if (!accountModalIsOpen()) return;
+  elements.accountDialog.hidden = true;
+  elements.accountDialog.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("account-modal-open");
+  setAccountModalBackgroundInert(false);
+  elements.accountDialog.dispatchEvent(new Event("close"));
+  if (restoreFocus && accountModalReturnFocus?.isConnected) {
+    accountModalReturnFocus.focus();
+  }
+  accountModalReturnFocus = null;
+}
+
+elements.accountDialog.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeAccountModal();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = accountModalFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
 if (!TEST_MODE && elements.randomizeBracket) {
   elements.randomizeBracket.classList.add("hidden");
 }
@@ -347,6 +442,10 @@ const AUTH_SESSION_KEY = "road-to-bowl.auth.session";
 const SIGN_IN_LABEL = "Sign in";
 let signInPending = false;
 let deleteAccountPending = false;
+let deleteGroupPending = false;
+let deleteGroupId = "";
+let leaveGroupPending = false;
+let leaveGroupId = "";
 let pendingPredictionSave = false;
 let publicBracketRequest = 0;
 let groupDialogMode = "create";
@@ -480,7 +579,7 @@ async function finishPasswordSignIn(email, password) {
   elements.loginPassword.value = "";
   elements.authMessage.textContent = "";
   renderAuthentication(true);
-  if (elements.accountDialog.open) elements.accountDialog.close();
+  closeAccountModal();
 
   await refreshProfile();
   if (PAGE === "picks") {
@@ -897,7 +996,7 @@ function closeLeaderboardNameDialog() {
 
 async function signOut() {
   const session = loadAuthSession();
-  if (elements.accountDialog.open) elements.accountDialog.close();
+  closeAccountModal();
   clearAuthSession();
   renderAuthentication(false);
   showAuthPanel("signIn");
@@ -949,6 +1048,17 @@ async function submitDeleteAccount(event) {
   try {
     const accessToken = await getValidAccessToken();
     if (!accessToken) throw new Error("Your session expired. Please sign in again.");
+
+    const groupsPayload = await apiRequest("/api/groups");
+    const managedGroups = (groupsPayload.groups || []).filter(
+      (group) => group.isCommissioner ?? group.isCreator,
+    );
+    if (managedGroups.length) {
+      const groupNames = managedGroups.map((group) => group.groupName).join(", ");
+      throw new Error(
+        `Before deleting your account, leave each group you manage and appoint a new commissioner: ${groupNames}`,
+      );
+    }
 
     await apiRequest("/api/prediction", { method: "DELETE" });
     await apiRequest("/api/profile", { method: "DELETE" });

@@ -27,7 +27,7 @@ PREDICTION_LOCK_AT = os.environ.get(
     "PREDICTION_LOCK_AT", "2099-12-31T23:59:59Z"
 )
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
-NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*[A-Za-z0-9]")
+NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._'’-]*[A-Za-z0-9]")
 ANALYTICS_ID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
     re.IGNORECASE,
@@ -135,9 +135,10 @@ def normalize_name(
         )
     if not NAME_PATTERN.fullmatch(display_name):
         raise ValueError(
-            f"{label} name may use letters, numbers, spaces, periods, underscores, and hyphens"
+            f"{label} name may use letters, numbers, spaces, periods, apostrophes, underscores, and hyphens"
         )
-    return display_name, display_name.casefold()
+    normalized_name = display_name.casefold().replace("’", "'")
+    return display_name, normalized_name
 
 
 def normalize_leaderboard_name(value) -> tuple[str, str]:
@@ -263,14 +264,15 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         if not profile:
             continue
         predicted_picks = prediction.get("picks") or {}
+        scoring_modes = ("classic", "vegas") if member_ids is None else (scoring_option,)
         scores = {mode: score_prediction(prediction, results, mode)
-                  for mode in ("classic", "vegas")}
+                  for mode in scoring_modes}
         score = scores[scoring_option]
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
                 "superBowl": predicted_picks.get("superBowl", ""),
-                "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total", "upsetBonus")}
+                "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total")}
                            for mode, value in scores.items()},
                 "regularSeason": score["regularSeason"],
                 "playoffs": score["playoffs"],
@@ -543,26 +545,31 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
 
 def score_vegas_prediction(prediction: dict, results: dict) -> dict:
-    """Classic credit plus a fixed, nonnegative bonus for each correct pick."""
+    """Weight each correct pick by its team's frozen preseason win total."""
     classic = score_prediction(prediction, results)
     with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
         snapshot = json.load(file)
     if snapshot["season"] != results.get("season"):
         raise ValueError("Upset Edge scoring needs a market snapshot for this season")
     totals = snapshot["totals"]
-    earned = {key: Decimal(0) for key in SCORING_RULES}
-    available = {key: Decimal(0) for key in SCORING_RULES}
+    earned = {key: Decimal("0.00") for key in SCORING_RULES}
+    available = {key: Decimal("0.00") for key in SCORING_RULES}
+
+    def rounded(value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     def add(category, team, correct, base):
         if not team:
             return
         if team not in totals:
             raise ValueError(f"Missing frozen Vegas win total for {team}")
-        rate = (Decimal("18") - Decimal(str(totals[team]))) / Decimal("8.5")
-        bonus = (Decimal(base) * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        available[category] += bonus
+        multiplier = Decimal("1") + Decimal("0.10") * (
+            Decimal("8.5") - Decimal(str(totals[team]))
+        )
+        points = rounded(Decimal(base) * multiplier)
+        available[category] += points
         if correct:
-            earned[category] += bonus
+            earned[category] += points
 
     predicted_seeds = prediction.get("seeds", {})
     actual_seeds = results.get("seeds", {})
@@ -601,20 +608,30 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     breakdown = {}
     for category, item in classic["breakdown"].items():
         breakdown[category] = {
-            **item, "classicPoints": item["points"], "upsetBonus": float(earned[category]),
-            "points": float(Decimal(item["points"]) + earned[category]),
-            "possible": float(Decimal(item["possible"]) + available[category]),
+            **item,
+            "points": float(rounded(earned[category])),
+            "possible": float(rounded(available[category])),
             "classicMaximum": item["maximum"], "maximum": None,
         }
-    regular_bonus = sum(earned[key] for key in ("playoffField", "divisionWinners", "exactSeeds"))
-    bonus = sum(earned.values())
+    regular_season = rounded(sum(
+        (earned[key] for key in ("playoffField", "divisionWinners", "exactSeeds")),
+        Decimal("0.00"),
+    ))
+    playoffs = rounded(sum(
+        (earned[key] for key in (
+            "wildCard", "divisional", "conferenceChampions", "superBowlChampion",
+        )),
+        Decimal("0.00"),
+    ))
+    total = rounded(regular_season + playoffs)
+    possible = rounded(sum(available.values(), Decimal("0.00")))
     return {
         **classic, "scoringOption": "vegas", "oddsSource": snapshot["source"],
-        "breakdown": breakdown, "classicScore": classic["total"], "upsetBonus": float(bonus),
-        "regularSeason": float(Decimal(classic["regularSeason"]) + regular_bonus),
-        "playoffs": float(Decimal(classic["playoffs"]) + bonus - regular_bonus),
-        "total": float(Decimal(classic["total"]) + bonus),
-        "possible": float(Decimal(classic["possible"]) + sum(available.values())),
+        "breakdown": breakdown,
+        "regularSeason": float(regular_season),
+        "playoffs": float(playoffs),
+        "total": float(total),
+        "possible": float(possible),
         "classicMaximum": MAX_SCORE, "maximum": None,
     }
 
@@ -892,12 +909,47 @@ def new_group_invite_code() -> str:
     return secrets.token_urlsafe(24)
 
 
-def public_group(group: dict) -> dict:
+def legacy_group_creator(group: dict, memberships: list[dict]) -> str | None:
+    """Recover the creator for groups created before createdBy was stored."""
+    created_at = group.get("createdAt")
+    if created_at is None:
+        return None
+    creator_ids = {
+        item.get("userId")
+        for item in memberships
+        if item.get("recordType") == "membership"
+        and item.get("groupId") == group.get("groupId")
+        and item.get("joinedAt") == created_at
+        and isinstance(item.get("userId"), str)
+    }
+    return next(iter(creator_ids)) if len(creator_ids) == 1 else None
+
+
+def group_commissioner_id(
+    group: dict,
+    memberships: list[dict] | None = None,
+) -> str | None:
+    """Return the current commissioner, including legacy creator fallbacks."""
+    commissioner_id = group.get("commissionerId") or group.get("createdBy")
+    if commissioner_id:
+        return commissioner_id
+    return legacy_group_creator(group, memberships or [])
+
+
+def public_group(
+    group: dict,
+    user_id: str | None = None,
+    creator_id: str | None = None,
+) -> dict:
+    commissioner_id = creator_id or group_commissioner_id(group)
     return {
         "groupId": group["groupId"],
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
         "scoringOption": group.get("scoringOption", "classic"),
+        "isCommissioner": bool(user_id and commissioner_id == user_id),
+        # Kept for older deployed clients while commissioner terminology rolls out.
+        "isCreator": bool(user_id and commissioner_id == user_id),
     }
 
 
@@ -933,9 +985,10 @@ def is_group_member(group_id: str, user_id: str) -> bool:
 
 def list_groups(user_id: str) -> dict:
     table = groups_table()
+    items = scan_all(table)
     memberships = [
         item
-        for item in scan_all(table)
+        for item in items
         if item.get("recordType") == "membership" and item.get("userId") == user_id
     ]
     groups = []
@@ -944,7 +997,13 @@ def list_groups(user_id: str) -> dict:
             Key={"groupKey": group_item_key(membership["groupId"])}
         ).get("Item")
         if group and group.get("recordType") == "group":
-            groups.append(public_group(group))
+            groups.append(
+                public_group(
+                    group,
+                    user_id,
+                    group_commissioner_id(group, items),
+                )
+            )
     groups.sort(key=lambda group: group["groupName"].casefold())
     return {"groups": groups}
 
@@ -984,6 +1043,8 @@ def create_group(user_id: str, event: dict) -> dict:
         "groupId": group_id,
         "groupName": group_name,
         "normalizedName": normalized_name,
+        "createdBy": user_id,
+        "commissionerId": user_id,
         "scoringOption": scoring_option,
         "passwordSalt": salt,
         "passwordHash": digest,
@@ -1007,7 +1068,7 @@ def create_group(user_id: str, event: dict) -> dict:
         table.delete_item(Key={"groupKey": group_key})
         table.delete_item(Key={"groupKey": name_key})
         raise
-    return public_group(group)
+    return public_group(group, user_id)
 
 
 def join_group(user_id: str, event: dict) -> dict:
@@ -1031,7 +1092,7 @@ def join_group(user_id: str, event: dict) -> dict:
         raise ValueError("Group name or password is incorrect")
 
     add_group_membership(group["groupId"], user_id)
-    return public_group(group)
+    return public_group(group, user_id)
 
 
 def add_group_membership(group_id: str, user_id: str) -> None:
@@ -1105,7 +1166,7 @@ def join_group_by_invite(user_id: str, event: dict) -> dict:
         raise ValueError("That group invite link is invalid")
 
     add_group_membership(group_id, user_id)
-    return public_group(group)
+    return public_group(group, user_id)
 
 
 def get_group_leaderboard(group_id: str, user_id: str) -> dict:
@@ -1125,9 +1186,158 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
     }
 
 
+def list_group_members(group_id: str, user_id: str) -> dict:
+    group = get_group(group_id)
+    if not group or not is_group_member(group_id, user_id):
+        raise PermissionError("Group membership required")
+
+    memberships = sorted(
+        (
+            item
+            for item in scan_all(groups_table())
+            if item.get("recordType") == "membership"
+            and item.get("groupId") == group_id
+        ),
+        key=lambda item: (item.get("joinedAt", 0), item.get("userId", "")),
+    )
+    commissioner_id = group_commissioner_id(group, memberships)
+    members = []
+    unnamed_number = 0
+    for membership in memberships:
+        member_id = membership.get("userId")
+        if not isinstance(member_id, str):
+            continue
+        profile = get_profile(member_id)
+        if profile and profile.get("leaderboardName"):
+            display_name = profile["leaderboardName"]
+        else:
+            unnamed_number += 1
+            display_name = f"Member {unnamed_number}"
+        members.append(
+            {
+                "userId": member_id,
+                "displayName": display_name,
+                "isCurrentUser": member_id == user_id,
+                "isCommissioner": member_id == commissioner_id,
+            }
+        )
+    return {"groupId": group_id, "members": members}
+
+
+def leave_group(group_id: str, user_id: str, event: dict) -> dict:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    table = groups_table()
+    items = scan_all(table)
+    memberships = [
+        item
+        for item in items
+        if item.get("recordType") == "membership"
+        and item.get("groupId") == group_id
+    ]
+    if not any(item.get("userId") == user_id for item in memberships):
+        raise PermissionError("Group membership required")
+
+    commissioner_id = group_commissioner_id(group, memberships)
+    new_commissioner_id = parse_body(event).get("newCommissionerId")
+    if commissioner_id == user_id:
+        if not isinstance(new_commissioner_id, str) or not new_commissioner_id:
+            raise ValueError("Choose a new commissioner before leaving this group")
+        if new_commissioner_id == user_id or not any(
+            item.get("userId") == new_commissioner_id for item in memberships
+        ):
+            raise ValueError("The new commissioner must be another current group member")
+
+        condition = "commissionerId = :currentCommissioner"
+        values = {
+            ":newCommissioner": new_commissioner_id,
+            ":currentCommissioner": user_id,
+        }
+        if not group.get("commissionerId"):
+            if group.get("createdBy"):
+                condition = (
+                    "attribute_not_exists(commissionerId) AND "
+                    "createdBy = :currentCommissioner"
+                )
+            else:
+                condition = (
+                    "attribute_not_exists(commissionerId) AND "
+                    "attribute_not_exists(createdBy)"
+                )
+        try:
+            table.update_item(
+                Key={"groupKey": group_item_key(group_id)},
+                UpdateExpression="SET commissionerId = :newCommissioner",
+                ConditionExpression=condition,
+                ExpressionAttributeValues=values,
+            )
+        except Exception as error:
+            if is_conditional_failure(error):
+                raise ValueError(
+                    "The group commissioner changed. Refresh and try again"
+                ) from error
+            raise
+    elif new_commissioner_id is not None:
+        raise ValueError("Only the current commissioner can appoint a replacement")
+
+    table.delete_item(Key={"groupKey": membership_item_key(group_id, user_id)})
+    return {"left": True, "commissionerTransferred": commissioner_id == user_id}
+
+
+def delete_group(group_id: str, user_id: str) -> None:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    table = groups_table()
+    items = scan_all(table)
+    commissioner_id = group_commissioner_id(group, items)
+    if commissioner_id != user_id:
+        raise PermissionError("Only the group commissioner can delete this group")
+
+    for item in items:
+        if item.get("recordType") == "membership" and item.get("groupId") == group_id:
+            table.delete_item(Key={"groupKey": item["groupKey"]})
+
+    try:
+        table.delete_item(
+            Key={"groupKey": group_name_item_key(group["normalizedName"])},
+            ConditionExpression="groupId = :groupId",
+            ExpressionAttributeValues={":groupId": group_id},
+        )
+    except Exception as error:
+        if not is_conditional_failure(error):
+            raise
+
+    group_delete = {"Key": {"groupKey": group_item_key(group_id)}}
+    if group.get("commissionerId"):
+        group_delete.update(
+            ConditionExpression="commissionerId = :commissioner",
+            ExpressionAttributeValues={":commissioner": user_id},
+        )
+    elif group.get("createdBy"):
+        group_delete.update(
+            ConditionExpression="createdBy = :creator",
+            ExpressionAttributeValues={":creator": user_id},
+        )
+    table.delete_item(**group_delete)
+
+
 def delete_group_memberships(user_id: str) -> None:
     table = groups_table()
-    for item in scan_all(table):
+    items = scan_all(table)
+    owned_groups = [
+        item.get("groupName", "a group")
+        for item in items
+        if item.get("recordType") == "group"
+        and group_commissioner_id(item, items) == user_id
+    ]
+    if owned_groups:
+        raise ValueError(
+            "Before deleting your account, leave each group you manage and appoint a new commissioner: "
+            + ", ".join(sorted(owned_groups, key=str.casefold))
+        )
+    for item in items:
         if item.get("recordType") == "membership" and item.get("userId") == user_id:
             table.delete_item(Key={"groupKey": item["groupKey"]})
 
@@ -1183,13 +1393,28 @@ def handler(event, context):
     group_invite_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/invite", path or ""
     )
+    group_members_match = re.fullmatch(
+        r"/api/groups/([0-9a-f-]{36})/members", path or ""
+    )
+    group_membership_match = re.fullmatch(
+        r"/api/groups/([0-9a-f-]{36})/membership", path or ""
+    )
+    group_delete_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})", path or "")
     if path not in (
         "/api/prediction",
         "/api/profile",
         "/api/groups",
         "/api/groups/join",
         "/api/groups/join-invite",
-    ) and not group_leaderboard_match and not group_invite_match:
+    ) and not any(
+        (
+            group_leaderboard_match,
+            group_invite_match,
+            group_members_match,
+            group_membership_match,
+            group_delete_match,
+        )
+    ):
         return response(404, {"message": "Not found"})
 
     user_id = authenticated_user_id(event)
@@ -1221,6 +1446,41 @@ def handler(event, context):
             except ValueError as error:
                 return response(400, {"message": str(error)})
         return response(404, {"message": "Not found"})
+
+    if group_delete_match:
+        if method != "DELETE":
+            return response(404, {"message": "Not found"})
+        try:
+            delete_group(group_delete_match.group(1), user_id)
+            return response(200, {"deleted": True})
+        except ValueError as error:
+            return response(404, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
+
+    if group_members_match:
+        if method != "GET":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(
+                200,
+                list_group_members(group_members_match.group(1), user_id),
+            )
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
+
+    if group_membership_match:
+        if method != "DELETE":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(
+                200,
+                leave_group(group_membership_match.group(1), user_id, event),
+            )
+        except ValueError as error:
+            return response(400, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
 
     if group_invite_match:
         if method != "GET":
@@ -1258,9 +1518,12 @@ def handler(event, context):
                 return response(400, {"message": str(error)})
 
         if method == "DELETE":
-            delete_group_memberships(user_id)
-            delete_profile(user_id)
-            return response(200, {"deleted": True})
+            try:
+                delete_group_memberships(user_id)
+                delete_profile(user_id)
+                return response(200, {"deleted": True})
+            except ValueError as error:
+                return response(409, {"message": str(error)})
 
         return response(404, {"message": "Not found"})
 

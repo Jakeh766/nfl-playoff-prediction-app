@@ -122,9 +122,28 @@ class LoginFormTests(unittest.TestCase):
             self.app_javascript,
         )
         self.assertIn(
-            "if (elements.accountDialog.open) elements.accountDialog.close();",
+            "closeAccountModal();",
             self.app_javascript,
         )
+
+    def test_account_modal_avoids_the_browser_top_layer(self):
+        account_markup = self.shell[
+            self.shell.index('id="account-dialog"') :
+            self.shell.index('id="leaderboard-name-dialog"')
+        ]
+        all_javascript = "\n".join(
+            (self.app_javascript, self.bootstrap_javascript)
+        )
+
+        self.assertIn('role="dialog"', account_markup)
+        self.assertIn('aria-modal="true"', account_markup)
+        self.assertIn('aria-hidden="true" hidden', account_markup)
+        self.assertNotIn('<dialog class="account-dialog auth-dialog"', self.shell)
+        self.assertIn('<dialog class="account-dialog" id="leaderboard-name-dialog"', self.shell)
+        self.assertIn('event.key === "Escape"', all_javascript)
+        self.assertIn('event.key !== "Tab"', all_javascript)
+        self.assertIn("accountModalReturnFocus.focus()", all_javascript)
+        self.assertIn("setAccountModalBackgroundInert(true)", all_javascript)
 
     def test_account_deletion_requires_confirmation_and_removes_saved_data_first(self):
         html = self.shell
@@ -170,6 +189,8 @@ class LoginFormTests(unittest.TestCase):
 
         self.assertIn('id="leaderboard-name-form"', html)
         self.assertIn('id="leaderboard-name"', html)
+        self.assertIn("apostrophes, underscores, and hyphens", self.shell)
+        self.assertIn("explainNameValidation", self.bootstrap_javascript)
         self.assertIn('maxlength="24"', html)
         self.assertIn('apiRequest("/api/profile", {', app_javascript)
         self.assertIn("openLeaderboardNameDialog(true);", picks_javascript)
@@ -230,6 +251,10 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="join-group"', html)
         self.assertIn('id="group-password"', html)
         self.assertIn('type="password"', html)
+        self.assertIn(
+            'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true"',
+            html,
+        )
         self.assertIn('apiRequest("/api/groups")', app_javascript)
         self.assertIn('"/api/groups/join"', app_javascript)
         self.assertIn("/leaderboard`", app_javascript)
@@ -265,6 +290,31 @@ class LoginFormTests(unittest.TestCase):
         groups_resource_index = terraform.index(groups_resource)
         groups_permissions = terraform[:groups_resource_index].rsplit("{", 1)[-1]
         self.assertIn('"dynamodb:UpdateItem"', groups_permissions)
+
+    def test_group_deletion_is_creator_only_and_confirmed(self):
+        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        app_javascript = "\n".join(
+            (
+                self.app_javascript,
+                self.leaderboard_javascript,
+                self.bootstrap_javascript,
+            )
+        )
+        terraform = (
+            FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="delete-group"', html)
+        self.assertIn('id="delete-group-dialog"', self.shell)
+        self.assertIn("activeGroup?.isCreator", app_javascript)
+        self.assertIn("apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`", app_javascript)
+        self.assertIn('route_key          = "DELETE /api/groups/{groupId}"', terraform)
+        self.assertIn('id="leave-group"', html)
+        self.assertIn('id="leave-group-dialog"', self.shell)
+        self.assertIn('}/members`', app_javascript)
+        self.assertIn('}/membership`', app_javascript)
+        self.assertIn('route_key          = "GET /api/groups/{groupId}/members"', terraform)
+        self.assertIn('route_key          = "DELETE /api/groups/{groupId}/membership"', terraform)
 
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")

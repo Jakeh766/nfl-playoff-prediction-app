@@ -173,6 +173,7 @@ def build_seed_data(now_ms: int | None = None) -> dict[str, list[dict]]:
                     "groupId": group_id,
                     "groupName": group_name,
                     "normalizedName": normalized_name,
+                    "createdBy": f"demo-user-{group_config['members'][0] + 1:02d}",
                     "createdAt": seeded_at,
                     **password_fields(group_name, group_config["password"]),
                 },

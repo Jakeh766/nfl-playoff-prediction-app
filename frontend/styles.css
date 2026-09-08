@@ -754,8 +754,43 @@ select:focus {
 .hero-actions {
   margin-top: 34px;
   display: flex;
-  align-items: center;
-  gap: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.account-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow-y: auto;
+  background: rgba(16, 34, 58, 0.64);
+  backdrop-filter: blur(3px);
+}
+
+.account-modal[hidden] {
+  display: none;
+}
+
+.account-modal > .account-dialog {
+  max-height: calc(100vh - 32px);
+  margin: auto;
+  overflow-y: auto;
+}
+
+body.account-modal-open {
+  overflow: hidden;
+}
+
+.hero-actions .button-hero {
+  width: 100%;
+}
+
+.hero-actions .text-link {
+  align-self: flex-start;
 }
 
 .text-link {
@@ -1826,6 +1861,59 @@ body.predictions-locked .predictor .final-actions button {
   margin: 0 0 18px !important;
 }
 
+.leaderboard-score-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 10px;
+}
+
+.leaderboard-score-toolbar > a {
+  color: var(--blue-dark);
+  font-size: 12px;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.leaderboard-scoring-toggle {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(16, 34, 58, 0.07);
+  border: 1px solid rgba(16, 34, 58, 0.11);
+  border-radius: 7px;
+}
+
+.leaderboard-scoring-option {
+  min-height: 36px;
+  padding: 0 16px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: background 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.leaderboard-scoring-option:hover {
+  color: var(--blue-dark);
+}
+
+.leaderboard-scoring-option.active {
+  color: var(--blue-dark);
+  background: var(--card);
+  box-shadow: 0 2px 8px rgba(16, 34, 58, 0.1);
+}
+
+.leaderboard-scoring-option:focus-visible {
+  outline: 3px solid rgba(24, 89, 169, 0.3);
+  outline-offset: 2px;
+}
+
 .groups-toolbar {
   display: flex;
   align-items: center;
@@ -1966,8 +2054,9 @@ body.predictions-locked .predictor .final-actions button {
 
 .leaderboard-table {
   width: 100%;
-  min-width: 820px;
+  min-width: 680px;
   border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
 }
 
 .leaderboard-table th,
@@ -2306,12 +2395,8 @@ body.predictions-locked .predictor .final-actions button {
   align-items: start;
 }
 
-#vegas-scoring-panel .scoring-table-shell {
-  overflow-x: auto;
-}
-
 #vegas-scoring-panel .scoring-table {
-  min-width: 460px;
+  min-width: 0;
 }
 
 #vegas-scoring-panel .scoring-table th:nth-child(2),
@@ -2319,13 +2404,8 @@ body.predictions-locked .predictor .final-actions button {
   width: 210px;
 }
 
-#vegas-scoring-panel .seed-point-tiers li {
-  flex-wrap: wrap;
-  gap: 2px 12px;
-}
-
-#vegas-scoring-panel .seed-point-tiers span {
-  white-space: nowrap;
+#vegas-scoring-panel .scoring-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 #vegas-scoring-panel .scoring-note a {
@@ -2438,51 +2518,41 @@ body.predictions-locked .predictor .final-actions button {
 
 .scoring-formula {
   margin: 0 0 20px;
-  padding: 18px 16px;
-  background: rgba(255, 255, 255, 0.09);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  padding: 18px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.scoring-note p.scoring-formula-equation {
-  margin: 0 0 13px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px 10px;
+.scoring-formula-step {
+  display: grid;
+  gap: 5px;
+}
+
+.scoring-formula-step + .scoring-formula-step {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.scoring-formula-step span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.scoring-formula-step strong {
   color: white;
   font-family: var(--display);
-  font-size: clamp(1.3rem, 2.3vw, 1.8rem);
-  font-weight: 500;
-  line-height: 1.25;
-}
-
-.scoring-formula-equation strong {
-  color: white;
+  font-size: 21px;
   font-weight: 700;
-}
-
-.scoring-formula-fraction {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  max-width: 100%;
-  color: white;
-  text-align: center;
-  line-height: 1.1;
-}
-
-.scoring-formula-fraction span:first-child {
-  padding: 0 4px 5px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
-}
-
-.scoring-formula-fraction span:last-child {
-  padding-top: 5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .scoring-note p.scoring-formula-explainer {
-  margin: 0;
+  margin: 16px 0 0;
   color: rgba(255, 255, 255, 0.82);
   font-size: 12px;
   line-height: 1.5;
@@ -2855,6 +2925,50 @@ footer p {
     min-width: 0;
   }
 
+  .leaderboard-table {
+    min-width: 0;
+  }
+
+  .leaderboard-table th,
+  .leaderboard-table td {
+    padding: 13px 10px;
+  }
+
+  .leaderboard-table th:nth-child(4),
+  .leaderboard-table td:nth-child(4),
+  .leaderboard-table th:nth-child(5),
+  .leaderboard-table td:nth-child(5) {
+    display: none;
+  }
+
+  .leaderboard-player-heading {
+    padding: 0 10px !important;
+  }
+
+  .leaderboard-rank {
+    width: 54px;
+    font-size: 16px;
+  }
+
+  .leaderboard-champion,
+  .leaderboard-champion-heading {
+    width: 48px;
+    min-width: 48px;
+  }
+
+  .leaderboard-champion-logo {
+    width: 26px;
+    height: 26px;
+    max-width: 26px;
+    max-height: 26px;
+    flex-basis: 26px;
+  }
+
+  .leaderboard-sort-button {
+    min-height: 50px;
+    padding: 10px;
+  }
+
   .conference-grid {
     grid-template-columns: 1fr;
   }
@@ -2944,11 +3058,6 @@ footer p {
     flex-direction: column;
   }
 
-  .scoring-formula-equation {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .scoring-table th,
   .scoring-table td {
     padding: 12px;
@@ -2957,6 +3066,20 @@ footer p {
   .scoring-table th:not(:first-child),
   .scoring-table td:not(:first-child) {
     width: auto;
+  }
+
+  #vegas-scoring-panel .scoring-table {
+    min-width: 0;
+  }
+
+  #vegas-scoring-panel .scoring-table th,
+  #vegas-scoring-panel .scoring-table td {
+    padding: 11px 9px;
+  }
+
+  #vegas-scoring-panel .scoring-table th:nth-child(2),
+  #vegas-scoring-panel .scoring-table td:nth-child(2) {
+    width: 145px;
   }
 
   footer {

@@ -39,7 +39,8 @@ if (dialogs) {
       </dialog>
     ` : ""}
 
-    <dialog class="account-dialog auth-dialog" id="account-dialog" aria-labelledby="account-dialog-title">
+    <div class="account-modal" id="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" aria-hidden="true" hidden>
+      <div class="account-dialog auth-dialog" role="document">
       <div class="dialog-heading">
         <div>
           <p class="card-kicker">ACCOUNT</p>
@@ -138,7 +139,8 @@ if (dialogs) {
         </div>
         <button class="delete-account-button" id="delete-account" type="button">Delete account</button>
       </div>
-    </dialog>
+      </div>
+    </div>
 
     <dialog class="account-dialog" id="leaderboard-name-dialog" aria-labelledby="leaderboard-name-title" aria-describedby="leaderboard-name-description">
       <form id="leaderboard-name-form" method="post">
@@ -146,8 +148,8 @@ if (dialogs) {
         <h2 id="leaderboard-name-title">Choose your name.</h2>
         <p id="leaderboard-name-description">Choose the public name that identifies your saved prediction and read-only bracket. Every name is unique, ignoring capitalization.</p>
         <label for="leaderboard-name">Leaderboard name</label>
-        <input id="leaderboard-name" name="leaderboard-name" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="nickname" autocapitalize="words" spellcheck="false" required />
-        <p class="input-hint">3–24 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
+        <input id="leaderboard-name" name="leaderboard-name" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9][A-Za-z0-9 ._'’\\-]*[A-Za-z0-9]" autocomplete="nickname" autocapitalize="words" spellcheck="false" required />
+        <p class="input-hint">3–24 characters. Letters, numbers, spaces, periods, apostrophes, underscores, and hyphens.</p>
         <p class="dialog-message" id="leaderboard-name-message" role="status" aria-live="polite"></p>
         <div class="dialog-actions">
           <button class="button button-secondary" id="cancel-leaderboard-name" type="button">Cancel</button>
@@ -163,18 +165,18 @@ if (dialogs) {
           <h2 id="group-dialog-title">Create a group.</h2>
           <p id="group-dialog-description">Pick a unique group name. You can invite people with a private link or the group password.</p>
           <label for="group-name">Group name</label>
-          <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
-          <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, underscores, and hyphens.</p>
+          <input id="group-name" name="group-name" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9 ._'’\\-]*[A-Za-z0-9]" autocomplete="off" autocapitalize="words" spellcheck="false" required />
+          <p class="input-hint">3–40 characters. Letters, numbers, spaces, periods, apostrophes, underscores, and hyphens.</p>
           <div id="group-scoring-field">
             <label for="group-scoring">Scoring option</label>
             <select id="group-scoring" name="scoring-option" aria-describedby="group-scoring-hint">
               <option value="classic">Classic · 300 points</option>
-              <option value="vegas">Upset Edge · Classic + bonus</option>
+              <option value="vegas">Upset Edge · weighted picks</option>
             </select>
-            <p class="input-hint" id="group-scoring-hint">Upset Edge adds a fixed market-based bonus for every correct pick in seeding and playoffs. Lower-projected teams earn bigger bonuses. Totals can exceed 300. This choice sets your group’s ranking and cannot be changed.</p>
+            <p class="input-hint" id="group-scoring-hint">Upset Edge multiplies each correct pick by the team’s fixed preseason win-total weight. An 8.5-win team is neutral; each win below or above changes the value by 10%. This choice sets your group’s ranking and cannot be changed.</p>
           </div>
           <label for="group-password">Group password</label>
-          <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="current-password" required />
+          <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true" required />
           <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
           <p class="dialog-message" id="group-dialog-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">
@@ -200,6 +202,38 @@ if (dialogs) {
           <button class="button button-secondary hidden" id="share-group-invite-native" type="button">Share link</button>
           <button class="button button-primary" id="copy-group-invite" type="button">Copy invite link</button>
         </div>
+      </dialog>
+
+      <dialog class="account-dialog" id="leave-group-dialog" aria-labelledby="leave-group-title" aria-describedby="leave-group-description">
+        <form id="leave-group-form" method="post">
+          <h2 id="leave-group-title">Leave this group?</h2>
+          <p id="leave-group-description"></p>
+          <div class="hidden" id="new-commissioner-field">
+            <label for="new-commissioner">New commissioner</label>
+            <select id="new-commissioner" name="new-commissioner"></select>
+            <p class="input-hint">They will be able to manage and delete the group.</p>
+          </div>
+          <p class="dialog-message" id="leave-group-message" role="status" aria-live="polite"></p>
+          <div class="dialog-actions">
+            <button class="button button-secondary" id="cancel-leave-group" type="button">Stay in group</button>
+            <button class="button button-danger" id="confirm-leave-group" type="submit">Leave group</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog class="account-dialog" id="delete-group-dialog" aria-labelledby="delete-group-title" aria-describedby="delete-group-description">
+        <form id="delete-group-form" method="post">
+          <p class="card-kicker">PERMANENT ACTION</p>
+          <h2 id="delete-group-title">Delete this group?</h2>
+          <p id="delete-group-description">As commissioner, you can permanently remove <strong id="delete-group-name"></strong> for every member, including its invite link and leaderboard. This cannot be undone.</p>
+          <label for="delete-group-confirmation">Type <strong id="delete-group-confirmation-name"></strong> to confirm</label>
+          <input id="delete-group-confirmation" name="confirmation" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" required />
+          <p class="dialog-message" id="delete-group-message" role="status" aria-live="polite"></p>
+          <div class="dialog-actions">
+            <button class="button button-secondary" id="cancel-delete-group" type="button">Keep this group</button>
+            <button class="button button-danger" id="confirm-delete-group" type="submit" disabled>Delete group</button>
+          </div>
+        </form>
       </dialog>
     ` : ""}
 
