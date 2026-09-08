@@ -250,7 +250,7 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="group-password"', html)
         self.assertIn('type="password"', html)
         self.assertIn(
-            'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off"',
+            'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true"',
             html,
         )
         self.assertIn('apiRequest("/api/groups")', app_javascript)
