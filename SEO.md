@@ -36,8 +36,11 @@ The existing CloudFront cache policy has min/default/max TTL zero, and S3 object
 have no-store/no-cache headers. No new invalidation step is needed. Wait for the
 CloudFront distribution update to finish before checking response headers.
 
-The social PNG is a 512px export of the existing SVG logo, not new branding. To
-regenerate with Sharp installed: `sharp(input).resize(512, 512).png().toFile(output)`.
+The favicon, 180px Apple touch icon, and 1200x630 social preview all reuse the
+existing trophy SVG and site palette. The editable social-card source is
+`frontend/assets/predict-playoffs-social.svg`; its PNG export is the file used by
+Open Graph and Twitter metadata. Raster derivatives can be regenerated with Sharp,
+and the multi-size ICO can be regenerated from the mark with Pillow.
 JSON-LD describes a WebApplication; pricing, reviews, and ratings are omitted.
 Update the homepage title, descriptions, visible year, schema, and corresponding
 tests together for future seasons.

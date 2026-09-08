@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Predict Playoffs social preview</title>
+  <desc id="desc">The Predict Playoffs trophy logo beside the words NFL Playoff Predictor.</desc>
+  <rect width="1200" height="630" fill="#10223a" />
+  <g opacity="0.08" stroke="#fffefa" stroke-width="2">
+    <path d="M0 90h1200M0 180h1200M0 270h1200M0 360h1200M0 450h1200M0 540h1200" />
+    <path d="M90 0v630M180 0v630M270 0v630M360 0v630M450 0v630M540 0v630M630 0v630M720 0v630M810 0v630M900 0v630M990 0v630M1080 0v630M1170 0v630" />
+  </g>
+  <rect x="72" y="72" width="1056" height="486" rx="36" fill="#fffefa" />
+  <circle cx="315" cy="315" r="166" fill="#f5f3ee" />
+  <g transform="translate(187 187)">
+    <path fill="#10223a" fill-rule="evenodd" d="M45 28h166v19h-11v32c0 44-22 81-58 100v24h20c14 0 25 11 25 25v6H69v-6c0-14 11-25 25-25h20v-24C78 160 56 123 56 79V47H45V28Zm31 31v20c0 40 20 70 52 86 32-16 52-46 52-86V59H76Z" />
+    <path fill="none" stroke="#10223a" stroke-linecap="round" stroke-linejoin="round" stroke-width="14" d="M62 55H29v30c0 33 16 61 46 75M194 55h33v30c0 33-16 61-46 75" />
+    <path fill="#e33b3f" d="m128 67 11 25 27 2-21 18 7 27-24-15-24 15 7-27-21-18 27-2 11-25Z" />
+  </g>
+  <rect x="533" y="166" width="76" height="8" rx="4" fill="#e33b3f" />
+  <text x="533" y="236" fill="#e33b3f" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" letter-spacing="5">PREDICT PLAYOFFS</text>
+  <text x="533" y="330" fill="#10223a" font-family="Arial, Helvetica, sans-serif" font-size="62" font-weight="800">NFL PLAYOFF</text>
+  <text x="533" y="402" fill="#10223a" font-family="Arial, Helvetica, sans-serif" font-size="62" font-weight="800">PREDICTOR</text>
+  <text x="536" y="466" fill="#647084" font-family="Arial, Helvetica, sans-serif" font-size="25">Build your bracket. Call the season.</text>
+</svg>

@@ -1,6 +1,7 @@
 """Static SEO and deployment regression checks; run with unittest discovery."""
 import json
 import re
+import struct
 import unittest
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
@@ -8,6 +9,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = "https://predictplayoffs.com"
+
+
+def png_size(path):
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise AssertionError(f"{path} is not a PNG")
+    return struct.unpack(">II", data[16:24])
 
 
 class Page(HTMLParser):
@@ -45,19 +53,52 @@ class SeoTests(unittest.TestCase):
         self.assertIn("Predict the 2026<br />NFL Playoffs.", page.html)
         for text in ["14 NFL playoff teams", "AFC and NFC", "Super Bowl", "Compete with friends"]:
             self.assertIn(text, page.html)
+        for prop in ["og:title", "og:site_name", "og:description", "og:url", "og:image"]:
+            self.assertEqual(len(page.select("meta", property=prop)), 1)
         self.assertEqual(page.select("meta", property="og:url")[0]["content"], BASE + "/")
         for attr, key in [("property", "og:image"), ("name", "twitter:image")]:
             url = page.select("meta", **{attr: key})[0]["content"]
             self.assertTrue(url.startswith(BASE + "/assets/"))
             asset = ROOT / "frontend" / url.removeprefix(BASE + "/")
-            self.assertEqual(asset.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(png_size(asset), (1200, 630))
             self.assertIn('"assets/' + asset.name + '"', (ROOT / "terraform/modules/app/main.tf").read_text())
+        self.assertEqual(page.select("meta", property="og:image:width")[0]["content"], "1200")
+        self.assertEqual(page.select("meta", property="og:image:height")[0]["content"], "630")
+        self.assertEqual(page.select("meta", name="twitter:card")[0]["content"], "summary_large_image")
         schema = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', page.html, re.S)[1])
         self.assertEqual(schema["name"], "Predict Playoffs")
         self.assertEqual(schema["url"], BASE + "/")
         self.assertEqual(schema["@type"], "WebApplication")
         self.assertNotIn("aggregateRating", schema)
         self.assertNotIn("review", schema)
+
+    def test_icons_exist_at_declared_sizes_and_are_published(self):
+        expected_links = [
+            ("icon", "/favicon.ico"),
+            ("icon", "/assets/predict-playoffs-mark.svg"),
+            ("icon", "/assets/favicon-32x32.png"),
+            ("apple-touch-icon", "/apple-touch-icon.png"),
+        ]
+        for filename in ["index.html", "picks.html", "leaderboard.html", "scoring.html"]:
+            page = Page(filename)
+            with self.subTest(page=filename):
+                for rel, href in expected_links:
+                    self.assertEqual(len(page.select("link", rel=rel, href=href)), 1)
+
+        frontend = ROOT / "frontend"
+        self.assertEqual(png_size(frontend / "apple-touch-icon.png"), (180, 180))
+        self.assertEqual(png_size(frontend / "assets/favicon-32x32.png"), (32, 32))
+        self.assertEqual((frontend / "favicon.ico").read_bytes()[:4], b"\x00\x00\x01\x00")
+
+        config = (ROOT / "terraform/modules/app/main.tf").read_text()
+        for deployed_path in [
+            "favicon.ico",
+            "apple-touch-icon.png",
+            "assets/favicon-32x32.png",
+            "assets/predict-playoffs-mark.svg",
+            "assets/predict-playoffs-social.png",
+        ]:
+            self.assertIn(f'"{deployed_path}"', config)
 
     def test_crawl_files_and_private_workspace(self):
         robots = (ROOT / "frontend/robots.txt").read_text()

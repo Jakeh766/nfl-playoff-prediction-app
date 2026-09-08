@@ -18,6 +18,14 @@ locals {
       source       = "${var.frontend_dir}/index.html"
       content_type = "text/html; charset=utf-8"
     }
+    "favicon.ico" = {
+      source       = "${var.frontend_dir}/favicon.ico"
+      content_type = "image/x-icon"
+    }
+    "apple-touch-icon.png" = {
+      source       = "${var.frontend_dir}/apple-touch-icon.png"
+      content_type = "image/png"
+    }
     "picks" = {
       source       = "${var.frontend_dir}/picks.html"
       content_type = "text/html; charset=utf-8"
@@ -64,6 +72,14 @@ locals {
     }
     "assets/predict-playoffs-mark.png" = {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.png"
+      content_type = "image/png"
+    }
+    "assets/favicon-32x32.png" = {
+      source       = "${var.frontend_dir}/assets/favicon-32x32.png"
+      content_type = "image/png"
+    }
+    "assets/predict-playoffs-social.png" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-social.png"
       content_type = "image/png"
     }
     "assets/predict-playoffs-mark.svg" = {
