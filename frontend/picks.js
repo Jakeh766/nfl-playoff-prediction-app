@@ -499,7 +499,6 @@ function renderConferenceBracket(conference, container, games) {
     { key: "divisional", label: "Divisional" },
     { key: "championship", label: `Pick ${conference} Champion` },
   ];
-  if (conference === "NFC") rounds.reverse();
 
   rounds.forEach(({ key, label }) => {
     const round = document.createElement("div");

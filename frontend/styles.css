@@ -1566,6 +1566,21 @@ body.predictions-locked .predictor .final-actions button {
   gap: 9px;
 }
 
+/* Mirror NFC toward the Super Bowl only while rounds sit side by side. */
+@media (min-width: 761px) {
+  #nfc-bracket .wild-card {
+    order: 3;
+  }
+
+  #nfc-bracket .divisional {
+    order: 2;
+  }
+
+  #nfc-bracket .championship {
+    order: 1;
+  }
+}
+
 .round {
   min-width: 0;
   display: flex;
