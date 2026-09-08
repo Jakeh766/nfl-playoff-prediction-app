@@ -559,11 +559,20 @@ function renderGroups() {
   const activeGroup = state.groups.find(
     (group) => group.groupId === state.activeGroupId,
   );
-  elements.deleteGroup?.classList.toggle(
-    "hidden",
-    !activeGroup?.isCreator,
+  const isCommissioner = Boolean(
+    activeGroup?.isCommissioner ?? activeGroup?.isCreator,
   );
-  if (activeGroup?.isCreator) {
+  elements.leaveGroup?.classList.toggle("hidden", !activeGroup);
+  elements.deleteGroup?.classList.toggle("hidden", !isCommissioner);
+  if (activeGroup) {
+    elements.leaveGroup?.setAttribute(
+      "aria-label",
+      `Leave ${activeGroup.groupName}`,
+    );
+  } else {
+    elements.leaveGroup?.removeAttribute("aria-label");
+  }
+  if (isCommissioner) {
     elements.deleteGroup.setAttribute(
       "aria-label",
       `Delete ${activeGroup.groupName}`,
@@ -663,6 +672,118 @@ async function refreshGroups(preferredGroupId = state.activeGroupId) {
   }
 }
 
+function resetLeaveGroupDialog() {
+  leaveGroupPending = false;
+  leaveGroupId = "";
+  elements.leaveGroupDescription.textContent = "";
+  elements.newCommissionerField.classList.add("hidden");
+  elements.newCommissioner.innerHTML = "";
+  elements.leaveGroupMessage.textContent = "";
+  elements.confirmLeaveGroup.disabled = false;
+  elements.confirmLeaveGroup.removeAttribute("aria-busy");
+  elements.confirmLeaveGroup.textContent = "Leave group";
+}
+
+async function openLeaveGroupDialog(group) {
+  if (!group || !elements.leaveGroupDialog) return;
+  resetLeaveGroupDialog();
+  leaveGroupId = group.groupId;
+  const isCommissioner = Boolean(group.isCommissioner ?? group.isCreator);
+  elements.leaveGroupTitle.textContent = `Leave ${group.groupName}?`;
+  elements.leaveGroupDescription.textContent = isCommissioner
+    ? "You’re this group’s commissioner. Choose another member to take over before you leave."
+    : "You’ll be removed from this group and its private leaderboard. You can rejoin later with an invite or the group password.";
+  elements.newCommissionerField.classList.toggle("hidden", !isCommissioner);
+  elements.leaveGroupDialog.showModal();
+
+  if (!isCommissioner) {
+    elements.confirmLeaveGroup.focus();
+    return;
+  }
+
+  elements.confirmLeaveGroup.disabled = true;
+  elements.leaveGroupMessage.textContent = "Loading group members…";
+  try {
+    const payload = await apiRequest(
+      `/api/groups/${encodeURIComponent(group.groupId)}/members`,
+    );
+    if (leaveGroupId !== group.groupId) return;
+    const candidates = (payload.members || []).filter(
+      (member) => !member.isCurrentUser,
+    );
+    candidates.forEach((member) => {
+      const option = document.createElement("option");
+      option.value = member.userId;
+      option.textContent = member.displayName;
+      elements.newCommissioner.appendChild(option);
+    });
+    if (candidates.length) {
+      elements.leaveGroupMessage.textContent = "";
+      elements.confirmLeaveGroup.disabled = false;
+      elements.newCommissioner.focus();
+    } else {
+      elements.leaveGroupMessage.textContent =
+        "Invite another member before leaving so someone can take over.";
+    }
+  } catch (error) {
+    elements.leaveGroupMessage.textContent =
+      `Could not load group members: ${error.message}`;
+  }
+}
+
+async function submitLeaveGroup(event) {
+  event.preventDefault();
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === leaveGroupId,
+  );
+  if (leaveGroupPending || !group) return;
+  const isCommissioner = Boolean(group.isCommissioner ?? group.isCreator);
+  const newCommissionerId = isCommissioner
+    ? elements.newCommissioner.value
+    : "";
+  if (isCommissioner && !newCommissionerId) return;
+
+  leaveGroupPending = true;
+  elements.confirmLeaveGroup.disabled = true;
+  elements.confirmLeaveGroup.setAttribute("aria-busy", "true");
+  elements.confirmLeaveGroup.textContent = "Leaving…";
+  elements.leaveGroupMessage.textContent = isCommissioner
+    ? "Transferring commissioner access and leaving…"
+    : "Leaving the group…";
+  try {
+    await apiRequest(
+      `/api/groups/${encodeURIComponent(group.groupId)}/membership`,
+      {
+        method: "DELETE",
+        body: JSON.stringify(
+          isCommissioner ? { newCommissionerId } : {},
+        ),
+      },
+    );
+    state.groups = state.groups.filter(
+      (candidate) => candidate.groupId !== group.groupId,
+    );
+    state.activeGroupId = state.groups[0]?.groupId || "";
+    state.groupLeaderboard = null;
+    elements.leaveGroupDialog.close();
+    renderGroups();
+    if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
+    showToast(`You left ${group.groupName}.`);
+  } catch (error) {
+    elements.leaveGroupMessage.textContent =
+      `Could not leave the group: ${error.message}`;
+  } finally {
+    leaveGroupPending = false;
+    elements.confirmLeaveGroup.removeAttribute("aria-busy");
+    elements.confirmLeaveGroup.textContent = "Leave group";
+    if (elements.leaveGroupDialog.open) {
+      elements.confirmLeaveGroup.disabled = isCommissioner
+        ? !elements.newCommissioner.value
+        : false;
+    }
+  }
+}
+
 function groupConfirmationMatches(value, groupName) {
   return Boolean(groupName) &&
     value.trim().toLowerCase() === groupName.trim().toLowerCase();
@@ -681,7 +802,10 @@ function resetDeleteGroupDialog() {
 }
 
 function openDeleteGroupDialog(group) {
-  if (!group?.isCreator || !elements.deleteGroupDialog) return;
+  if (
+    !(group?.isCommissioner ?? group?.isCreator) ||
+    !elements.deleteGroupDialog
+  ) return;
   deleteGroupId = group.groupId;
   elements.deleteGroupName.textContent = group.groupName;
   elements.deleteGroupConfirmationName.textContent = group.groupName;
@@ -708,7 +832,7 @@ async function submitDeleteGroup(event) {
   );
   if (
     deleteGroupPending ||
-    !group?.isCreator ||
+    !(group?.isCommissioner ?? group?.isCreator) ||
     !groupConfirmationMatches(
       elements.deleteGroupConfirmation.value,
       group.groupName,

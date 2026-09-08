@@ -81,8 +81,12 @@ class FakeGroupTable:
         existing = self.items.get(Key["groupKey"])
         if ConditionExpression:
             values = ExpressionAttributeValues or {}
-            attribute = "createdBy" if "createdBy" in ConditionExpression else "groupId"
-            value_key = ":creator" if attribute == "createdBy" else ":groupId"
+            if "commissionerId" in ConditionExpression:
+                attribute, value_key = "commissionerId", ":commissioner"
+            elif "createdBy" in ConditionExpression:
+                attribute, value_key = "createdBy", ":creator"
+            else:
+                attribute, value_key = "groupId", ":groupId"
             if not existing or existing.get(attribute) != values.get(value_key):
                 raise ConditionalCheckFailed()
         self.items.pop(Key["groupKey"], None)
@@ -97,11 +101,24 @@ class FakeGroupTable:
         ReturnValues=None,
     ):
         item = self.items[Key["groupKey"]]
-        if ConditionExpression and "inviteCode" in item:
-            raise ConditionalCheckFailed()
-        if UpdateExpression != "SET inviteCode = :inviteCode":
+        values = ExpressionAttributeValues or {}
+        if UpdateExpression == "SET inviteCode = :inviteCode":
+            if ConditionExpression and "inviteCode" in item:
+                raise ConditionalCheckFailed()
+            item["inviteCode"] = values[":inviteCode"]
+        elif UpdateExpression == "SET commissionerId = :newCommissioner":
+            current = values[":currentCommissioner"]
+            if "commissionerId = :currentCommissioner" == ConditionExpression:
+                if item.get("commissionerId") != current:
+                    raise ConditionalCheckFailed()
+            elif "createdBy = :currentCommissioner" in (ConditionExpression or ""):
+                if "commissionerId" in item or item.get("createdBy") != current:
+                    raise ConditionalCheckFailed()
+            elif "commissionerId" in item or "createdBy" in item:
+                raise ConditionalCheckFailed()
+            item["commissionerId"] = values[":newCommissioner"]
+        else:
             raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
-        item["inviteCode"] = ExpressionAttributeValues[":inviteCode"]
         return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
 
     def scan(self, **_arguments):
@@ -433,6 +450,22 @@ class PrivateGroupTests(unittest.TestCase):
             None,
         )
 
+    def leave(self, group_id, user_id="user-456", new_commissioner_id=None):
+        body = (
+            {"newCommissionerId": new_commissioner_id}
+            if new_commissioner_id is not None
+            else {}
+        )
+        return lambda_app.handler(
+            event(
+                "DELETE",
+                user_id=user_id,
+                body=body,
+                path=f"/api/groups/{group_id}/membership",
+            ),
+            None,
+        )
+
     def join(self, user_id="user-456", name="Sunday Crew", password="secret1"):
         return lambda_app.handler(
             event(
@@ -528,6 +561,110 @@ class PrivateGroupTests(unittest.TestCase):
         self.assertEqual(rejected["statusCode"], 403)
         self.assertIn(f"group#{group_id}", self.groups.items)
         self.assertIn("name#sunday crew", self.groups.items)
+
+    def test_group_member_can_leave_without_affecting_the_group(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        result = self.leave(group_id)
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-456",
+            self.groups.items,
+        )
+        self.assertIn(f"group#{group_id}", self.groups.items)
+
+    def test_commissioner_must_transfer_role_before_leaving(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        rejected = self.leave(group_id, user_id="user-123")
+        transferred = self.leave(
+            group_id,
+            user_id="user-123",
+            new_commissioner_id="user-456",
+        )
+        group = self.groups.items[f"group#{group_id}"]
+
+        self.assertEqual(rejected["statusCode"], 400)
+        self.assertEqual(transferred["statusCode"], 200)
+        self.assertEqual(group["commissionerId"], "user-456")
+        self.assertNotIn(
+            f"membership#{group_id}#user#user-123",
+            self.groups.items,
+        )
+        listed = lambda_app.handler(
+            event("GET", user_id="user-456", path="/api/groups"),
+            None,
+        )
+        self.assertTrue(json.loads(listed["body"])["groups"][0]["isCommissioner"])
+
+        old_commissioner_delete = self.delete(group_id, user_id="user-123")
+        new_commissioner_delete = self.delete(group_id, user_id="user-456")
+        self.assertEqual(old_commissioner_delete["statusCode"], 403)
+        self.assertEqual(new_commissioner_delete["statusCode"], 200)
+
+    def test_commissioner_can_only_transfer_to_another_member(self):
+        created = json.loads(self.create()["body"])
+
+        result = self.leave(
+            created["groupId"],
+            user_id="user-123",
+            new_commissioner_id="outsider",
+        )
+
+        self.assertEqual(result["statusCode"], 400)
+        self.assertIn(
+            f"membership#{created['groupId']}#user#user-123",
+            self.groups.items,
+        )
+
+    def test_group_members_endpoint_is_member_only(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+
+        allowed = lambda_app.handler(
+            event("GET", path=f"/api/groups/{group_id}/members"),
+            None,
+        )
+        forbidden = lambda_app.handler(
+            event(
+                "GET",
+                user_id="outsider",
+                path=f"/api/groups/{group_id}/members",
+            ),
+            None,
+        )
+
+        members = json.loads(allowed["body"])["members"]
+        self.assertEqual(allowed["statusCode"], 200)
+        self.assertEqual(forbidden["statusCode"], 403)
+        self.assertEqual(
+            {member["userId"] for member in members},
+            {"user-123", "user-456"},
+        )
+        creator = next(
+            member for member in members if member["userId"] == "user-123"
+        )
+        self.assertTrue(creator["isCommissioner"])
+
+    def test_account_deletion_is_blocked_while_user_manages_a_group(self):
+        self.create()
+
+        result = lambda_app.handler(
+            event("DELETE", path="/api/profile"),
+            None,
+        )
+
+        self.assertEqual(result["statusCode"], 409)
+        self.assertIn(
+            "appoint a new commissioner",
+            json.loads(result["body"])["message"],
+        )
 
     def test_legacy_group_creator_can_delete_when_membership_is_unambiguous(self):
         group_id = "00000000-0000-4000-8000-000000000000"

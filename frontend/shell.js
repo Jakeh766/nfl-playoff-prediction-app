@@ -204,11 +204,28 @@ if (dialogs) {
         </div>
       </dialog>
 
+      <dialog class="account-dialog" id="leave-group-dialog" aria-labelledby="leave-group-title" aria-describedby="leave-group-description">
+        <form id="leave-group-form" method="post">
+          <h2 id="leave-group-title">Leave this group?</h2>
+          <p id="leave-group-description"></p>
+          <div class="hidden" id="new-commissioner-field">
+            <label for="new-commissioner">New commissioner</label>
+            <select id="new-commissioner" name="new-commissioner"></select>
+            <p class="input-hint">They will be able to manage and delete the group.</p>
+          </div>
+          <p class="dialog-message" id="leave-group-message" role="status" aria-live="polite"></p>
+          <div class="dialog-actions">
+            <button class="button button-secondary" id="cancel-leave-group" type="button">Stay in group</button>
+            <button class="button button-danger" id="confirm-leave-group" type="submit">Leave group</button>
+          </div>
+        </form>
+      </dialog>
+
       <dialog class="account-dialog" id="delete-group-dialog" aria-labelledby="delete-group-title" aria-describedby="delete-group-description">
         <form id="delete-group-form" method="post">
           <p class="card-kicker">PERMANENT ACTION</p>
           <h2 id="delete-group-title">Delete this group?</h2>
-          <p id="delete-group-description">This permanently removes <strong id="delete-group-name"></strong> for every member, including its invite link and leaderboard. This cannot be undone.</p>
+          <p id="delete-group-description">As commissioner, you can permanently remove <strong id="delete-group-name"></strong> for every member, including its invite link and leaderboard. This cannot be undone.</p>
           <label for="delete-group-confirmation">Type <strong id="delete-group-confirmation-name"></strong> to confirm</label>
           <input id="delete-group-confirmation" name="confirmation" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" required />
           <p class="dialog-message" id="delete-group-message" role="status" aria-live="polite"></p>

@@ -303,6 +303,7 @@ const elements = {
   cancelGroup: document.querySelector("#cancel-group"),
   submitGroup: document.querySelector("#submit-group"),
   shareGroupInvite: document.querySelector("#share-group-invite"),
+  leaveGroup: document.querySelector("#leave-group"),
   deleteGroup: document.querySelector("#delete-group"),
   groupInviteDialog: document.querySelector("#group-invite-dialog"),
   groupInviteName: document.querySelector("#group-invite-name"),
@@ -311,6 +312,15 @@ const elements = {
   closeGroupInvite: document.querySelector("#close-group-invite"),
   copyGroupInvite: document.querySelector("#copy-group-invite"),
   shareGroupInviteNative: document.querySelector("#share-group-invite-native"),
+  leaveGroupDialog: document.querySelector("#leave-group-dialog"),
+  leaveGroupForm: document.querySelector("#leave-group-form"),
+  leaveGroupTitle: document.querySelector("#leave-group-title"),
+  leaveGroupDescription: document.querySelector("#leave-group-description"),
+  newCommissionerField: document.querySelector("#new-commissioner-field"),
+  newCommissioner: document.querySelector("#new-commissioner"),
+  leaveGroupMessage: document.querySelector("#leave-group-message"),
+  cancelLeaveGroup: document.querySelector("#cancel-leave-group"),
+  confirmLeaveGroup: document.querySelector("#confirm-leave-group"),
   deleteGroupDialog: document.querySelector("#delete-group-dialog"),
   deleteGroupForm: document.querySelector("#delete-group-form"),
   deleteGroupName: document.querySelector("#delete-group-name"),
@@ -434,6 +444,8 @@ let signInPending = false;
 let deleteAccountPending = false;
 let deleteGroupPending = false;
 let deleteGroupId = "";
+let leaveGroupPending = false;
+let leaveGroupId = "";
 let pendingPredictionSave = false;
 let publicBracketRequest = 0;
 let groupDialogMode = "create";
@@ -1036,6 +1048,17 @@ async function submitDeleteAccount(event) {
   try {
     const accessToken = await getValidAccessToken();
     if (!accessToken) throw new Error("Your session expired. Please sign in again.");
+
+    const groupsPayload = await apiRequest("/api/groups");
+    const managedGroups = (groupsPayload.groups || []).filter(
+      (group) => group.isCommissioner ?? group.isCreator,
+    );
+    if (managedGroups.length) {
+      const groupNames = managedGroups.map((group) => group.groupName).join(", ");
+      throw new Error(
+        `Before deleting your account, leave each group you manage and appoint a new commissioner: ${groupNames}`,
+      );
+    }
 
     await apiRequest("/api/prediction", { method: "DELETE" });
     await apiRequest("/api/profile", { method: "DELETE" });

@@ -307,6 +307,12 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn("activeGroup?.isCreator", app_javascript)
         self.assertIn("apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`", app_javascript)
         self.assertIn('route_key          = "DELETE /api/groups/{groupId}"', terraform)
+        self.assertIn('id="leave-group"', html)
+        self.assertIn('id="leave-group-dialog"', self.shell)
+        self.assertIn('}/members`', app_javascript)
+        self.assertIn('}/membership`', app_javascript)
+        self.assertIn('route_key          = "GET /api/groups/{groupId}/members"', terraform)
+        self.assertIn('route_key          = "DELETE /api/groups/{groupId}/membership"', terraform)
 
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")

@@ -45,6 +45,12 @@ elements.groupDialog?.addEventListener("close", () => {
   elements.groupDialogMessage.textContent = "";
 });
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+elements.leaveGroup?.addEventListener("click", () => {
+  const group = state.groups.find(
+    (candidate) => candidate.groupId === state.activeGroupId,
+  );
+  if (group) openLeaveGroupDialog(group);
+});
 elements.deleteGroup?.addEventListener("click", () => {
   const group = state.groups.find(
     (candidate) => candidate.groupId === state.activeGroupId,
@@ -61,6 +67,14 @@ elements.groupInviteDialog?.addEventListener("close", () => {
   elements.groupInviteMessage.textContent = "";
   elements.copyGroupInvite.textContent = "Copy invite link";
 });
+elements.leaveGroupForm?.addEventListener("submit", submitLeaveGroup);
+elements.cancelLeaveGroup?.addEventListener("click", () => {
+  if (!leaveGroupPending) elements.leaveGroupDialog.close();
+});
+elements.leaveGroupDialog?.addEventListener("cancel", (event) => {
+  if (leaveGroupPending) event.preventDefault();
+});
+elements.leaveGroupDialog?.addEventListener("close", resetLeaveGroupDialog);
 elements.deleteGroupForm?.addEventListener("submit", submitDeleteGroup);
 elements.deleteGroupConfirmation?.addEventListener(
   "input",

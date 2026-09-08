@@ -67,7 +67,9 @@ before storage. Members can also copy a private invite link; an authenticated
 recipient who accepts the link joins without entering the shared password. A
 group leaderboard can only be loaded by a current member and uses the same live
 scoring as the global leaderboard, filtered to members with saved predictions.
-The creator can permanently delete the group, which removes its invite link,
+Any member can leave a group. The commissioner must appoint another current
+member as commissioner before leaving. The commissioner can permanently delete
+the group, which removes its invite link,
 leaderboard, name reservation, and memberships for everyone. Groups created
 before creator tracking was added use their original creator membership when it
 can be identified unambiguously.
