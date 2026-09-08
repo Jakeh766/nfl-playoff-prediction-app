@@ -122,9 +122,28 @@ class LoginFormTests(unittest.TestCase):
             self.app_javascript,
         )
         self.assertIn(
-            "if (elements.accountDialog.open) elements.accountDialog.close();",
+            "closeAccountModal();",
             self.app_javascript,
         )
+
+    def test_account_modal_avoids_the_browser_top_layer(self):
+        account_markup = self.shell[
+            self.shell.index('id="account-dialog"') :
+            self.shell.index('id="leaderboard-name-dialog"')
+        ]
+        all_javascript = "\n".join(
+            (self.app_javascript, self.bootstrap_javascript)
+        )
+
+        self.assertIn('role="dialog"', account_markup)
+        self.assertIn('aria-modal="true"', account_markup)
+        self.assertIn('aria-hidden="true" hidden', account_markup)
+        self.assertNotIn('<dialog class="account-dialog auth-dialog"', self.shell)
+        self.assertIn('<dialog class="account-dialog" id="leaderboard-name-dialog"', self.shell)
+        self.assertIn('event.key === "Escape"', all_javascript)
+        self.assertIn('event.key !== "Tab"', all_javascript)
+        self.assertIn("accountModalReturnFocus.focus()", all_javascript)
+        self.assertIn("setAccountModalBackgroundInert(true)", all_javascript)
 
     def test_account_deletion_requires_confirmation_and_removes_saved_data_first(self):
         html = self.shell

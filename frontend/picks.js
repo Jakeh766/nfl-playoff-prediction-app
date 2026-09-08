@@ -662,7 +662,7 @@ async function savePrediction() {
   }
   if (!state.signedIn) {
     showAuthPanel("signIn", "Sign in to save this prediction to your account.");
-    elements.accountDialog.showModal();
+    openAccountModal(elements.loginEmail);
     return;
   }
   if (!state.bracketBuilt) {
@@ -721,7 +721,7 @@ function openPrediction(scrollToPredictor = true) {
     window.location.assign(LOCAL_PREVIEW ? "/picks.html" : "/picks");
     return;
   }
-  if (elements.accountDialog.open) elements.accountDialog.close();
+  closeAccountModal();
   const stored = state.savedPrediction;
   state.seeds = stored?.seeds
     ? clone(stored.seeds)

@@ -830,8 +830,7 @@ function openGroupAction(mode) {
       ? "Sign in to create a private group."
       : "Sign in to join a private group.",
   );
-  elements.accountDialog.showModal();
-  elements.loginEmail.focus();
+  openAccountModal(elements.loginEmail);
 }
 
 async function acceptPendingGroupInvite() {
@@ -839,8 +838,7 @@ async function acceptPendingGroupInvite() {
   if (!state.signedIn) {
     pendingGroupAction = "accept-invite";
     showAuthPanel("signIn", "Sign in to accept this private group invite.");
-    elements.accountDialog.showModal();
-    elements.loginEmail.focus();
+    openAccountModal(elements.loginEmail);
     return;
   }
 
@@ -874,7 +872,7 @@ async function resumePendingGroupAction() {
   if (!pendingGroupAction) return;
   const action = pendingGroupAction;
   pendingGroupAction = "";
-  if (elements.accountDialog.open) elements.accountDialog.close();
+  closeAccountModal({ restoreFocus: false });
   if (action === "accept-invite") {
     await acceptPendingGroupInvite();
   } else {

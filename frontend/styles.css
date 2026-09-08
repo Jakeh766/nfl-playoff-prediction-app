@@ -759,6 +759,32 @@ select:focus {
   gap: 16px;
 }
 
+.account-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  overflow-y: auto;
+  background: rgba(16, 34, 58, 0.64);
+  backdrop-filter: blur(3px);
+}
+
+.account-modal[hidden] {
+  display: none;
+}
+
+.account-modal > .account-dialog {
+  max-height: calc(100vh - 32px);
+  margin: auto;
+  overflow-y: auto;
+}
+
+body.account-modal-open {
+  overflow: hidden;
+}
+
 .hero-actions .button-hero {
   width: 100%;
 }

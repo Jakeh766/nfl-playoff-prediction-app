@@ -39,7 +39,8 @@ if (dialogs) {
       </dialog>
     ` : ""}
 
-    <dialog class="account-dialog auth-dialog" id="account-dialog" aria-labelledby="account-dialog-title">
+    <div class="account-modal" id="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" aria-hidden="true" hidden>
+      <div class="account-dialog auth-dialog" role="document">
       <div class="dialog-heading">
         <div>
           <p class="card-kicker">ACCOUNT</p>
@@ -138,7 +139,8 @@ if (dialogs) {
         </div>
         <button class="delete-account-button" id="delete-account" type="button">Delete account</button>
       </div>
-    </dialog>
+      </div>
+    </div>
 
     <dialog class="account-dialog" id="leaderboard-name-dialog" aria-labelledby="leaderboard-name-title" aria-describedby="leaderboard-name-description">
       <form id="leaderboard-name-form" method="post">

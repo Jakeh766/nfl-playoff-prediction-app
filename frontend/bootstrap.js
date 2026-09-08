@@ -74,7 +74,7 @@ elements.deleteGroupDialog?.addEventListener("cancel", (event) => {
 });
 elements.deleteGroupDialog?.addEventListener("close", resetDeleteGroupDialog);
 elements.changeLeaderboardName.addEventListener("click", () => {
-  elements.accountDialog.close();
+  closeAccountModal({ restoreFocus: false });
   openLeaderboardNameDialog(false);
 });
 elements.cancelLeaderboardName.addEventListener("click", closeLeaderboardNameDialog);
@@ -116,17 +116,17 @@ elements.publicBracketDialog?.addEventListener("close", () => {
   elements.publicBracketContent.innerHTML = "";
 });
 elements.headerAccount.addEventListener("click", () => {
-  elements.accountDialog.showModal();
+  openAccountModal();
 });
 elements.closeAccountDialog.addEventListener("click", () => {
-  elements.accountDialog.close();
+  closeAccountModal();
 });
 elements.accountDialog.addEventListener("close", () => {
   if (!state.signedIn) pendingGroupAction = "";
 });
 elements.accountSignOut.addEventListener("click", signOut);
 elements.deleteAccount.addEventListener("click", () => {
-  elements.accountDialog.close();
+  closeAccountModal({ restoreFocus: false });
   openDeleteAccountDialog();
 });
 elements.deleteAccountForm.addEventListener("submit", submitDeleteAccount);
