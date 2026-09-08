@@ -6,9 +6,25 @@ locals {
   analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
 
   frontend_files = {
+    "robots.txt" = {
+      source       = "${var.frontend_dir}/robots.txt"
+      content_type = "text/plain; charset=utf-8"
+    }
+    "sitemap.xml" = {
+      source       = "${var.frontend_dir}/sitemap.xml"
+      content_type = "application/xml; charset=utf-8"
+    }
     "index.html" = {
       source       = "${var.frontend_dir}/index.html"
       content_type = "text/html; charset=utf-8"
+    }
+    "favicon.ico" = {
+      source       = "${var.frontend_dir}/favicon.ico"
+      content_type = "image/x-icon"
+    }
+    "apple-touch-icon.png" = {
+      source       = "${var.frontend_dir}/apple-touch-icon.png"
+      content_type = "image/png"
     }
     "picks" = {
       source       = "${var.frontend_dir}/picks.html"
@@ -53,6 +69,18 @@ locals {
     "styles.css" = {
       source       = "${var.frontend_dir}/styles.css"
       content_type = "text/css; charset=utf-8"
+    }
+    "assets/predict-playoffs-mark.png" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-mark.png"
+      content_type = "image/png"
+    }
+    "assets/favicon-32x32.png" = {
+      source       = "${var.frontend_dir}/assets/favicon-32x32.png"
+      content_type = "image/png"
+    }
+    "assets/predict-playoffs-social.png" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-social.png"
+      content_type = "image/png"
     }
     "assets/predict-playoffs-mark.svg" = {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
@@ -804,6 +832,19 @@ resource "aws_cloudfront_cache_policy" "disabled" {
   }
 }
 
+# Allow crawlers to fetch dev pages and read noindex. Production uses static page metadata.
+resource "aws_cloudfront_response_headers_policy" "noindex" {
+  count = var.environment == "prod" ? 0 : 1
+  name  = "${local.resource_prefix}-noindex"
+  custom_headers_config {
+    items {
+      header   = "X-Robots-Tag"
+      value    = "noindex, nofollow"
+      override = true
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "app" {
   enabled             = true
   default_root_object = "index.html"
@@ -829,23 +870,25 @@ resource "aws_cloudfront_distribution" "app" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "frontend-s3"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = aws_cloudfront_cache_policy.disabled.id
-    compress               = true
+    response_headers_policy_id = var.environment == "prod" ? null : aws_cloudfront_response_headers_policy.noindex[0].id
+    target_origin_id           = "frontend-s3"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    compress                   = true
   }
 
   ordered_cache_behavior {
-    path_pattern             = "/api/*"
-    target_origin_id         = "backend-api"
-    viewer_protocol_policy   = "redirect-to-https"
-    allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = aws_cloudfront_cache_policy.disabled.id
-    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
-    compress                 = true
+    response_headers_policy_id = var.environment == "prod" ? null : aws_cloudfront_response_headers_policy.noindex[0].id
+    path_pattern               = "/api/*"
+    target_origin_id           = "backend-api"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods             = ["GET", "HEAD"]
+    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    origin_request_policy_id   = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
+    compress                   = true
   }
 
   restrictions {

@@ -407,6 +407,20 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     ]
   }
 
+  # CloudFront assigns policy IDs on creation, so the noindex policy ARN is
+  # not known until the application stack has deployed it.
+  statement {
+    sid = "ManageDevResponseHeadersPolicy"
+    actions = [
+      "cloudfront:CreateResponseHeadersPolicy",
+      "cloudfront:DeleteResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicyConfig",
+      "cloudfront:UpdateResponseHeadersPolicy",
+    ]
+    resources = ["arn:aws:cloudfront::${local.account_id}:response-headers-policy/*"]
+  }
+
   statement {
     sid = "ManageDevAnalyticsDashboard"
     actions = [
