@@ -263,14 +263,15 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         if not profile:
             continue
         predicted_picks = prediction.get("picks") or {}
+        scoring_modes = ("classic", "vegas") if member_ids is None else (scoring_option,)
         scores = {mode: score_prediction(prediction, results, mode)
-                  for mode in ("classic", "vegas")}
+                  for mode in scoring_modes}
         score = scores[scoring_option]
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
                 "superBowl": predicted_picks.get("superBowl", ""),
-                "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total", "upsetBonus")}
+                "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total")}
                            for mode, value in scores.items()},
                 "regularSeason": score["regularSeason"],
                 "playoffs": score["playoffs"],
@@ -543,26 +544,31 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
 
 def score_vegas_prediction(prediction: dict, results: dict) -> dict:
-    """Classic credit plus a fixed, nonnegative bonus for each correct pick."""
+    """Weight each correct pick by its team's frozen preseason win total."""
     classic = score_prediction(prediction, results)
     with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
         snapshot = json.load(file)
     if snapshot["season"] != results.get("season"):
         raise ValueError("Upset Edge scoring needs a market snapshot for this season")
     totals = snapshot["totals"]
-    earned = {key: Decimal(0) for key in SCORING_RULES}
-    available = {key: Decimal(0) for key in SCORING_RULES}
+    earned = {key: Decimal("0.00") for key in SCORING_RULES}
+    available = {key: Decimal("0.00") for key in SCORING_RULES}
+
+    def rounded(value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     def add(category, team, correct, base):
         if not team:
             return
         if team not in totals:
             raise ValueError(f"Missing frozen Vegas win total for {team}")
-        rate = (Decimal("18") - Decimal(str(totals[team]))) / Decimal("8.5")
-        bonus = (Decimal(base) * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        available[category] += bonus
+        multiplier = Decimal("1") + Decimal("0.10") * (
+            Decimal("8.5") - Decimal(str(totals[team]))
+        )
+        points = rounded(Decimal(base) * multiplier)
+        available[category] += points
         if correct:
-            earned[category] += bonus
+            earned[category] += points
 
     predicted_seeds = prediction.get("seeds", {})
     actual_seeds = results.get("seeds", {})
@@ -601,20 +607,30 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     breakdown = {}
     for category, item in classic["breakdown"].items():
         breakdown[category] = {
-            **item, "classicPoints": item["points"], "upsetBonus": float(earned[category]),
-            "points": float(Decimal(item["points"]) + earned[category]),
-            "possible": float(Decimal(item["possible"]) + available[category]),
+            **item,
+            "points": float(rounded(earned[category])),
+            "possible": float(rounded(available[category])),
             "classicMaximum": item["maximum"], "maximum": None,
         }
-    regular_bonus = sum(earned[key] for key in ("playoffField", "divisionWinners", "exactSeeds"))
-    bonus = sum(earned.values())
+    regular_season = rounded(sum(
+        (earned[key] for key in ("playoffField", "divisionWinners", "exactSeeds")),
+        Decimal("0.00"),
+    ))
+    playoffs = rounded(sum(
+        (earned[key] for key in (
+            "wildCard", "divisional", "conferenceChampions", "superBowlChampion",
+        )),
+        Decimal("0.00"),
+    ))
+    total = rounded(regular_season + playoffs)
+    possible = rounded(sum(available.values(), Decimal("0.00")))
     return {
         **classic, "scoringOption": "vegas", "oddsSource": snapshot["source"],
-        "breakdown": breakdown, "classicScore": classic["total"], "upsetBonus": float(bonus),
-        "regularSeason": float(Decimal(classic["regularSeason"]) + regular_bonus),
-        "playoffs": float(Decimal(classic["playoffs"]) + bonus - regular_bonus),
-        "total": float(Decimal(classic["total"]) + bonus),
-        "possible": float(Decimal(classic["possible"]) + sum(available.values())),
+        "breakdown": breakdown,
+        "regularSeason": float(regular_season),
+        "playoffs": float(playoffs),
+        "total": float(total),
+        "possible": float(possible),
         "classicMaximum": MAX_SCORE, "maximum": None,
     }
 

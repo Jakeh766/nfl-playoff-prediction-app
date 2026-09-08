@@ -108,35 +108,33 @@ def completed_results():
 
 
 class PredictionScoringTests(unittest.TestCase):
-    def test_vegas_perfect_bracket_is_300_plus_bonus(self):
+    def test_vegas_perfect_bracket_uses_weighted_pick_values(self):
         score = lambda_app.score_prediction(perfect_prediction(), completed_results(), "vegas")
-        self.assertEqual(score["classicScore"], 300)
-        self.assertGreater(score["upsetBonus"], 0)
-        self.assertAlmostEqual(score["total"], 300 + score["upsetBonus"])
         self.assertEqual(score["possible"], score["total"])
         self.assertIsNone(score["maximum"])
         self.assertEqual(score["classicMaximum"], 300)
-        self.assertAlmostEqual(sum(v["upsetBonus"] for v in score["breakdown"].values()), score["upsetBonus"])
+        self.assertNotIn("classicScore", score)
+        self.assertNotIn("upsetBonus", score)
+        self.assertTrue(all("upsetBonus" not in item for item in score["breakdown"].values()))
+        self.assertEqual(score["total"], round(score["regularSeason"] + score["playoffs"], 2))
 
-    def test_same_correct_pick_has_fixed_bonus_regardless_of_bracket(self):
+    def test_same_correct_pick_has_fixed_weight_regardless_of_bracket(self):
         results = {"season": 2026, "roundWinners": {"wildCard": ["Minnesota Vikings"]}}
         full = perfect_prediction()
         single = {"picks": {"NFC": {"wc-2-7": "Minnesota Vikings"}}}
         for prediction in (full, single):
             score = lambda_app.score_prediction(prediction, results, "vegas")
-            self.assertEqual(score["classicScore"], 5)
-            self.assertEqual(score["upsetBonus"], 6.18)
-            self.assertEqual(score["total"], 11.18)
+            self.assertEqual(score["total"], 5.50)
 
-    def test_fixed_bonuses_for_underdogs_neutral_teams_and_favorites(self):
-        for team, bonus in (("Miami Dolphins", 7.94), ("Minnesota Vikings", 6.18),
-                            ("Chicago Bears", 5), ("Buffalo Bills", 4.41), ("Los Angeles Rams", 3.82)):
+    def test_multiplier_rewards_underdogs_and_discounts_favorites(self):
+        for team, points in (("Miami Dolphins", 7.00), ("Minnesota Vikings", 5.50),
+                             ("Cincinnati Bengals", 5.00), ("Buffalo Bills", 4.00),
+                             ("Los Angeles Rams", 3.50)):
             with self.subTest(team=team):
                 score = lambda_app.score_prediction(
                     {"picks": {"NFC": {"wc-2-7": team}}},
                     {"season": 2026, "roundWinners": {"wildCard": [team]}}, "vegas")
-                self.assertEqual(score["upsetBonus"], bonus)
-                self.assertAlmostEqual(score["total"], 5 + bonus)
+                self.assertEqual(score["total"], points)
 
     def test_same_super_bowl_pick_and_seed_have_fixed_values(self):
         results = {"season": 2026, "seeds": {"NFC": ["Minnesota Vikings"]},
@@ -147,14 +145,14 @@ class PredictionScoringTests(unittest.TestCase):
                   "picks": {"superBowl": "Minnesota Vikings", "AFC": {"conf": "Buffalo Bills"}}}
         scores = [lambda_app.score_prediction(p, results, "vegas") for p in (first, second)]
         self.assertEqual(scores[0]["total"], scores[1]["total"])
-        self.assertEqual(scores[0]["breakdown"]["superBowlChampion"]["upsetBonus"], 49.41)
-        self.assertEqual(scores[0]["breakdown"]["exactSeeds"]["upsetBonus"], 6.18)
+        self.assertEqual(scores[0]["breakdown"]["superBowlChampion"]["points"], 44.00)
+        self.assertEqual(scores[0]["breakdown"]["exactSeeds"]["points"], 5.50)
 
-    def test_duplicate_round_picks_do_not_duplicate_bonus(self):
+    def test_duplicate_round_picks_do_not_duplicate_weighted_points(self):
         score = lambda_app.score_prediction(
             {"picks": {"NFC": {"wc-2-7": "Minnesota Vikings", "wc-3-6": "Minnesota Vikings"}}},
             {"season": 2026, "roundWinners": {"wildCard": ["Minnesota Vikings"]}}, "vegas")
-        self.assertEqual(score["total"], 11.18)
+        self.assertEqual(score["total"], 5.50)
 
     def test_vegas_rewards_lower_market_total_in_seeding_and_playoffs(self):
         prediction = perfect_prediction()

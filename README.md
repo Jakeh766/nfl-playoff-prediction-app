@@ -198,25 +198,24 @@ Lambda health. Each deployment summary includes a direct link to its dashboard.
 
 ## Scoring options
 
-Classic remains out of 300. Upset Edge is Classic plus a fixed, nonnegative
-Upset Bonus for each correct pick: `Classic points × (18 - win total) / 8.5`.
-Each pick's bonus is rounded half up to hundredths before summing. Every correct pick earns full Classic credit plus its bonus; lower-projected
-teams earn bigger bonuses. Incorrect or missing picks earn zero. No allocations
-or bracket normalization remain. The same team picked for the same outcome
-always earns the same points, independently of every other pick.
+Classic remains out of 300. Upset Edge weights each correct pick directly:
+`Classic points × [1 + 0.10 × (8.5 - preseason win total)]`. A team at 8.5
+wins is neutral at 1.0×. Each win below or above 8.5 raises or lowers the
+pick's value by 10%. Each weighted pick is rounded half up to hundredths before
+summing. Incorrect or missing picks earn zero. The same team picked for the same
+outcome always earns the same points, independently of every other pick.
 
 `backend/lambda/scoring_odds.json` freezes the existing bundled 2026 market
 snapshot for everyone. Scoring never reads the live odds cache. Do not change
 this snapshot during a season. Prepare a matching snapshot when rolling over
-`season_results.json` to a new season. These are win-total bonuses, not implied
-game moneyline probabilities. Upset Edge totals can exceed 300; API `maximum` is
-null for Upset Edge and `classicMaximum` remains 300. `upsetBonus` is reported
-separately in the score and category breakdowns.
+`season_results.json` to a new season. These are win-total weights, not implied
+game moneyline probabilities. API `maximum` is null for Upset Edge and
+`classicMaximum` remains 300.
 
-Leaderboards return both totals in each entry's `scores`; the public UI can sort
-by either total or any visible scoring column. Groups store `scoringOption` (`classic` or `vegas`) at creation,
-and use it for ranking. Legacy groups default to `classic`; joining does not
-change a group's option. Run the ranking UI regression with
+Public leaderboards return both totals in each entry's `scores`; the UI toggle
+shows and ranks by one mode at a time. Groups store `scoringOption` (`classic`
+or `vegas`) at creation and return, show, and rank only that mode. Legacy groups
+default to `classic`; joining does not change a group's option. Run the ranking UI regression with
 `node --test backend/test_leaderboard.cjs` alongside the Python suite.
 
 ## Repository layout

@@ -470,7 +470,7 @@ class PrivateGroupTests(unittest.TestCase):
         self.assertEqual(created["scoringOption"], "vegas")
         board = lambda_app.get_group_leaderboard(created["groupId"], "user-123")
         self.assertEqual(board["scoringOption"], "vegas")
-        self.assertEqual(set(board["entries"][0]["scores"]), {"classic", "vegas"})
+        self.assertEqual(set(board["entries"][0]["scores"]), {"vegas"})
 
     def test_invalid_group_scoring_is_rejected(self):
         result = lambda_app.handler(event("POST", user_id="user-123", path="/api/groups",
@@ -735,6 +735,7 @@ class PublicLeaderboardTests(unittest.TestCase):
         )
         self.assertEqual([entry["rank"] for entry in payload["entries"]], [1, 2])
         self.assertEqual(payload["entries"][0]["superBowl"], "Detroit Lions")
+        self.assertEqual(set(payload["entries"][0]["scores"]), {"classic", "vegas"})
         self.assertNotIn("profileKey", payload["entries"][0])
         self.assertNotIn("picks", payload["entries"][0])
 
