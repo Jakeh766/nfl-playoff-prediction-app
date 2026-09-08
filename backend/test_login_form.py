@@ -126,6 +126,59 @@ class LoginFormTests(unittest.TestCase):
             self.app_javascript,
         )
 
+    def test_existing_unconfirmed_signup_resends_without_reusing_new_password(self):
+        create_flow = self.app_javascript[
+            self.app_javascript.index("async function submitCreateAccount") :
+            self.app_javascript.index("async function submitConfirmAccount")
+        ]
+
+        self.assertIn('error.code === "UsernameExistsException"', create_flow)
+        self.assertIn("pendingAccountCredentials = null;", create_flow)
+        self.assertIn('elements.createPassword.value = "";', create_flow)
+        self.assertIn("await requestConfirmationCode(email);", create_flow)
+        self.assertIn("elements.confirmEmail.value = email;", create_flow)
+        self.assertIn(
+            "You started creating an account with this email earlier.",
+            create_flow,
+        )
+        self.assertLess(
+            create_flow.index("pendingAccountCredentials = null;"),
+            create_flow.index("await requestConfirmationCode(email);"),
+        )
+
+        confirm_flow = self.app_javascript[
+            self.app_javascript.index("async function submitConfirmAccount") :
+            self.app_javascript.index("async function resendConfirmationCode")
+        ]
+        self.assertIn(
+            'showAuthPanel("signIn", "Email confirmed. Sign in to continue.");',
+            confirm_flow,
+        )
+
+    def test_confirmed_account_recovery_returns_to_sign_in(self):
+        self.assertIn(
+            'error.code === "InvalidParameterException"',
+            self.app_javascript,
+        )
+        self.assertIn(
+            "An account already exists for this email. Sign in, or use Forgot password",
+            self.app_javascript,
+        )
+        self.assertIn(
+            "This account is already confirmed. Sign in, or use Forgot password",
+            self.app_javascript,
+        )
+
+    def test_unconfirmed_sign_in_points_to_resend_action(self):
+        confirmation_panel = self.shell[
+            self.shell.index('id="confirm-account-panel"') :
+            self.shell.index('id="forgot-password-panel"')
+        ]
+
+        self.assertIn('id="resend-confirmation" type="button"', confirmation_panel)
+        self.assertIn("request a new code below", confirmation_panel)
+        self.assertIn("select Resend code below for a new one", self.app_javascript)
+
     def test_account_modal_avoids_the_browser_top_layer(self):
         account_markup = self.shell[
             self.shell.index('id="account-dialog"') :

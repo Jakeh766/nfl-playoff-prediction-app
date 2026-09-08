@@ -81,7 +81,7 @@ if (dialogs) {
 
         <div class="hidden" id="confirm-account-panel">
           <h3>Confirm your account.</h3>
-          <p class="auth-description">Enter the verification code sent to your email.</p>
+          <p class="auth-description">Enter the verification code sent to your email. If you do not have one, request a new code below.</p>
           <form class="auth-form" id="confirm-account-form" method="post">
             <input id="confirm-email" name="username" type="hidden" />
             <label for="confirmation-code">Verification code</label>

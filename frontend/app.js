@@ -635,7 +635,10 @@ async function submitSignIn(event) {
       pendingAccountCredentials = { email, password };
       elements.loginPassword.value = "";
       elements.confirmEmail.value = email;
-      showAuthPanel("confirmAccount", "Confirm your email before signing in.");
+      showAuthPanel(
+        "confirmAccount",
+        "Your account still needs verification. Enter your code, or select Resend code below for a new one.",
+      );
       elements.confirmationCode.focus();
     } else {
       elements.authMessage.textContent = signInErrorMessage(error);
@@ -658,6 +661,21 @@ function showAuthPanel(name, message = "") {
     panel.classList.toggle("hidden", panelName !== name);
   });
   elements.authMessage.textContent = message;
+}
+
+function accountIsAlreadyConfirmed(error) {
+  return (
+    error.code === "InvalidParameterException" &&
+    /already\s+confirmed|confirmed\s+user/i.test(error.message || "")
+  );
+}
+
+async function requestConfirmationCode(email) {
+  const config = authConfig();
+  return requestCognito("ResendConfirmationCode", {
+    ClientId: config.clientId,
+    Username: email,
+  });
 }
 
 function cognitoErrorMessage(error) {
@@ -705,6 +723,31 @@ async function submitCreateAccount(event) {
     showAuthPanel("confirmAccount", "Enter the verification code we emailed you.");
     elements.confirmationCode.focus();
   } catch (error) {
+    if (error.code === "UsernameExistsException") {
+      pendingAccountCredentials = null;
+      elements.createPassword.value = "";
+      try {
+        await requestConfirmationCode(email);
+        elements.confirmEmail.value = email;
+        showAuthPanel(
+          "confirmAccount",
+          "You started creating an account with this email earlier. We sent you a new verification code.",
+        );
+        elements.confirmationCode.focus();
+      } catch (resendError) {
+        if (accountIsAlreadyConfirmed(resendError)) {
+          elements.loginEmail.value = email;
+          showAuthPanel(
+            "signIn",
+            "An account already exists for this email. Sign in, or use Forgot password if you need a new password.",
+          );
+          elements.loginPassword.focus();
+        } else {
+          elements.authMessage.textContent = cognitoErrorMessage(resendError);
+        }
+      }
+      return;
+    }
     elements.authMessage.textContent = cognitoErrorMessage(error);
   }
 }
@@ -758,14 +801,20 @@ async function resendConfirmationCode() {
   }
 
   try {
-    const config = authConfig();
-    await requestCognito("ResendConfirmationCode", {
-      ClientId: config.clientId,
-      Username: email,
-    });
+    await requestConfirmationCode(email);
     elements.authMessage.textContent = "A new verification code is on its way.";
   } catch (error) {
-    elements.authMessage.textContent = cognitoErrorMessage(error);
+    if (accountIsAlreadyConfirmed(error)) {
+      pendingAccountCredentials = null;
+      elements.loginEmail.value = email;
+      showAuthPanel(
+        "signIn",
+        "This account is already confirmed. Sign in, or use Forgot password if you need a new password.",
+      );
+      elements.loginPassword.focus();
+    } else {
+      elements.authMessage.textContent = cognitoErrorMessage(error);
+    }
   }
 }
 
