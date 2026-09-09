@@ -1772,7 +1772,7 @@ body.predictions-locked .predictor .final-actions button {
   border-top: 1px solid #ebe8e2;
 }
 
-.team-pick:not(:disabled):hover {
+.team-pick:not(:disabled):not(.selected):hover {
   background: #f7f7f4;
 }
 
@@ -1854,7 +1854,7 @@ body.predictions-locked .predictor .final-actions button {
   min-height: 54px;
 }
 
-.super-bowl-card .team-pick:not(:disabled):hover {
+.super-bowl-card .team-pick:not(:disabled):not(.selected):hover {
   color: white;
   background: var(--red);
 }
