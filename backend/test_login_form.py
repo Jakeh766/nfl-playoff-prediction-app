@@ -126,6 +126,59 @@ class LoginFormTests(unittest.TestCase):
             self.app_javascript,
         )
 
+    def test_existing_unconfirmed_signup_resends_without_reusing_new_password(self):
+        create_flow = self.app_javascript[
+            self.app_javascript.index("async function submitCreateAccount") :
+            self.app_javascript.index("async function submitConfirmAccount")
+        ]
+
+        self.assertIn('error.code === "UsernameExistsException"', create_flow)
+        self.assertIn("pendingAccountCredentials = null;", create_flow)
+        self.assertIn('elements.createPassword.value = "";', create_flow)
+        self.assertIn("await requestConfirmationCode(email);", create_flow)
+        self.assertIn("elements.confirmEmail.value = email;", create_flow)
+        self.assertIn(
+            "You started creating an account with this email earlier.",
+            create_flow,
+        )
+        self.assertLess(
+            create_flow.index("pendingAccountCredentials = null;"),
+            create_flow.index("await requestConfirmationCode(email);"),
+        )
+
+        confirm_flow = self.app_javascript[
+            self.app_javascript.index("async function submitConfirmAccount") :
+            self.app_javascript.index("async function resendConfirmationCode")
+        ]
+        self.assertIn(
+            'showAuthPanel("signIn", "Email confirmed. Sign in to continue.");',
+            confirm_flow,
+        )
+
+    def test_confirmed_account_recovery_returns_to_sign_in(self):
+        self.assertIn(
+            'error.code === "InvalidParameterException"',
+            self.app_javascript,
+        )
+        self.assertIn(
+            "An account already exists for this email. Sign in, or use Forgot password",
+            self.app_javascript,
+        )
+        self.assertIn(
+            "This account is already confirmed. Sign in, or use Forgot password",
+            self.app_javascript,
+        )
+
+    def test_unconfirmed_sign_in_points_to_resend_action(self):
+        confirmation_panel = self.shell[
+            self.shell.index('id="confirm-account-panel"') :
+            self.shell.index('id="forgot-password-panel"')
+        ]
+
+        self.assertIn('id="resend-confirmation" type="button"', confirmation_panel)
+        self.assertIn("request a new code below", confirmation_panel)
+        self.assertIn("select Resend code below for a new one", self.app_javascript)
+
     def test_account_modal_avoids_the_browser_top_layer(self):
         account_markup = self.shell[
             self.shell.index('id="account-dialog"') :
@@ -260,6 +313,35 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn("/leaderboard`", app_javascript)
         self.assertIn('path.startsWith("/api/groups")', app_javascript)
 
+    def test_password_fields_share_an_accessible_visibility_toggle(self):
+        password_ids = (
+            "login-password",
+            "create-password",
+            "reset-password",
+            "group-password",
+        )
+        for password_id in password_ids:
+            self.assertIn(f'id="{password_id}"', self.shell)
+            self.assertIn(
+                f'data-password-toggle aria-controls="{password_id}" '
+                'aria-label="Show password" aria-pressed="false"',
+                self.shell,
+            )
+
+        self.assertEqual(self.shell.count('class="password-toggle" type="button"'), 4)
+        self.assertIn(
+            'document.querySelectorAll("[data-password-toggle]")',
+            self.bootstrap_javascript,
+        )
+        toggle_flow = self.bootstrap_javascript[
+            self.bootstrap_javascript.index("function setPasswordVisibility") :
+            self.bootstrap_javascript.index("function resetPasswordVisibility")
+        ]
+        self.assertIn('input.type = visible ? "text" : "password";', toggle_flow)
+        self.assertIn('visible ? "Hide password" : "Show password"', toggle_flow)
+        self.assertIn('toggle.setAttribute("aria-pressed", String(visible));', toggle_flow)
+        self.assertNotIn("input.value", toggle_flow)
+
     def test_homepage_exposes_group_actions_and_link_invites(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         app_javascript = "\n".join(
@@ -277,6 +359,12 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('id="home-create-group"', home)
         self.assertIn('id="home-join-group"', home)
         self.assertIn('id="home-accept-invite"', home)
+        self.assertLess(
+            home.index('id="home-invite-callout"'),
+            home.index('class="home-hero"'),
+        )
+        self.assertIn('document.body.classList.toggle("has-group-invite"', app_javascript)
+        self.assertIn('"Sign in to join group"', app_javascript)
         self.assertIn('id="group-invite-dialog"', self.shell)
         leaderboard = (FRONTEND_DIR / "leaderboard.html").read_text(
             encoding="utf-8"

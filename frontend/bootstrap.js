@@ -1,4 +1,19 @@
 let toastTimer;
+
+function setPasswordVisibility(toggle, visible) {
+  const input = document.getElementById(toggle.getAttribute("aria-controls"));
+  if (!input) return;
+  input.type = visible ? "text" : "password";
+  toggle.setAttribute("aria-pressed", String(visible));
+  toggle.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+}
+
+function resetPasswordVisibility(container = document) {
+  container.querySelectorAll("[data-password-toggle]").forEach((toggle) => {
+    setPasswordVisibility(toggle, false);
+  });
+}
+
 function showToast(message) {
   clearTimeout(toastTimer);
   elements.toast.textContent = message;
@@ -18,6 +33,11 @@ elements.createAccountForm.addEventListener("submit", submitCreateAccount);
 elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
 elements.forgotPasswordForm.addEventListener("submit", submitForgotPassword);
 elements.resetPasswordForm.addEventListener("submit", submitResetPassword);
+document.querySelectorAll("[data-password-toggle]").forEach((toggle) => {
+  toggle.addEventListener("click", () => {
+    setPasswordVisibility(toggle, toggle.getAttribute("aria-pressed") !== "true");
+  });
+});
 elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
 function explainNameValidation(input, maximumLength) {
   input.setCustomValidity("");
@@ -64,6 +84,7 @@ elements.groupForm?.addEventListener("submit", submitGroup);
 elements.cancelGroup?.addEventListener("click", () => elements.groupDialog.close());
 elements.groupDialog?.addEventListener("close", () => {
   elements.groupForm.reset();
+  resetPasswordVisibility(elements.groupForm);
   elements.groupDialogMessage.textContent = "";
 });
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);

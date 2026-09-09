@@ -40,17 +40,31 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=38" />
+    <link rel="stylesheet" href="/styles.css?v=39" />
     <script src="/shell.js?v=13" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=26" defer></script>
-    <script src="/leaderboard.js?v=11" defer></script>
+    <script src="/leaderboard.js?v=12" defer></script>
     <script src="/bootstrap.js?v=8" defer></script>
   </head>
   <body data-page="home">
     <header id="site-header"></header>
     <main>
+      <section class="home-invite-hero hidden" id="home-invite-callout" aria-labelledby="home-invite-title">
+        <div class="home-invite-copy">
+          <div class="home-invite-title" id="home-invite-title" role="heading" aria-level="1">You’re invited to join a private group.</div>
+          <p>Join the group to compare playoff picks, track the standings, and compete all season.</p>
+          <button class="button button-primary button-large" id="home-accept-invite" type="button">Sign in to join group</button>
+          <p class="home-invite-status" id="home-invite-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="home-invite-mark" aria-hidden="true">
+          <span>PRIVATE GROUP</span>
+          <strong>One invite.<br />One leaderboard.</strong>
+          <i></i>
+        </div>
+      </section>
+
       <section class="home-hero">
         <div class="home-hero-copy">
           <p class="eyebrow">CALL IT BEFORE KICKOFF</p>
@@ -107,14 +121,6 @@
             <strong>Invite by link</strong>
             <p>Share one private link. Invitees sign in, accept, and join your group—no password to copy.</p>
           </div>
-        </div>
-        <div class="home-invite-callout hidden" id="home-invite-callout">
-          <div>
-            <p class="card-kicker">YOU'RE INVITED</p>
-            <strong>Join this private leaderboard.</strong>
-            <p>Accept the invitation to compare your picks with the group.</p>
-          </div>
-          <button class="button button-primary" id="home-accept-invite" type="button">Accept group invite</button>
         </div>
       </section>
 

@@ -935,7 +935,12 @@ async function submitGroup(event) {
 function renderHomeGroupInvite() {
   if (!elements.homeInviteCallout) return;
   const hasInviteParameter = new URLSearchParams(window.location.search).has("invite");
-  elements.homeInviteCallout.classList.toggle("hidden", !pendingGroupInvite);
+  const hasValidInvite = Boolean(pendingGroupInvite);
+  elements.homeInviteCallout.classList.toggle("hidden", !hasValidInvite);
+  document.body.classList.toggle("has-group-invite", hasValidInvite);
+  elements.homeAcceptInvite.textContent = state.signedIn
+    ? "Join group"
+    : "Sign in to join group";
   if (hasInviteParameter && !pendingGroupInvite) {
     elements.homeGroupStatus.textContent =
       "This group invite link is invalid. Ask the sender for a new link.";
@@ -969,6 +974,7 @@ async function acceptPendingGroupInvite() {
   elements.homeAcceptInvite.disabled = true;
   elements.homeAcceptInvite.setAttribute("aria-busy", "true");
   elements.homeAcceptInvite.textContent = "Joining…";
+  elements.homeInviteStatus.textContent = "Joining your group…";
   try {
     const group = await apiRequest("/api/groups/join-invite", {
       method: "POST",
@@ -984,11 +990,11 @@ async function acceptPendingGroupInvite() {
       `You joined ${group.groupName}. Open My Groups to view its standings.`;
     showToast(`Joined ${group.groupName}.`);
   } catch (error) {
-    elements.homeGroupStatus.textContent = error.message;
+    elements.homeInviteStatus.textContent = error.message;
   } finally {
     elements.homeAcceptInvite.disabled = false;
     elements.homeAcceptInvite.removeAttribute("aria-busy");
-    elements.homeAcceptInvite.textContent = "Accept group invite";
+    renderHomeGroupInvite();
   }
 }
 
