@@ -30,6 +30,12 @@ variable "resource_prefix" {
   default     = null
 }
 
+variable "stateful_table_protection_enabled" {
+  description = "Whether saved predictions, profiles, and groups use deletion protection and point-in-time recovery."
+  type        = bool
+  default     = false
+}
+
 variable "frontend_dir" {
   description = "Absolute path to the frontend files uploaded to S3."
   type        = string

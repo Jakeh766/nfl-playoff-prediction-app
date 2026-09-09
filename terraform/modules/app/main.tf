@@ -101,35 +101,50 @@ resource "aws_dynamodb_table" "win_totals_cache" {
 }
 
 resource "aws_dynamodb_table" "predictions" {
-  name         = "${local.resource_prefix}-predictions"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "profileKey"
+  name                        = "${local.resource_prefix}-predictions"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "profileKey"
+  deletion_protection_enabled = var.stateful_table_protection_enabled
 
   attribute {
     name = "profileKey"
     type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = var.stateful_table_protection_enabled
   }
 }
 
 resource "aws_dynamodb_table" "profiles" {
-  name         = "${local.resource_prefix}-profiles"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "profileKey"
+  name                        = "${local.resource_prefix}-profiles"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "profileKey"
+  deletion_protection_enabled = var.stateful_table_protection_enabled
 
   attribute {
     name = "profileKey"
     type = "S"
   }
+
+  point_in_time_recovery {
+    enabled = var.stateful_table_protection_enabled
+  }
 }
 
 resource "aws_dynamodb_table" "groups" {
-  name         = "${local.resource_prefix}-groups"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "groupKey"
+  name                        = "${local.resource_prefix}-groups"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "groupKey"
+  deletion_protection_enabled = var.stateful_table_protection_enabled
 
   attribute {
     name = "groupKey"
     type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = var.stateful_table_protection_enabled
   }
 }
 
