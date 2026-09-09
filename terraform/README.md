@@ -11,14 +11,16 @@ terraform/
   envs/prod/      Production resources and existing production state
 ```
 
-Both environments deploy the same architecture:
+Both environments share the application architecture, with environment-specific
+Cognito email delivery:
 
 ```text
 Browser
   -> CloudFront
        -> private S3 bucket (index.html, app.js, styles.css, generated auth-config.js)
        -> Cognito user pool APIs (in-app email/password forms)
-            -> custom email sender Lambda -> Resend
+            -> dev: Cognito built-in email
+            -> prod: KMS -> custom email sender Lambda -> Resend
        -> API Gateway
             -> public /api/win-totals -> Lambda -> VegasInsider
                                                   -> DynamoDB scrape cache
@@ -86,18 +88,14 @@ The GitHub environment named `dev` must define these environment variables:
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-dev-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
-It must also define the encrypted environment secret `RESEND_API_KEY` with a
-Resend sending key that begins with `re_`.
-
 The GitHub environment named `prod` must define:
 
 - `AWS_ROLE_ARN` =
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-prod-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
-The `prod` environment must also define its encrypted `RESEND_API_KEY` secret.
-The environments may use the same restricted sending key, but separate keys
-make rotation and revocation safer.
+The `prod` environment must also define its encrypted `RESEND_API_KEY` secret
+with a Resend sending key that begins with `re_`.
 
 ## One-time production automation setup
 
@@ -186,11 +184,11 @@ by the authenticated API.
 The module also publishes `cognito_user_pool_id` and `cognito_client_id`
 outputs. Email verification is required and MFA is explicitly `OFF`.
 
-## Resend email delivery
+## Cognito email delivery
 
-Cognito routes all account-confirmation, resend-code, password-reset, email
-verification, authentication-code, administrator-created-user, and account
-security messages to a dedicated Node.js Lambda. Cognito encrypts codes with a
+Dev uses Cognito's built-in email service, so it does not create a KMS key,
+Resend secret, or custom email sender Lambda. Prod routes account email to the
+dedicated Node.js Lambda instead. Cognito encrypts production codes with a
 customer-managed KMS key; the Lambda uses the AWS Encryption SDK to decrypt
 them and sends both HTML and plain-text messages through Resend. The Lambda
 never logs codes, API keys, or full recipient addresses.
@@ -202,15 +200,15 @@ Before the first deployment:
    verified. Existing SES DNS records can remain while SES approval is pending,
    provided Cloudflare contains only one SPF TXT record per hostname.
 2. Create a Resend API key with sending access. Store it as the encrypted GitHub
-   environment secret `RESEND_API_KEY` in both `dev` and `prod` (or use separate
-   keys in each environment).
+   environment secret `RESEND_API_KEY` in `prod`.
 3. Apply `terraform/bootstrap` once with AWS administrator credentials to grant
    the existing GitHub deployment roles permission to manage the new Lambda,
    KMS, Secrets Manager, and IAM resources.
-4. Push or rerun the `dev` workflow. Its configuration check fails before
-   Terraform changes anything if `RESEND_API_KEY` is missing.
-5. Create a dev account, resend its confirmation code, and exercise password
-   recovery before promoting the change to `prod`.
+4. Run the prod workflow when you are ready to deploy the custom sender. Its
+   configuration check fails before Terraform changes anything if
+   `RESEND_API_KEY` is missing.
+5. Create a production test account, resend its confirmation code, and exercise
+   password recovery after deployment.
 
 Terraform writes the API key to Secrets Manager with the provider's write-only
 field. The root and module variables are ephemeral, so the value is absent from

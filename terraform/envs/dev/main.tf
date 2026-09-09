@@ -35,21 +35,17 @@ provider "aws" {
 module "nfl_app" {
   source = "../../modules/app"
 
-  aws_region                     = var.aws_region
-  environment                    = "dev"
-  project_name                   = var.project_name
-  prediction_lock_at             = var.prediction_lock_at
-  cache_ttl_seconds              = var.cache_ttl_seconds
-  api_throttling_rate_limit      = var.api_throttling_rate_limit
-  api_throttling_burst_limit     = var.api_throttling_burst_limit
-  cloudfront_price_class         = var.cloudfront_price_class
-  cognito_email_domain           = "predictplayoffs.com"
-  frontend_dir                   = abspath("${path.root}/../../../frontend")
-  lambda_source_dir              = abspath("${path.root}/../../../backend/lambda")
-  lambda_zip_path                = abspath("${path.root}/lambda.zip")
-  custom_email_sender_source_dir = abspath("${path.root}/../../../backend/custom-email-sender")
-  custom_email_sender_zip_path   = abspath("${path.root}/custom-email-sender.zip")
-  resend_api_key                 = var.resend_api_key
+  aws_region                 = var.aws_region
+  environment                = "dev"
+  project_name               = var.project_name
+  prediction_lock_at         = var.prediction_lock_at
+  cache_ttl_seconds          = var.cache_ttl_seconds
+  api_throttling_rate_limit  = var.api_throttling_rate_limit
+  api_throttling_burst_limit = var.api_throttling_burst_limit
+  cloudfront_price_class     = var.cloudfront_price_class
+  frontend_dir               = abspath("${path.root}/../../../frontend")
+  lambda_source_dir          = abspath("${path.root}/../../../backend/lambda")
+  lambda_zip_path            = abspath("${path.root}/lambda.zip")
 }
 
 output "app_url" {

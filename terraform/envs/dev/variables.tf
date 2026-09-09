@@ -32,10 +32,3 @@ variable "cloudfront_price_class" {
   description = "CloudFront edge-location price class."
   type        = string
 }
-
-variable "resend_api_key" {
-  description = "Resend API key supplied by the GitHub environment during deployment."
-  type        = string
-  sensitive   = true
-  ephemeral   = true
-}

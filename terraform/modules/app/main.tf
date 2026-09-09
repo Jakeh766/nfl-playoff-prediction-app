@@ -134,30 +134,40 @@ resource "aws_dynamodb_table" "groups" {
 }
 
 data "archive_file" "custom_email_sender_zip" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   type        = "zip"
-  source_dir  = var.custom_email_sender_source_dir
-  output_path = var.custom_email_sender_zip_path
+  source_dir  = coalesce(var.custom_email_sender_source_dir, path.module)
+  output_path = coalesce(var.custom_email_sender_zip_path, "${path.module}/custom-email-sender-disabled.zip")
 }
 
 resource "aws_kms_key" "cognito_email_codes" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   description             = "Encrypts Cognito email codes for the ${var.environment} custom sender"
   deletion_window_in_days = 30
   enable_key_rotation     = true
 }
 
 resource "aws_secretsmanager_secret" "resend_api_key" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   name                    = "${local.resource_prefix}/resend/api-key"
   description             = "Resend API key used by the Cognito custom email sender"
   recovery_window_in_days = 7
 }
 
 resource "aws_secretsmanager_secret_version" "resend_api_key" {
-  secret_id                = aws_secretsmanager_secret.resend_api_key.id
-  secret_string_wo         = var.resend_api_key
+  count = var.custom_email_sender_enabled ? 1 : 0
+
+  secret_id                = aws_secretsmanager_secret.resend_api_key[0].id
+  secret_string_wo         = coalesce(var.resend_api_key, "re_disabled")
   secret_string_wo_version = var.resend_api_key_version
 }
 
 resource "aws_iam_role" "custom_email_sender" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   name = "${local.resource_prefix}-email-sender-role"
 
   assume_role_policy = jsonencode({
@@ -173,13 +183,17 @@ resource "aws_iam_role" "custom_email_sender" {
 }
 
 resource "aws_iam_role_policy_attachment" "custom_email_sender_logs" {
-  role       = aws_iam_role.custom_email_sender.name
+  count = var.custom_email_sender_enabled ? 1 : 0
+
+  role       = aws_iam_role.custom_email_sender[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy" "custom_email_sender" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   name = "${local.resource_prefix}-email-sender-access"
-  role = aws_iam_role.custom_email_sender.id
+  role = aws_iam_role.custom_email_sender[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -187,42 +201,44 @@ resource "aws_iam_role_policy" "custom_email_sender" {
       {
         Effect   = "Allow"
         Action   = ["kms:Decrypt"]
-        Resource = aws_kms_key.cognito_email_codes.arn
+        Resource = aws_kms_key.cognito_email_codes[0].arn
       },
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_secretsmanager_secret.resend_api_key.arn
+        Resource = aws_secretsmanager_secret.resend_api_key[0].arn
       }
     ]
   })
 }
 
 resource "aws_lambda_function" "custom_email_sender" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   function_name = "${local.resource_prefix}-email-sender"
-  role          = aws_iam_role.custom_email_sender.arn
+  role          = aws_iam_role.custom_email_sender[0].arn
   runtime       = "nodejs24.x"
   handler       = "index.handler"
 
-  filename         = data.archive_file.custom_email_sender_zip.output_path
-  source_code_hash = data.archive_file.custom_email_sender_zip.output_base64sha256
+  filename         = data.archive_file.custom_email_sender_zip[0].output_path
+  source_code_hash = data.archive_file.custom_email_sender_zip[0].output_base64sha256
 
   timeout     = 15
   memory_size = 256
 
   environment {
     variables = {
-      EMAIL_FROM                = "Predict Playoffs <no-reply@${var.cognito_email_domain}>"
-      KMS_KEY_ARN               = aws_kms_key.cognito_email_codes.arn
-      KMS_KEY_ID                = aws_kms_key.cognito_email_codes.key_id
-      RESEND_API_KEY_SECRET_ARN = aws_secretsmanager_secret.resend_api_key.arn
+      EMAIL_FROM                = "Predict Playoffs <no-reply@${coalesce(var.cognito_email_domain, "example.com")}>"
+      KMS_KEY_ARN               = aws_kms_key.cognito_email_codes[0].arn
+      KMS_KEY_ID                = aws_kms_key.cognito_email_codes[0].key_id
+      RESEND_API_KEY_SECRET_ARN = aws_secretsmanager_secret.resend_api_key[0].arn
     }
   }
 
   depends_on = [
-    aws_iam_role_policy.custom_email_sender,
-    aws_iam_role_policy_attachment.custom_email_sender_logs,
-    aws_secretsmanager_secret_version.resend_api_key,
+    aws_iam_role_policy.custom_email_sender[0],
+    aws_iam_role_policy_attachment.custom_email_sender_logs[0],
+    aws_secretsmanager_secret_version.resend_api_key[0],
   ]
 }
 
@@ -256,22 +272,82 @@ resource "aws_cognito_user_pool" "users" {
     allow_admin_create_user_only = false
   }
 
-  lambda_config {
-    kms_key_id = aws_kms_key.cognito_email_codes.arn
+  dynamic "lambda_config" {
+    for_each = var.custom_email_sender_enabled ? [true] : []
 
-    custom_email_sender {
-      lambda_arn     = aws_lambda_function.custom_email_sender.arn
-      lambda_version = "V1_0"
+    content {
+      kms_key_id = aws_kms_key.cognito_email_codes[0].arn
+
+      custom_email_sender {
+        lambda_arn     = aws_lambda_function.custom_email_sender[0].arn
+        lambda_version = "V1_0"
+      }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition = !var.custom_email_sender_enabled || (
+        var.custom_email_sender_source_dir != null &&
+        var.custom_email_sender_zip_path != null &&
+        var.resend_api_key != null &&
+        var.cognito_email_domain != null
+      )
+      error_message = "The custom email sender source, archive path, Resend API key, and email domain are required when custom_email_sender_enabled is true."
     }
   }
 }
 
 resource "aws_lambda_permission" "cognito_custom_email_sender" {
+  count = var.custom_email_sender_enabled ? 1 : 0
+
   statement_id  = "AllowCognitoCustomEmailSender"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.custom_email_sender.function_name
+  function_name = aws_lambda_function.custom_email_sender[0].function_name
   principal     = "cognito-idp.amazonaws.com"
   source_arn    = aws_cognito_user_pool.users.arn
+}
+
+# Preserve the existing production resource identities after making the custom
+# sender optional. In dev, the moved instances are then cleanly destroyed.
+moved {
+  from = aws_kms_key.cognito_email_codes
+  to   = aws_kms_key.cognito_email_codes[0]
+}
+
+moved {
+  from = aws_secretsmanager_secret.resend_api_key
+  to   = aws_secretsmanager_secret.resend_api_key[0]
+}
+
+moved {
+  from = aws_secretsmanager_secret_version.resend_api_key
+  to   = aws_secretsmanager_secret_version.resend_api_key[0]
+}
+
+moved {
+  from = aws_iam_role.custom_email_sender
+  to   = aws_iam_role.custom_email_sender[0]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.custom_email_sender_logs
+  to   = aws_iam_role_policy_attachment.custom_email_sender_logs[0]
+}
+
+moved {
+  from = aws_iam_role_policy.custom_email_sender
+  to   = aws_iam_role_policy.custom_email_sender[0]
+}
+
+moved {
+  from = aws_lambda_function.custom_email_sender
+  to   = aws_lambda_function.custom_email_sender[0]
+}
+
+moved {
+  from = aws_lambda_permission.cognito_custom_email_sender
+  to   = aws_lambda_permission.cognito_custom_email_sender[0]
 }
 
 data "archive_file" "lambda_zip" {

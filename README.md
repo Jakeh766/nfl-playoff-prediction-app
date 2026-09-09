@@ -110,8 +110,8 @@ name dialog, open `http://localhost:8000/?preview=leaderboard-name`.
   seeds seven demo participants and two demo groups.
 - After validating dev, promote by merging `dev` into `prod`. A push to `prod`
   runs the same checks, applies production, and creates a GitHub release.
-- GitHub environments must provide the AWS role, Terraform state bucket, and
-  encrypted `RESEND_API_KEY` required by their workflow.
+- Both GitHub environments provide an AWS role and Terraform state bucket;
+  only prod requires the encrypted `RESEND_API_KEY` secret.
 
 The one-time AWS bootstrap, state migration, Resend setup, and local Terraform
 commands are documented in [`terraform/README.md`](terraform/README.md).
