@@ -58,8 +58,7 @@ try {
   }
 
   if (-not $SkipTerraform) {
-    foreach ($environment in @("dev", "prod")) {
-      $terraformDirectory = "terraform/envs/$environment"
+    foreach ($terraformDirectory in @("terraform/bootstrap", "terraform/envs/dev", "terraform/envs/prod")) {
       if (-not (Test-Path -LiteralPath "$terraformDirectory/.terraform")) {
         Invoke-NativeCommand -FilePath terraform -ArgumentList @("-chdir=$terraformDirectory", "init", "-backend=false", "-input=false")
       }

@@ -78,6 +78,8 @@ The one-time AWS prerequisites are managed by `terraform/bootstrap`:
   `Jakeh766/nfl-playoff-prediction-app` repository's `dev` environment;
 - role `nfl-playoff-predictor-prod-github-actions`, trusted only by the
   repository's `prod` environment.
+- role `nfl-playoff-predictor-codex-audit`, limited to read-only access for the
+  four production DynamoDB tables and their backups.
 
 The existing dev state has been migrated into the state bucket. The workflow
 also verifies that remote state is nonempty before it plans or applies.
@@ -85,20 +87,23 @@ also verifies that remote state is nonempty before it plans or applies.
 ## Local read-only AWS inspection
 
 Routine deployments use the GitHub OIDC roles above and do not need persistent
-local AWS credentials. For an explicitly requested live audit, use the existing
-short-lived `codex-audit` profile in `us-east-1`:
+local AWS credentials. The `nfl-prod-setup` profile provides a short-lived,
+interactive source session; `codex-audit` assumes the Terraform-managed
+`nfl-playoff-predictor-codex-audit` role from that source.
+
+Authenticate the source session, then verify the constrained audit role:
 
 ```powershell
-aws login --profile codex-audit
+aws login --profile nfl-prod-setup
 aws sts get-caller-identity --profile codex-audit --output json
 ```
 
 The expected account is `410533922944`. Complete browser authentication and MFA
 interactively; never create, paste, or store root access keys. Keep audit commands
 read-only and select only the fields needed for the report rather than returning
-raw table items or secret values. Do not broaden this profile or use the separate
-`nfl-prod-setup` profile unless an explicitly requested bootstrap operation
-requires administrator access.
+raw table items or secret values. Do not use `nfl-prod-setup` for application
+inspection; it exists only to refresh the source session and perform explicitly
+requested bootstrap administration.
 
 The GitHub environment named `dev` must define these environment variables:
 

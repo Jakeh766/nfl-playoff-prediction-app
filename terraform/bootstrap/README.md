@@ -7,6 +7,8 @@ deployments can use Terraform:
 - the GitHub Actions OIDC provider for this AWS account;
 - deployment roles separately trusted by this repository's `dev` and `prod`
   environments;
+- a read-only production DynamoDB audit role for the local `codex-audit`
+  profile;
 - inline policies scoped to each environment's stack and state object.
 
 The deployment policies also permit Terraform to create environment-tagged

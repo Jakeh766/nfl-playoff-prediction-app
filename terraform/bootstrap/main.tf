@@ -20,8 +20,80 @@ locals {
   prod_email_sender_role = "${var.project_name}-email-sender-role"
   prod_dashboard_name    = "${var.project_name}-analytics"
 
+  codex_audit_role_name = "${var.project_name}-codex-audit"
+  prod_dynamodb_table_arns = [
+    for suffix in ["groups", "predictions", "profiles", "win-totals-cache"] :
+    "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-${suffix}"
+  ]
+
   github_oidc_subject      = "repo:${var.github_repository}:environment:${var.github_environment}"
   github_prod_oidc_subject = "repo:${var.github_repository}:environment:${var.github_prod_environment}"
+}
+
+data "aws_iam_policy_document" "codex_audit_assume_role" {
+  statement {
+    sid     = "AccountRootTemporarySession"
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.account_id}:root"]
+    }
+  }
+}
+
+resource "aws_iam_role" "codex_audit" {
+  name                 = local.codex_audit_role_name
+  description          = "Read-only production DynamoDB audit access for Codex"
+  assume_role_policy   = data.aws_iam_policy_document.codex_audit_assume_role.json
+  max_session_duration = 3600
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+    Purpose   = "CodexAudit"
+  }
+}
+
+data "aws_iam_policy_document" "codex_audit" {
+  statement {
+    sid = "ReadProductionTables"
+    actions = [
+      "dynamodb:BatchGetItem",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTable",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:GetItem",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+    ]
+    resources = local.prod_dynamodb_table_arns
+  }
+
+  statement {
+    sid = "ReadDynamoDbInventory"
+    actions = [
+      "dynamodb:ListBackups",
+      "dynamodb:ListTables",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid     = "DescribeProductionBackups"
+    actions = ["dynamodb:DescribeBackup"]
+    resources = [
+      for table_arn in local.prod_dynamodb_table_arns : "${table_arn}/backup/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "codex_audit" {
+  name   = "${var.project_name}-dynamodb-read-only"
+  role   = aws_iam_role.codex_audit.id
+  policy = data.aws_iam_policy_document.codex_audit.json
 }
 
 resource "aws_s3_bucket" "terraform_state" {

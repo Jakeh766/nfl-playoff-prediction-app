@@ -69,10 +69,9 @@ try {
   if (Test-Scope "Terraform") {
     Write-Host "Checking Terraform..."
     Invoke-NativeCommand -FilePath terraform -ArgumentList @("fmt", "-check", "-recursive", "terraform")
-    foreach ($environment in @("dev", "prod")) {
-      $terraformDirectory = "terraform/envs/$environment"
+    foreach ($terraformDirectory in @("terraform/bootstrap", "terraform/envs/dev", "terraform/envs/prod")) {
       if (-not (Test-Path -LiteralPath "$terraformDirectory/.terraform")) {
-        throw "Terraform is not initialized for $environment. Run .\scripts\setup.ps1 first."
+        throw "Terraform is not initialized in $terraformDirectory. Run .\scripts\setup.ps1 first."
       }
       Invoke-NativeCommand -FilePath terraform -ArgumentList @("-chdir=$terraformDirectory", "validate")
     }
