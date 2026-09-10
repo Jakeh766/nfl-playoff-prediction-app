@@ -293,7 +293,7 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         )
     )
     for position, entry in enumerate(entries, start=1):
-        entry["rank"] = position
+        entry["rank"] = position if entry["total"] > 0 else None
 
     return {
         "season": results.get("season"),

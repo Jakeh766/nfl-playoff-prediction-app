@@ -207,6 +207,7 @@ function getLeaderboardSortState(body) {
 }
 
 function numericLeaderboardValue(value) {
+  if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -302,11 +303,14 @@ function rankLeaderboardEntries(entries, mode = "classic") {
       1,
     );
   });
-  return ordered.map((entry, index) => ({
-    ...entry,
-    rank: index + 1,
-    scoringMode: mode,
-  }));
+  return ordered.map((entry, index) => {
+    const total = leaderboardSortValue(entry, "total", mode);
+    return {
+      ...entry,
+      rank: total != null && total > 0 ? index + 1 : null,
+      scoringMode: mode,
+    };
+  });
 }
 
 function updateLeaderboardSortIndicators(body, sortState) {
@@ -358,6 +362,12 @@ function formatLeaderboardScore(value, decimals = 0) {
   return decimals ? number.toFixed(decimals) : String(value);
 }
 
+function formatLeaderboardRank(rank) {
+  if (!Number.isInteger(rank) || rank < 1) return "—";
+  if (rank <= 3) return ["🥇", "🥈", "🥉"][rank - 1];
+  return String(rank);
+}
+
 function leaderboardChampion(entry) {
   return entry.superBowl || entry.bracket?.picks?.superBowl || "";
 }
@@ -399,8 +409,11 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
     row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
-    rank.textContent = String(entry.rank ?? "—");
-    rank.setAttribute("aria-label", `Rank ${entry.rank ?? "unavailable"}`);
+    rank.textContent = formatLeaderboardRank(entry.rank);
+    rank.setAttribute(
+      "aria-label",
+      entry.rank == null ? "Not yet ranked" : `Rank ${entry.rank}`,
+    );
 
     const player = document.createElement("th");
     player.scope = "row";

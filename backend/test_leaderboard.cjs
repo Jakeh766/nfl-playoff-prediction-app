@@ -43,7 +43,7 @@ test('public leaderboard ranks and sorts by the selected scoring mode', () => {
   assert.equal('upsetBonus' in entries[0].scores.vegas, false);
 });
 
-test('tied scores receive clear sequential ranks', () => {
+test('zero-score players remain alphabetized and unranked', () => {
   context.tiedEntries = [
     { leaderboardName: 'Charlie', total: 0, regularSeason: 0, playoffs: 0 },
     { leaderboardName: 'Alpha', total: 0, regularSeason: 0, playoffs: 0 },
@@ -55,8 +55,16 @@ test('tied scores receive clear sequential ranks', () => {
       'rankLeaderboardEntries(tiedEntries).map((entry) => [entry.leaderboardName, entry.rank])',
       context,
     ), (entry) => Array.from(entry)),
-    [['Alpha', 1], ['Bravo', 2], ['Charlie', 3]],
+    [['Alpha', null], ['Bravo', null], ['Charlie', null]],
   );
+});
+
+test('podium places use medals and later places use numbers', () => {
+  assert.equal(vm.runInContext('formatLeaderboardRank(1)', context), '🥇');
+  assert.equal(vm.runInContext('formatLeaderboardRank(2)', context), '🥈');
+  assert.equal(vm.runInContext('formatLeaderboardRank(3)', context), '🥉');
+  assert.equal(vm.runInContext('formatLeaderboardRank(4)', context), '4');
+  assert.equal(vm.runInContext('formatLeaderboardRank(null)', context), '—');
 });
 
 test('Upset Edge zero scores do not show unnecessary decimals', () => {

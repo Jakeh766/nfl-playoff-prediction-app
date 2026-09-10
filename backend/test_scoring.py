@@ -285,10 +285,10 @@ class PredictionScoringTests(unittest.TestCase):
              mock.patch.object(lambda_app, "predictions_table", return_value=predictions), \
              mock.patch.object(lambda_app, "load_season_results", return_value=partial):
             after = lambda_app.build_leaderboard()
-        self.assertEqual([entry["rank"] for entry in before["entries"]], [1, 2])
+        self.assertEqual([entry["rank"] for entry in before["entries"]], [None, None])
         self.assertEqual(after["entries"][0]["leaderboardName"], "Alpha")
         self.assertEqual(after["entries"][0]["total"], 5)
-        self.assertEqual(after["entries"][1]["rank"], 2)
+        self.assertIsNone(after["entries"][1]["rank"])
 
     def test_group_leaderboard_uses_its_selected_upset_edge_method(self):
         class FakeTable:
