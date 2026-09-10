@@ -8,7 +8,8 @@ deployments can use Terraform:
 - deployment roles separately trusted by this repository's `dev` and `prod`
   environments;
 - a login-only IAM user and read-only production DynamoDB audit role for the
-  local `codex-audit` profile;
+  local `codex-audit` profile; the user has AWS's local-development sign-in
+  policy plus permission to assume only the audit role;
 - inline policies scoped to each environment's stack and state object.
 
 The deployment policies also permit Terraform to create environment-tagged

@@ -81,7 +81,8 @@ The one-time AWS prerequisites are managed by `terraform/bootstrap`:
 - role `nfl-playoff-predictor-codex-audit`, limited to read-only access for the
   four production DynamoDB tables and their backups.
 - login-only IAM user `nfl-playoff-predictor-codex-audit-login`, permitted only
-  to assume the audit role. It has no direct application access or access keys.
+  to authenticate with `aws login` and assume the audit role. It has no direct
+  application access or access keys.
 
 The existing dev state has been migrated into the state bucket. The workflow
 also verifies that remote state is nonempty before it plans or applies.

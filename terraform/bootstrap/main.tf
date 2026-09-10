@@ -122,6 +122,11 @@ resource "aws_iam_user_policy" "codex_audit_login" {
   policy = data.aws_iam_policy_document.codex_audit_login.json
 }
 
+resource "aws_iam_user_policy_attachment" "codex_audit_login" {
+  user       = aws_iam_user.codex_audit_login.name
+  policy_arn = "arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess"
+}
+
 resource "aws_s3_bucket" "terraform_state" {
   bucket = local.state_bucket_name
 
