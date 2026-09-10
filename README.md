@@ -104,7 +104,7 @@ name dialog, open `http://localhost:8000/?preview=leaderboard-name`.
 ## Deployment
 
 - Pushing to `dev` runs the checks, applies the dev Terraform environment, and
-  seeds seven demo participants and two demo groups.
+  seeds sixteen demo participants and two demo groups.
 - After validating dev, promote by merging `dev` into `prod`. A push to `prod`
   runs the same checks, applies production, and creates a GitHub release.
 - Both GitHub environments provide an AWS role and Terraform state bucket;

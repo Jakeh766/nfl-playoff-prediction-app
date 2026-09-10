@@ -6,6 +6,10 @@ const vm = require('node:vm');
 const context = vm.createContext({});
 vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), context);
 
+test('local preview has enough entries to exercise leaderboard scrolling', () => {
+  assert.equal(vm.runInContext('LOCAL_PREVIEW_LEADERBOARD_NAMES.length', context), 16);
+});
+
 test('public leaderboard ranks and sorts by the selected scoring mode', () => {
   const entry = (name, classic, vegas) => ({
     leaderboardName: name,

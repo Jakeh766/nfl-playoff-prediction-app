@@ -34,6 +34,15 @@ DEMO_PLAYERS = (
     "Demo Player Emery",
     "Demo Player Finley",
     "Demo Player Gray",
+    "Demo Player Harper",
+    "Demo Player Indigo",
+    "Demo Player Jordan",
+    "Demo Player Kendall",
+    "Demo Player Logan",
+    "Demo Player Morgan",
+    "Demo Player Nico",
+    "Demo Player Parker",
+    "Demo Player Quinn",
 )
 
 AFC_SEEDS = (
@@ -286,7 +295,7 @@ def main() -> None:
         groups_table=arguments.groups_table,
         region=arguments.region,
     )
-    print("Seeded 7 demo participants and 2 private groups.")
+    print(f"Seeded {len(DEMO_PLAYERS)} demo participants and {len(DEMO_GROUPS)} private groups.")
 
 
 if __name__ == "__main__":

@@ -470,6 +470,25 @@ function renderLeaderboard() {
   if (leaderboard) elements.leaderboardStatus.textContent = leaderboard.status;
 }
 
+const LOCAL_PREVIEW_LEADERBOARD_NAMES = [
+  "Gridiron Jake",
+  "Sunday Sam",
+  "Fourth Down Alex",
+  "Pocket Pass Pat",
+  "Red Zone Riley",
+  "Play Action Avery",
+  "Goal Line Jordan",
+  "Two Minute Taylor",
+  "Blitz Pickup Blake",
+  "Hail Mary Harper",
+  "Sideline Casey",
+  "Audible Morgan",
+  "First Down Finley",
+  "Wild Card Quinn",
+  "Overtime Parker",
+  "End Zone Emery",
+];
+
 function createPreviewPublicBracket(leaderboardName, variant = 0) {
   const rotate = (teams, amount) => {
     const shift = amount % teams.length;
@@ -529,11 +548,13 @@ async function loadLeaderboard() {
     if (LOCAL_PREVIEW) {
       state.leaderboard = {
         status: "Preseason — scoring has not started",
-        entries: [
-          { rank: 1, leaderboardName: "Gridiron Jake", regularSeason: 0, playoffs: 0, total: 0 },
-          { rank: 1, leaderboardName: "Sunday Sam", regularSeason: 0, playoffs: 0, total: 0 },
-          { rank: 1, leaderboardName: "Fourth Down Alex", regularSeason: 0, playoffs: 0, total: 0 },
-        ],
+        entries: LOCAL_PREVIEW_LEADERBOARD_NAMES.map((leaderboardName) => ({
+          rank: 1,
+          leaderboardName,
+          regularSeason: 0,
+          playoffs: 0,
+          total: 0,
+        })),
       };
       state.leaderboard.entries.forEach((entry, index) => {
         entry.bracket = createPreviewPublicBracket(entry.leaderboardName, index);

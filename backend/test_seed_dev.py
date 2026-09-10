@@ -16,18 +16,18 @@ class DevSeedTests(unittest.TestCase):
     def setUpClass(cls):
         cls.data = seed_dev.build_seed_data(now_ms=1_800_000_000_000)
 
-    def test_seeds_seven_unique_profiles_and_complete_predictions(self):
+    def test_seeds_enough_unique_profiles_to_exercise_leaderboard_scrolling(self):
         public_profiles = [
             item
             for item in self.data["profiles"]
             if item["recordType"] == "profile"
         ]
 
-        self.assertEqual(len(public_profiles), 7)
-        self.assertEqual(len(self.data["predictions"]), 7)
+        self.assertEqual(len(public_profiles), 16)
+        self.assertEqual(len(self.data["predictions"]), 16)
         self.assertEqual(
             len({profile["leaderboardName"] for profile in public_profiles}),
-            7,
+            16,
         )
         for prediction in self.data["predictions"]:
             self.assertEqual(len(prediction["seeds"]["AFC"]), 7)
