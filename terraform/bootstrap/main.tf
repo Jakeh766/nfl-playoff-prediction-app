@@ -20,7 +20,8 @@ locals {
   prod_email_sender_role = "${var.project_name}-email-sender-role"
   prod_dashboard_name    = "${var.project_name}-analytics"
 
-  codex_audit_role_name = "${var.project_name}-codex-audit"
+  codex_audit_role_name       = "${var.project_name}-codex-audit"
+  codex_audit_login_user_name = "${var.project_name}-codex-audit-login"
   prod_dynamodb_table_arns = [
     for suffix in ["groups", "predictions", "profiles", "win-totals-cache"] :
     "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-${suffix}"
@@ -32,14 +33,24 @@ locals {
 
 data "aws_iam_policy_document" "codex_audit_assume_role" {
   statement {
-    sid     = "AccountRootTemporarySession"
+    sid     = "CodexAuditLoginUser"
     effect  = "Allow"
     actions = ["sts:AssumeRole"]
 
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${local.account_id}:root"]
+      identifiers = [aws_iam_user.codex_audit_login.arn]
     }
+  }
+}
+
+resource "aws_iam_user" "codex_audit_login" {
+  name = local.codex_audit_login_user_name
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+    Purpose   = "CodexAuditLogin"
   }
 }
 
@@ -94,6 +105,21 @@ resource "aws_iam_role_policy" "codex_audit" {
   name   = "${var.project_name}-dynamodb-read-only"
   role   = aws_iam_role.codex_audit.id
   policy = data.aws_iam_policy_document.codex_audit.json
+}
+
+data "aws_iam_policy_document" "codex_audit_login" {
+  statement {
+    sid       = "AssumeCodexAuditRole"
+    effect    = "Allow"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.codex_audit.arn]
+  }
+}
+
+resource "aws_iam_user_policy" "codex_audit_login" {
+  name   = "${var.project_name}-assume-codex-audit-role"
+  user   = aws_iam_user.codex_audit_login.name
+  policy = data.aws_iam_policy_document.codex_audit_login.json
 }
 
 resource "aws_s3_bucket" "terraform_state" {

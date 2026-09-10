@@ -80,6 +80,8 @@ The one-time AWS prerequisites are managed by `terraform/bootstrap`:
   repository's `prod` environment.
 - role `nfl-playoff-predictor-codex-audit`, limited to read-only access for the
   four production DynamoDB tables and their backups.
+- login-only IAM user `nfl-playoff-predictor-codex-audit-login`, permitted only
+  to assume the audit role. It has no direct application access or access keys.
 
 The existing dev state has been migrated into the state bucket. The workflow
 also verifies that remote state is nonempty before it plans or applies.
@@ -87,14 +89,15 @@ also verifies that remote state is nonempty before it plans or applies.
 ## Local read-only AWS inspection
 
 Routine deployments use the GitHub OIDC roles above and do not need persistent
-local AWS credentials. The `nfl-prod-setup` profile provides a short-lived,
-interactive source session; `codex-audit` assumes the Terraform-managed
-`nfl-playoff-predictor-codex-audit` role from that source.
+local AWS credentials. The `codex-audit-login` profile provides a short-lived,
+interactive IAM-user session; `codex-audit` assumes the Terraform-managed
+`nfl-playoff-predictor-codex-audit` role from that source. The login-only user
+can assume that role but has no direct application permissions or access keys.
 
 Authenticate the source session, then verify the constrained audit role:
 
 ```powershell
-aws login --profile nfl-prod-setup
+aws login --profile codex-audit-login
 aws sts get-caller-identity --profile codex-audit --output json
 ```
 

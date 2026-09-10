@@ -18,6 +18,11 @@ output "codex_audit_role_arn" {
   value       = aws_iam_role.codex_audit.arn
 }
 
+output "codex_audit_login_user_name" {
+  description = "Login-only IAM user that can assume the Codex audit role."
+  value       = aws_iam_user.codex_audit_login.name
+}
+
 output "github_oidc_provider_arn" {
   description = "GitHub Actions OIDC provider ARN."
   value       = aws_iam_openid_connect_provider.github.arn

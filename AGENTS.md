@@ -22,7 +22,7 @@
 - The application AWS account is in `us-east-1`. Use the existing
   `codex-audit` profile for explicitly requested, read-only live AWS inspection.
 - If the profile session is expired, ask the user to complete
-  `aws login --profile nfl-prod-setup`; `codex-audit` assumes the constrained
+  `aws login --profile codex-audit-login`; `codex-audit` assumes the constrained
   audit role from that short-lived source session. Never request, create, store,
   or paste root access keys.
 - Keep routine dev and production deployment on GitHub Actions' OIDC roles. Do
