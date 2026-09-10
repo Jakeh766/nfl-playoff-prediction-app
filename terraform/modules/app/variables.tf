@@ -179,8 +179,14 @@ variable "results_season" {
   default     = 2026
 }
 
+variable "results_automation_start_at" {
+  description = "UTC timestamp before which scheduled NFL results syncs exit without polling."
+  type        = string
+  default     = "2026-12-01T16:00:00Z"
+}
+
 variable "results_update_schedule" {
   description = "EventBridge schedule expression for the NFL results updater."
   type        = string
-  default     = "rate(6 hours)"
+  default     = "cron(0 16 ? * TUE *)"
 }

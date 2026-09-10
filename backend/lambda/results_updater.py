@@ -20,6 +20,9 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
 SEASON = int(os.environ.get("RESULTS_SEASON", "2026"))
+AUTOMATION_START_AT = os.environ.get(
+    "RESULTS_AUTOMATION_START_AT", "2026-12-01T16:00:00Z"
+)
 EXPECTED_REGULAR_SEASON_GAMES = 272
 PROVIDER_NAME = "ESPN public site API"
 PROVIDER_BASE_URL = "https://site.api.espn.com/apis"
@@ -101,6 +104,19 @@ class ProviderDataError(ValueError):
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def is_scheduled_invocation(event: dict) -> bool:
+    return event.get("source") == "aws.events"
+
+
+def automation_has_started(now: str) -> bool:
+    try:
+        current = datetime.fromisoformat(now.replace("Z", "+00:00"))
+        start = datetime.fromisoformat(AUTOMATION_START_AT.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("RESULTS_AUTOMATION_START_AT must be an ISO-8601 timestamp") from error
+    return current >= start
 
 
 def results_table():
@@ -478,11 +494,34 @@ def apply_manual_override(current: dict, override: dict, reason: str, now: str) 
 
 
 def handler(event, _context):
+    event = event if isinstance(event, dict) else {}
+    now = utc_now()
+    if is_scheduled_invocation(event) and not automation_has_started(now):
+        LOGGER.info(
+            "Scheduled NFL results sync skipped before automation start: start=%s",
+            AUTOMATION_START_AT,
+        )
+        return {
+            "season": SEASON,
+            "status": "Scheduled sync not started",
+            "skipped": True,
+            "automationStartAt": AUTOMATION_START_AT,
+        }
+
     table = results_table()
     current = table.get_item(Key={"season": SEASON}, ConsistentRead=True).get("Item")
     current_revision = int((current or {}).get("revision", 0))
-    now = utc_now()
-    event = event if isinstance(event, dict) else {}
+    if (
+        is_scheduled_invocation(event)
+        and (current or {}).get("roundWinners", {}).get("superBowlChampion")
+    ):
+        LOGGER.info("Scheduled NFL results sync skipped because the season is final")
+        return {
+            "season": SEASON,
+            "status": current.get("status", "Final"),
+            "skipped": True,
+            "updatedAt": current.get("updatedAt"),
+        }
     if "manualOverride" in event:
         updated = apply_manual_override(
             current or empty_results(), event["manualOverride"], str(event.get("reason", "")), now

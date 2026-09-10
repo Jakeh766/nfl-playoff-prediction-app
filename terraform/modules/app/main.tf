@@ -1010,8 +1010,9 @@ resource "aws_lambda_function" "results_updater" {
 
   environment {
     variables = {
-      RESULTS_SEASON = tostring(var.results_season)
-      RESULTS_TABLE  = aws_dynamodb_table.season_results.name
+      RESULTS_AUTOMATION_START_AT = var.results_automation_start_at
+      RESULTS_SEASON              = tostring(var.results_season)
+      RESULTS_TABLE               = aws_dynamodb_table.season_results.name
     }
   }
 

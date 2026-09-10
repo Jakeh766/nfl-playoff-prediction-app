@@ -120,6 +120,50 @@ class ResultsUpdaterTests(unittest.TestCase):
             self.assertEqual(score["total"], 0)
             self.assertEqual(score["possible"], 0)
 
+    def test_scheduled_sync_skips_espn_and_dynamodb_before_week_12_window(self):
+        with mock.patch.object(updater, "utc_now", return_value="2026-11-24T16:00:00Z"), \
+             mock.patch.object(updater, "fetch_json") as fetch, \
+             mock.patch.object(updater, "results_table") as table:
+            response = updater.handler({"source": "aws.events"}, None)
+        self.assertTrue(response["skipped"])
+        fetch.assert_not_called()
+        table.assert_not_called()
+
+    def test_manual_sync_can_poll_espn_before_automatic_window(self):
+        class FakeTable:
+            def __init__(self):
+                self.puts = []
+
+            def get_item(self, **_kwargs):
+                return {}
+
+            def put_item(self, **kwargs):
+                self.puts.append(kwargs)
+
+        table = FakeTable()
+        with mock.patch.object(updater, "utc_now", return_value="2026-11-24T16:00:00Z"), \
+             mock.patch.object(updater, "fetch_json", return_value=scoreboard()) as fetch, \
+             mock.patch.object(updater, "results_table", return_value=table):
+            response = updater.handler({}, None)
+        self.assertNotIn("skipped", response)
+        fetch.assert_called_once_with(updater.SCOREBOARD_URL)
+        self.assertEqual(len(table.puts), 1)
+
+    def test_scheduled_sync_stops_polling_after_super_bowl_is_final(self):
+        final = copy.deepcopy(self.empty)
+        final["roundWinners"]["superBowlChampion"] = "Buffalo Bills"
+
+        class FakeTable:
+            def get_item(self, **_kwargs):
+                return {"Item": final}
+
+        with mock.patch.object(updater, "utc_now", return_value="2027-02-16T16:00:00Z"), \
+             mock.patch.object(updater, "fetch_json") as fetch, \
+             mock.patch.object(updater, "results_table", return_value=FakeTable()):
+            response = updater.handler({"source": "aws.events"}, None)
+        self.assertTrue(response["skipped"])
+        fetch.assert_not_called()
+
     def test_regular_season_is_scored_only_after_final_standings(self):
         final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=18)
         with mock.patch.object(updater, "EXPECTED_REGULAR_SEASON_GAMES", 1):

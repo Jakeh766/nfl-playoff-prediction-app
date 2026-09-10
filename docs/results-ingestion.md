@@ -9,10 +9,13 @@ that item whenever it scores a prediction or builds a leaderboard; the bundled
 exist or DynamoDB is temporarily unavailable.
 
 An EventBridge scheduled rule invokes the dedicated results-updater Lambda every
-six hours. The updater fetches ESPN's season scoreboard, accepts only events for
-which `status.type.completed` is exactly `true`, normalizes every team name, and
-merges those games into the stored item by ESPN event ID. It fetches final seeds
-from ESPN standings only after all 272 scheduled regular-season games are final.
+Tuesday at 16:00 UTC (10:00 a.m. Central Standard Time). The updater exits before
+calling ESPN until December 1, 2026, the Tuesday after the final Week 12 game.
+It also exits after a Super Bowl champion is stored. The updater fetches ESPN's
+season scoreboard, accepts only events for which `status.type.completed` is
+exactly `true`, normalizes every team name, and merges those games into the
+stored item by ESPN event ID. It fetches final seeds from ESPN standings only
+after all 272 scheduled regular-season games are final.
 Consequently, current records, projected seeds, temporary division leaders, and
 in-progress games never become scoring facts.
 
@@ -99,8 +102,9 @@ manual action. Do not edit `scoring_odds.json` as part of a results correction.
 
 Terraform adds one on-demand DynamoDB table with point-in-time recovery when
 stateful protection is enabled, one 256 MB Lambda, one execution role/policy,
-and one EventBridge scheduled rule/target. Four updates per day are about 120
-Lambda invocations and DynamoDB writes per month. At this scale the incremental
+and one EventBridge scheduled rule/target. One scheduled update per week is
+about four Lambda invocations and DynamoDB writes per month during the scoring
+window. At this scale the incremental
 cost should normally round to $0 under the standard Lambda/EventBridge free
 tiers, with only negligible DynamoDB request/storage and CloudWatch Logs usage
 if account-wide free allowances are already exhausted. Always use the current

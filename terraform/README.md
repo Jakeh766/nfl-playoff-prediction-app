@@ -32,7 +32,7 @@ Browser
                                                 -> DynamoDB settled season results
                                                 -> Sanitized scores and leaderboard names
 
-EventBridge (every six hours)
+EventBridge (Tuesdays at 16:00 UTC, beginning after 2026 Week 12)
   -> results-updater Lambda
        -> ESPN public scoreboard/standings JSON
        -> DynamoDB settled season results
