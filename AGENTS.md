@@ -1,36 +1,66 @@
 # Repository Instructions
 
+## Local tools
+
+- This repository's local development environment is Windows with Node.js 24,
+  Python 3.13, and Terraform 1.15.7.
+- Run `.\scripts\setup.ps1` once per checkout or worktree, then use
+  `.\scripts\check.ps1 -Scope <scope>` for validation. Valid scopes are
+  `Backend`, `Frontend`, `Email`, `Terraform`, and `All`.
+- Do not invoke the Microsoft Store `python` or `py` launchers. Use
+  `.venv\Scripts\python.exe` directly; the setup and check scripts already do
+  this.
+- The normal Codex workspace sandbox protects `.git` as read-only. Request host
+  permission before commands that write Git metadata, including fetch, add,
+  commit, switch, merge, rebase, and push. Do not first run a command that is
+  known to require `.git` writes inside the sandbox.
+- Preserve all unrelated working-tree changes. Local screenshots are ignored and
+  must not be added to commits.
+
+## AWS access
+
+- The application AWS account is in `us-east-1`. Use the existing
+  `codex-audit` profile for explicitly requested, read-only live AWS inspection.
+- If the profile session is expired, ask the user to complete
+  `aws login --profile codex-audit`; never request, create, store, or paste root
+  access keys.
+- Keep routine dev and production deployment on GitHub Actions' OIDC roles. Do
+  not use `nfl-prod-setup`, broaden IAM permissions, run Terraform apply locally,
+  or mutate AWS resources unless the user explicitly requests that operation.
+- Confirm the AWS principal with `aws sts get-caller-identity` before live work,
+  and keep audit output narrow; never print credentials, secrets, or raw user
+  data.
+
 ## Branch roles
 
 - `dev` is the automatic integration branch for development work.
-- `prod` is the production branch. Codex must never automatically modify, merge, push, or deploy changes to `prod`; do so only when the user explicitly requests it.
+- `prod` is the production branch. Never modify, merge, push, or deploy `prod`
+  unless the user explicitly requests it.
 
 ## Commits on `dev`
 
-- Whenever changes are made directly on the `dev` branch, commit them as small, atomic units of work.
-- Each commit must represent one coherent change and have a commit message that describes that change specifically.
-- Do not combine unrelated fixes, features, refactors, documentation updates, configuration changes, or other independent work in one commit merely because they were completed together.
-- A single atomic commit may include multiple files when all of those files are required for the same coherent change.
-- Before committing, review the diff and stage only the files or hunks that belong to that commit. Never include pre-existing or unrelated changes from the working tree.
-- After creating the required atomic commit or commits on `dev`, push them to the remote `dev` branch automatically. Do not leave completed commits only in the local repository unless pushing is blocked by authentication, permissions, failed checks, or another error outside the agent's control.
-- If a push is blocked, report the blocker and leave the local atomic commits intact.
+- Commit direct `dev` changes as small, coherent units with specific messages.
+  Stage only the files or hunks belonging to each commit.
+- After relevant checks pass, fetch and integrate the latest `origin/dev`, rerun
+  the relevant checks, and push normally to `origin/dev` without asking for a
+  separate review or pull request.
+- Never force-push `dev`. If a concurrent update rejects the push, integrate the
+  new `origin/dev`, rerun checks, and retry. If authentication, integration, or
+  tests fail, leave local commits intact, do not push, and report the blocker.
 
-## Codex-managed worktrees based on `dev`
+## Codex worktrees based on `dev`
 
-When working in a Codex-managed worktree based on `dev`, Codex must:
+- Complete the requested work, run relevant checks, and commit every completed
+  change; do not leave finished work uncommitted in a detached worktree.
+- Fetch the latest `origin/dev` and safely rebase or merge the worktree commits
+  onto it. Preserve both histories. Stop on ambiguous conflicts rather than
+  discarding changes or guessing.
+- Rerun relevant checks on the combined result, then push `HEAD` directly to
+  `origin/dev` with a normal push. Handle concurrent push rejection using the
+  same integrate-check-retry cycle above.
+- Do not require a pull request or manual handoff after successful integration,
+  and never automatically merge, push, or deploy to `prod`.
 
-1. Complete the requested task.
-2. Run the relevant tests and checks for the task.
-3. Commit all completed changes as small, atomic commits with descriptive commit messages. Never leave completed work uncommitted in a detached worktree.
-4. Fetch the latest `origin/dev`.
-5. Integrate the worktree commits on top of the latest `origin/dev` using a safe Git strategy that preserves both the worktree changes and changes that landed on `dev` since the worktree was created.
-6. If a merge or rebase conflict is ambiguous, stop and report it. Do not discard another task's changes or guess at a conflict resolution merely to make the integration succeed.
-7. After integrating the latest `dev`, rerun all relevant tests and checks against the combined code.
-8. If the tests and checks pass, push the resulting `HEAD` directly to `origin/dev` with a normal non-force push.
-9. Never force-push `dev`.
-10. If the push is rejected because another task updated `dev` concurrently, fetch the new `origin/dev`, integrate it again, rerun the relevant tests and checks, and retry the normal push.
-11. If integration or tests fail, do not push and report the failure.
-12. When integration and tests succeed, do not require manual review, approval, handoff, or a pull request.
-13. Never automatically merge, push, or otherwise deploy changes to `prod`.
-
-The expected workflow is: Codex worktree → make changes → test → commit → sync with the latest `dev` → test the combined result → push directly to `dev` → existing GitHub Actions handles the dev deployment.
+Expected flow: Codex worktree -> implement -> check -> atomic commits -> sync
+with `origin/dev` -> check combined result -> push to `dev` -> GitHub Actions
+deploys dev.

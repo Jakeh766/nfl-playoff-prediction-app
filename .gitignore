@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
+.venv/
+screenshots/
 terraform/**/.terraform/
 terraform/**/*.tfstate
 terraform/**/*.tfstate.*

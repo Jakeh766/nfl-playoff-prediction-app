@@ -82,6 +82,24 @@ The one-time AWS prerequisites are managed by `terraform/bootstrap`:
 The existing dev state has been migrated into the state bucket. The workflow
 also verifies that remote state is nonempty before it plans or applies.
 
+## Local read-only AWS inspection
+
+Routine deployments use the GitHub OIDC roles above and do not need persistent
+local AWS credentials. For an explicitly requested live audit, use the existing
+short-lived `codex-audit` profile in `us-east-1`:
+
+```powershell
+aws login --profile codex-audit
+aws sts get-caller-identity --profile codex-audit --output json
+```
+
+The expected account is `410533922944`. Complete browser authentication and MFA
+interactively; never create, paste, or store root access keys. Keep audit commands
+read-only and select only the fields needed for the report rather than returning
+raw table items or secret values. Do not broaden this profile or use the separate
+`nfl-prod-setup` profile unless an explicitly requested bootstrap operation
+requires administrator access.
+
 The GitHub environment named `dev` must define these environment variables:
 
 - `AWS_ROLE_ARN` =

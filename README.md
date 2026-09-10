@@ -70,32 +70,29 @@ truth used by the countdown and prediction UI.
 
 ## Local development
 
-The CI toolchain is Node.js 24, Python 3.13, and Terraform 1.15.7. Run checks
-from the repository root:
+The CI toolchain is Node.js 24, Python 3.13, and Terraform 1.15.7. On Windows,
+initialize the repository-local Python environment and other dependencies once:
 
 ```powershell
-node --check frontend/app.js
-node --check frontend/bootstrap.js
-node --check frontend/leaderboard.js
-node --check frontend/monitoring.js
-node --check frontend/picks.js
-node --check frontend/scoring.js
-node --check frontend/shell.js
-node --check frontend/auth-config.js
-python -m py_compile backend/lambda/app.py
-npm ci --prefix backend/custom-email-sender
-npm test --prefix backend/custom-email-sender
-python -m unittest discover -s backend -p "test_*.py"
-node --test backend/test_leaderboard.cjs
-terraform fmt -check -recursive terraform
-terraform -chdir=terraform/envs/dev init -backend=false
-terraform -chdir=terraform/envs/dev validate
+.\scripts\setup.ps1
 ```
+
+Run all local checks, or select one or more scopes:
+
+```powershell
+.\scripts\check.ps1
+.\scripts\check.ps1 -Scope Backend
+.\scripts\check.ps1 -Scope Frontend,Terraform
+```
+
+The scripts deliberately use `.venv\Scripts\python.exe` instead of the Windows
+Store `python.exe` launcher. GitHub Actions continues to use the matching
+Python 3.13, Node.js 24, and Terraform 1.15.7 toolchain.
 
 For a frontend-only preview:
 
 ```powershell
-python -m http.server 8000 --directory frontend
+.\.venv\Scripts\python.exe -m http.server 8000 --directory frontend
 ```
 
 Open `http://localhost:8000`. The preview supports the bracket UI and bundled
