@@ -425,7 +425,10 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
     actual_playoff_teams = {
         team
         for conference in ("AFC", "NFC")
-        for team in actual_seeds.get(conference, [])
+        for team in [
+            *results.get("playoffTeams", {}).get(conference, []),
+            *actual_seeds.get(conference, []),
+        ]
         if team
     }
     predicted_playoff_teams = {
@@ -599,7 +602,10 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     predicted_field = {team for conference in ("AFC", "NFC")
                        for team in predicted_seeds.get(conference, []) if team}
     actual_field = {team for conference in ("AFC", "NFC")
-                    for team in actual_seeds.get(conference, []) if team}
+                    for team in [
+                        *results.get("playoffTeams", {}).get(conference, []),
+                        *actual_seeds.get(conference, []),
+                    ] if team}
     for team in actual_field:
         add("playoffField", team, team in predicted_field, 5)
     for conference in ("AFC", "NFC"):

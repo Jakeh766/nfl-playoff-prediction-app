@@ -39,7 +39,7 @@ EventBridge (Tuesdays at 16:00 UTC, beginning after 2026 Week 12)
 ```
 
 See [`docs/results-ingestion.md`](../docs/results-ingestion.md) for provider
-limitations, finalized-only safeguards, the frozen Upset Edge boundary, manual
+limitations, settled-outcome safeguards, the frozen Upset Edge boundary, manual
 refresh/correction commands, and the expected incremental cost.
 
 ## Environment isolation

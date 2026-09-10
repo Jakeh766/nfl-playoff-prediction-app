@@ -86,18 +86,32 @@ def prediction():
     }
 
 
-def standings():
+def standings(clinchers=None, records=None):
+    clinchers = clinchers or {}
+    records = records or {}
     picks = prediction()
     children = []
     for conference in ("AFC", "NFC"):
+        remaining = sorted(
+            team
+            for team, (team_conference, _division) in updater.TEAM_INFO.items()
+            if team_conference == conference and team not in picks["seeds"][conference]
+        )
+        ranked_teams = [*picks["seeds"][conference], *remaining]
         children.append({
             "abbreviation": conference,
             "standings": {"entries": [
                 {
                     "team": {"displayName": team},
-                    "stats": [{"type": "playoffseed", "value": index}],
+                    "stats": [
+                        {"type": "playoffseed", "value": index},
+                        {"type": "clincher", "displayValue": clinchers.get(team, "")},
+                        {"type": "wins", "value": records.get(team, (8, 5, 0))[0]},
+                        {"type": "losses", "value": records.get(team, (8, 5, 0))[1]},
+                        {"type": "ties", "value": records.get(team, (8, 5, 0))[2]},
+                    ],
                 }
-                for index, team in enumerate(picks["seeds"][conference], start=1)
+                for index, team in enumerate(ranked_teams, start=1)
             ]},
         })
     return {"children": children}
@@ -142,11 +156,16 @@ class ResultsUpdaterTests(unittest.TestCase):
 
         table = FakeTable()
         with mock.patch.object(updater, "utc_now", return_value="2026-11-24T16:00:00Z"), \
-             mock.patch.object(updater, "fetch_json", return_value=scoreboard()) as fetch, \
+             mock.patch.object(
+                 updater, "fetch_json", side_effect=[scoreboard(), standings()]
+             ) as fetch, \
              mock.patch.object(updater, "results_table", return_value=table):
             response = updater.handler({}, None)
         self.assertNotIn("skipped", response)
-        fetch.assert_called_once_with(updater.SCOREBOARD_URL)
+        self.assertEqual(
+            fetch.call_args_list,
+            [mock.call(updater.SCOREBOARD_URL), mock.call(updater.STANDINGS_URL)],
+        )
         self.assertEqual(len(table.puts), 1)
 
     def test_scheduled_sync_stops_polling_after_super_bowl_is_final(self):
@@ -164,7 +183,144 @@ class ResultsUpdaterTests(unittest.TestCase):
         self.assertTrue(response["skipped"])
         fetch.assert_not_called()
 
-    def test_regular_season_is_scored_only_after_final_standings(self):
+    def test_temporary_regular_season_standings_do_not_score(self):
+        final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=13)
+        results = self.sync(self.empty, scoreboard(final), standings())
+        for mode in ("classic", "vegas"):
+            score = scoring.score_prediction(prediction(), results, mode)
+            self.assertEqual(score["regularSeason"], 0)
+            self.assertEqual(score["possible"], 0)
+
+    def test_provider_clinches_score_progressively(self):
+        final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=13)
+        berth = self.sync(
+            self.empty,
+            scoreboard(final),
+            standings({"Minnesota Vikings": "x"}),
+        )
+        berth_score = scoring.score_prediction(prediction(), berth)
+        self.assertEqual(berth_score["regularSeason"], 5)
+        self.assertEqual(berth_score["breakdown"]["playoffField"]["settled"], 1)
+        self.assertEqual(berth_score["breakdown"]["divisionWinners"]["settled"], 0)
+        self.assertEqual(berth_score["breakdown"]["exactSeeds"]["settled"], 0)
+
+        division = self.sync(
+            berth,
+            scoreboard(final),
+            standings({"Minnesota Vikings": "z"}),
+        )
+        division_score = scoring.score_prediction(prediction(), division)
+        self.assertEqual(division_score["regularSeason"], 10)
+        self.assertEqual(division["divisionWinners"]["NFC"]["North"], "Minnesota Vikings")
+
+        bye = self.sync(
+            division,
+            scoreboard(final),
+            standings({"Philadelphia Eagles": "*", "Minnesota Vikings": "z"}),
+        )
+        bye_score = scoring.score_prediction(prediction(), bye)
+        self.assertEqual(bye["seeds"]["NFC"][0], "Philadelphia Eagles")
+        self.assertEqual(bye_score["breakdown"]["exactSeeds"]["settled"], 1)
+        self.assertEqual(bye_score["breakdown"]["exactSeeds"]["points"], 5)
+
+    def test_strict_record_bounds_can_lock_lower_exact_seeds(self):
+        final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=17)
+        clinchers = {
+            "Philadelphia Eagles": "z",
+            "Minnesota Vikings": "z",
+            "Los Angeles Rams": "z",
+            "Tampa Bay Buccaneers": "z",
+        }
+        records = {
+            "Philadelphia Eagles": (14, 3, 0),
+            "Minnesota Vikings": (11, 6, 0),
+            "Los Angeles Rams": (8, 9, 0),
+            "Tampa Bay Buccaneers": (4, 13, 0),
+        }
+        results = self.sync(
+            self.empty,
+            scoreboard(final),
+            standings(clinchers, records),
+        )
+        self.assertEqual(
+            results["seeds"]["NFC"][:4],
+            [
+                "Philadelphia Eagles",
+                "Minnesota Vikings",
+                "Los Angeles Rams",
+                "Tampa Bay Buccaneers",
+            ],
+        )
+
+    def test_overlapping_record_bounds_do_not_lock_current_seed(self):
+        final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=17)
+        results = self.sync(
+            self.empty,
+            scoreboard(final),
+            standings(
+                {
+                    "Philadelphia Eagles": "z",
+                    "Minnesota Vikings": "z",
+                    "Los Angeles Rams": "z",
+                    "Tampa Bay Buccaneers": "z",
+                }
+            ),
+        )
+        self.assertFalse(any(results["seeds"]["NFC"]))
+
+    def test_strict_record_bounds_can_lock_wild_card_seeds(self):
+        final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=17)
+        nfc_teams = {
+            team
+            for team, (conference, _division) in updater.TEAM_INFO.items()
+            if conference == "NFC"
+        }
+        clinchers = {team: "e" for team in nfc_teams}
+        clinchers.update({
+            "Philadelphia Eagles": "z",
+            "Minnesota Vikings": "z",
+            "Los Angeles Rams": "z",
+            "Tampa Bay Buccaneers": "z",
+            "Green Bay Packers": "y",
+            "Detroit Lions": "y",
+            "Seattle Seahawks": "y",
+        })
+        records = {
+            "Green Bay Packers": (12, 5, 0),
+            "Detroit Lions": (10, 7, 0),
+            "Seattle Seahawks": (8, 9, 0),
+        }
+        results = self.sync(
+            self.empty,
+            scoreboard(final),
+            standings(clinchers, records),
+        )
+        self.assertEqual(
+            results["seeds"]["NFC"][4:],
+            ["Green Bay Packers", "Detroit Lions", "Seattle Seahawks"],
+        )
+
+    def test_known_clinch_survives_later_response_without_marker(self):
+        final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=13)
+        clinched = self.sync(
+            self.empty,
+            scoreboard(final),
+            standings({"Minnesota Vikings": "y"}),
+        )
+        refreshed = self.sync(clinched, scoreboard(final), standings())
+        self.assertEqual(refreshed["playoffTeams"]["NFC"], ["Minnesota Vikings"])
+
+    def test_incomplete_or_inconsistent_clinch_data_is_rejected(self):
+        incomplete = standings()
+        incomplete["children"][0]["standings"]["entries"].pop()
+        with self.assertRaises(updater.ProviderDataError):
+            self.sync(self.empty, scoreboard(), incomplete)
+
+        inconsistent = standings({"Minnesota Vikings": "*"})
+        with self.assertRaises(updater.ProviderDataError):
+            self.sync(self.empty, scoreboard(), inconsistent)
+
+    def test_full_regular_season_settles_all_standings(self):
         final = game("02", "Buffalo Bills", "Miami Dolphins", season_type=2, week=18)
         with mock.patch.object(updater, "EXPECTED_REGULAR_SEASON_GAMES", 1):
             results = self.sync(self.empty, scoreboard(final), standings())
@@ -247,6 +403,20 @@ class ResultsUpdaterTests(unittest.TestCase):
         self.assertTrue(refreshed["manualOverrides"])
         with self.assertRaises(ValueError):
             updater.apply_manual_override(self.empty, {"scoringOdds": {}}, "bad", self.now)
+
+    def test_manual_override_can_set_an_officially_locked_lower_seed(self):
+        corrected = updater.apply_manual_override(
+            self.empty,
+            {
+                "playoffTeams": {"NFC": ["Minnesota Vikings"]},
+                "seeds": {"NFC": ["", "", "", "", "Minnesota Vikings"]},
+            },
+            "NFL confirmed the No. 5 seed",
+            self.now,
+        )
+        score = scoring.score_prediction(prediction(), corrected)
+        self.assertEqual(score["breakdown"]["playoffField"]["settled"], 1)
+        self.assertEqual(score["breakdown"]["exactSeeds"]["settled"], 1)
 
     def test_provider_failure_never_writes_over_last_known_good_item(self):
         known = self.sync(

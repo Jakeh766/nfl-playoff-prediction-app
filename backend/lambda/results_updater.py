@@ -24,6 +24,7 @@ AUTOMATION_START_AT = os.environ.get(
     "RESULTS_AUTOMATION_START_AT", "2026-12-01T16:00:00Z"
 )
 EXPECTED_REGULAR_SEASON_GAMES = 272
+REGULAR_SEASON_GAMES_PER_TEAM = 17
 PROVIDER_NAME = "ESPN public site API"
 PROVIDER_BASE_URL = "https://site.api.espn.com/apis"
 SCOREBOARD_URL = (
@@ -32,8 +33,8 @@ SCOREBOARD_URL = (
     + f"?dates={SEASON}0901-{SEASON + 1}0301&limit=500"
 )
 STANDINGS_URL = (
-    PROVIDER_BASE_URL
-    + f"/v2/sports/football/nfl/standings?season={SEASON}"
+    "https://site.web.api.espn.com/apis/v2/sports/football/nfl/standings"
+    + f"?season={SEASON}&seasontype=2&type=3&level=2&sort=playoffseed:asc"
 )
 
 TEAM_INFO = {
@@ -128,6 +129,7 @@ def empty_results(season: int = SEASON) -> dict:
         "season": season,
         "status": "Preseason — scoring has not started",
         "updatedAt": None,
+        "playoffTeams": {"AFC": [], "NFC": []},
         "divisionWinners": {"AFC": {}, "NFC": {}},
         "seeds": {"AFC": [], "NFC": []},
         "roundWinners": {
@@ -247,17 +249,30 @@ def parse_scoreboard(payload: dict, season: int = SEASON) -> tuple[dict, int, in
     return games, len(regular_event_ids), regular_final
 
 
-def parse_standings(payload: dict, season: int = SEASON) -> tuple[dict, dict]:
+def parse_standings(
+    payload: dict, season: int = SEASON, *, regular_season_final: bool = False
+) -> tuple[dict, dict, dict]:
+    """Return only provider-confirmed, mathematically settled outcomes.
+
+    ESPN's current ``playoffseed`` is provisional. Its NFL ``clincher`` marker is
+    the settled signal: y=Wild Card, z=division, and *=division plus the
+    conference's lone bye (therefore the exact No. 1 seed). Once every regular-
+    season game is final, all seven displayed seeds settle.
+    """
     children = payload.get("children")
     if not isinstance(children, list):
         raise ProviderDataError("Provider standings are missing conference children")
-    seeds = {"AFC": [None] * 7, "NFC": [None] * 7}
+    current_seeds = {"AFC": [None] * 16, "NFC": [None] * 16}
+    playoff_teams = {"AFC": [], "NFC": []}
+    divisions = {"AFC": {}, "NFC": {}}
+    clinchers = {"AFC": {}, "NFC": {}}
+    records = {"AFC": {}, "NFC": {}}
     for child in children:
         conference = str(child.get("abbreviation", "")).upper()
-        if conference not in seeds:
+        if conference not in current_seeds:
             continue
         entries = (child.get("standings") or {}).get("entries")
-        if not isinstance(entries, list):
+        if not isinstance(entries, list) or len(entries) != 16:
             raise ProviderDataError(f"Provider standings are missing {conference} entries")
         for entry in entries:
             team = normalize_team((entry.get("team") or {}).get("displayName"))
@@ -268,34 +283,205 @@ def parse_standings(payload: dict, season: int = SEASON) -> tuple[dict, dict]:
             }
             seed_stat = stats.get("playoffseed")
             if not seed_stat:
-                continue
+                raise ProviderDataError(f"Provider standings omit the playoff seed for {team}")
             try:
                 seed = int(float(seed_stat.get("value", seed_stat.get("displayValue"))))
             except (TypeError, ValueError) as error:
                 raise ProviderDataError(f"Invalid playoff seed for {team}") from error
-            if not 1 <= seed <= 7:
-                continue
-            if seeds[conference][seed - 1] is not None:
+            if not 1 <= seed <= 16:
+                raise ProviderDataError(f"Invalid playoff seed for {team}")
+            if current_seeds[conference][seed - 1] is not None:
                 raise ProviderDataError(f"Duplicate {conference} playoff seed {seed}")
             if TEAM_INFO[team][0] != conference:
                 raise ProviderDataError(f"{team} is listed in the wrong conference")
-            seeds[conference][seed - 1] = team
+            current_seeds[conference][seed - 1] = team
 
-    if any(team is None for conference in seeds.values() for team in conference):
-        raise ProviderDataError("Provider standings do not contain all 14 playoff seeds")
-    final_seeds = {conference: list(teams) for conference, teams in seeds.items()}
-    divisions = {"AFC": {}, "NFC": {}}
-    for conference, teams in final_seeds.items():
-        for team in teams[:4]:
-            division = TEAM_INFO[team][1]
-            if division in divisions[conference]:
+            clincher = str((stats.get("clincher") or {}).get("displayValue") or "").strip().lower()
+            clinchers[conference][team] = clincher
+            record = []
+            for name in ("wins", "losses", "ties"):
+                stat = stats.get(name)
+                try:
+                    value = float(stat.get("value", stat.get("displayValue")))
+                except (AttributeError, TypeError, ValueError) as error:
+                    raise ProviderDataError(f"Invalid {name} for {team}") from error
+                if value < 0 or not value.is_integer():
+                    raise ProviderDataError(f"Invalid {name} for {team}")
+                record.append(int(value))
+            wins, losses, ties = record
+            played = wins + losses + ties
+            if played > REGULAR_SEASON_GAMES_PER_TEAM:
+                raise ProviderDataError(f"Invalid record for {team}")
+            current_points = wins * 2 + ties
+            records[conference][team] = (
+                current_points,
+                current_points
+                + (REGULAR_SEASON_GAMES_PER_TEAM - played) * 2,
+            )
+            if clincher in {"x", "y", "z", "*"}:
+                playoff_teams[conference].append(team)
+            if clincher in {"z", "*"}:
+                division = TEAM_INFO[team][1]
+                previous = divisions[conference].get(division)
+                if previous and previous != team:
+                    raise ProviderDataError(
+                        f"Two {conference} teams have clinched the {division} division"
+                    )
+                divisions[conference][division] = team
+            if clincher == "*" and seed != 1:
+                raise ProviderDataError(f"{team} has a bye clincher but is not the No. 1 seed")
+
+    if any(team is None for conference in current_seeds.values() for team in conference):
+        raise ProviderDataError("Provider standings do not contain all 32 teams")
+
+    if regular_season_final:
+        settled_seeds = {
+            conference: list(teams[:7]) for conference, teams in current_seeds.items()
+        }
+        playoff_teams = {
+            conference: list(teams[:7]) for conference, teams in current_seeds.items()
+        }
+        divisions = {"AFC": {}, "NFC": {}}
+        for conference, teams in settled_seeds.items():
+            for team in teams[:4]:
+                division = TEAM_INFO[team][1]
+                if division in divisions[conference]:
+                    raise ProviderDataError(
+                        f"Two {conference} playoff seeds claim the {division} division"
+                    )
+                divisions[conference][division] = team
+            if set(divisions[conference]) != {"North", "South", "East", "West"}:
                 raise ProviderDataError(
-                    f"Two {conference} playoff seeds claim the {division} division"
+                    f"Provider seeds do not identify all {conference} divisions"
                 )
-            divisions[conference][division] = team
-        if set(divisions[conference]) != {"North", "South", "East", "West"}:
-            raise ProviderDataError(f"Provider seeds do not identify all {conference} divisions")
-    return final_seeds, divisions
+    else:
+        settled_seeds = derive_mathematically_locked_seeds(
+            current_seeds, clinchers, records
+        )
+
+    for conference in ("AFC", "NFC"):
+        playoff_teams[conference].sort(
+            key=lambda team: current_seeds[conference].index(team)
+        )
+    return settled_seeds, divisions, playoff_teams
+
+
+def derive_mathematically_locked_seeds(
+    current_seeds: dict, clinchers: dict, records: dict
+) -> dict:
+    """Prove exact seeds using only clinches and strict possible-record bounds.
+
+    Equal possible records are deliberately unresolved because they require the
+    NFL's multi-level tiebreakers. Overlapping bounds are also unresolved, even
+    when ESPN's current ordering happens to place a team in that seed.
+    """
+    settled = {"AFC": [""] * 7, "NFC": [""] * 7}
+
+    def place(conference: str, seed: int, team: str) -> None:
+        existing = settled[conference][seed - 1]
+        if existing not in ("", team):
+            raise ProviderDataError(f"Two {conference} teams lock seed {seed}")
+        settled[conference][seed - 1] = team
+
+    for conference in ("AFC", "NFC"):
+        # The NFL's lone first-round bye is necessarily the exact No. 1 seed.
+        for team, marker in clinchers[conference].items():
+            if marker == "*":
+                place(conference, 1, team)
+
+        divisions = {}
+        for division in ("North", "South", "East", "West"):
+            candidates = [
+                team
+                for team in current_seeds[conference]
+                if TEAM_INFO[team][1] == division
+                and clinchers[conference].get(team) not in {"e", "y"}
+            ]
+            clinched_winners = [
+                team
+                for team in candidates
+                if clinchers[conference].get(team) in {"z", "*"}
+            ]
+            divisions[division] = clinched_winners or candidates
+        for team, marker in clinchers[conference].items():
+            if marker not in {"z", "*"}:
+                continue
+            team_minimum, team_maximum = records[conference][team]
+            teams_ahead = 0
+            locked = True
+            for division, candidates in divisions.items():
+                if division == TEAM_INFO[team][1]:
+                    continue
+                if not candidates:
+                    locked = False
+                    break
+                winner_minimum = max(records[conference][candidate][0] for candidate in candidates)
+                winner_maximum = max(records[conference][candidate][1] for candidate in candidates)
+                if team_minimum > winner_maximum:
+                    continue
+                if team_maximum < winner_minimum:
+                    teams_ahead += 1
+                    continue
+                locked = False
+                break
+            if locked:
+                place(conference, teams_ahead + 1, team)
+
+        for team, marker in clinchers[conference].items():
+            if marker != "y":
+                continue
+            team_minimum, team_maximum = records[conference][team]
+            wild_cards_ahead = 0
+            locked = True
+            for candidate in current_seeds[conference]:
+                if candidate == team:
+                    continue
+                candidate_marker = clinchers[conference].get(candidate)
+                if candidate_marker in {"e", "z", "*"}:
+                    continue
+                candidate_minimum, candidate_maximum = records[conference][candidate]
+                if team_minimum > candidate_maximum:
+                    continue
+                if candidate_marker == "y" and team_maximum < candidate_minimum:
+                    wild_cards_ahead += 1
+                    continue
+                locked = False
+                break
+            if locked and wild_cards_ahead <= 2:
+                place(conference, 5 + wild_cards_ahead, team)
+
+    return settled
+
+
+def merge_settled_standings(current: dict, addition: tuple[dict, dict, dict]) -> None:
+    """Monotonically add clinches so a later incomplete response cannot erase them."""
+    seeds, divisions, playoff_teams = addition
+    current.setdefault("playoffTeams", {"AFC": [], "NFC": []})
+    current.setdefault("divisionWinners", {"AFC": {}, "NFC": {}})
+    current.setdefault("seeds", {"AFC": [], "NFC": []})
+    for conference in ("AFC", "NFC"):
+        known_playoff_teams = current["playoffTeams"].setdefault(conference, [])
+        for team in playoff_teams[conference]:
+            if team not in known_playoff_teams:
+                known_playoff_teams.append(team)
+
+        known_divisions = current["divisionWinners"].setdefault(conference, {})
+        for division, team in divisions[conference].items():
+            if known_divisions.get(division) not in (None, team):
+                raise ProviderDataError(f"Conflicting settled {conference} {division} winner")
+            known_divisions[division] = team
+
+        known_seeds = current["seeds"].setdefault(conference, [])
+        if len(known_seeds) < len(seeds[conference]):
+            known_seeds.extend([""] * (len(seeds[conference]) - len(known_seeds)))
+        for index, team in enumerate(seeds[conference]):
+            if not team:
+                continue
+            if known_seeds[index] not in ("", team):
+                raise ProviderDataError(
+                    f"Conflicting settled {conference} seed {index + 1}"
+                )
+            known_seeds[index] = team
 
 
 def derive_round_winners(processed_games: dict) -> dict:
@@ -357,14 +543,27 @@ def _merge_sparse(existing: dict, addition: dict, schema: dict) -> dict:
 def validate_results(results: dict) -> None:
     if int(results.get("season", 0)) != SEASON:
         raise ValueError(f"Results must target the {SEASON} season")
+    playoff_teams = results.get("playoffTeams") or {}
     divisions = results.get("divisionWinners") or {}
     seeds = results.get("seeds") or {}
     rounds = results.get("roundWinners") or {}
     for conference in ("AFC", "NFC"):
+        conference_playoff_teams = playoff_teams.get(conference, [])
+        if (
+            not isinstance(conference_playoff_teams, list)
+            or len(conference_playoff_teams) > 7
+            or len(conference_playoff_teams) != len(set(conference_playoff_teams))
+        ):
+            raise ValueError(f"{conference} playoff teams must be a unique list of at most seven")
+        for team in conference_playoff_teams:
+            if normalize_team(team) != team or TEAM_INFO[team][0] != conference:
+                raise ValueError(f"Invalid {conference} playoff team: {team}")
         conference_seeds = seeds.get(conference, [])
         if not isinstance(conference_seeds, list) or len(conference_seeds) > 7:
             raise ValueError(f"{conference} seeds must be a list of at most seven teams")
         for team in conference_seeds:
+            if not team:
+                continue
             if normalize_team(team) != team or TEAM_INFO[team][0] != conference:
                 raise ValueError(f"Invalid {conference} seed: {team}")
         for division, team in (divisions.get(conference) or {}).items():
@@ -400,8 +599,18 @@ def status_for(results: dict) -> str:
         return "Divisional round in progress"
     if rounds.get("wildCard"):
         return "Wild Card round in progress"
-    if any(results.get("seeds", {}).get(conference) for conference in ("AFC", "NFC")):
+    if all(
+        len([team for team in results.get("seeds", {}).get(conference, []) if team]) == 7
+        for conference in ("AFC", "NFC")
+    ):
         return "Regular season final"
+    if any(
+        results.get("playoffTeams", {}).get(conference)
+        or results.get("divisionWinners", {}).get(conference)
+        or any(results.get("seeds", {}).get(conference, []))
+        for conference in ("AFC", "NFC")
+    ):
+        return "Regular season in progress — clinched outcomes scored"
     if any(
         game.get("round") == "regularSeason"
         for game in results.get("processedGames", {}).values()
@@ -431,10 +640,19 @@ def sync_results(current: dict, scoreboard: dict, standings: dict | None, now: s
     merged["processedGames"] = stored_games
     merged["roundWinners"] = derive_round_winners(stored_games)
 
-    if regular_scheduled >= EXPECTED_REGULAR_SEASON_GAMES and regular_final >= regular_scheduled:
-        if standings is None:
-            raise ProviderDataError("Final regular season requires standings data")
-        merged["seeds"], merged["divisionWinners"] = parse_standings(standings)
+    regular_season_final = (
+        regular_scheduled >= EXPECTED_REGULAR_SEASON_GAMES
+        and regular_final >= regular_scheduled
+    )
+    if standings is not None:
+        merge_settled_standings(
+            merged,
+            parse_standings(
+                standings, regular_season_final=regular_season_final
+            ),
+        )
+    elif regular_season_final:
+        raise ProviderDataError("Final regular season requires standings data")
 
     merged["status"] = status_for(merged)
     merged["updatedAt"] = now
@@ -464,14 +682,15 @@ def sync_results(current: dict, scoreboard: dict, standings: dict | None, now: s
 def apply_manual_override(current: dict, override: dict, reason: str, now: str) -> dict:
     if not isinstance(override, dict) or not override:
         raise ValueError("manualOverride must be a non-empty object")
-    allowed = {"divisionWinners", "seeds", "roundWinners"}
+    allowed = {"playoffTeams", "divisionWinners", "seeds", "roundWinners"}
     unknown = set(override) - allowed
     if unknown:
         raise ValueError(f"Manual override cannot change: {', '.join(sorted(unknown))}")
     stored = copy.deepcopy(current or empty_results())
-    schema = {
-        key: empty_results()[key] for key in allowed
-    }
+    empty = empty_results()
+    for key in allowed:
+        stored.setdefault(key, copy.deepcopy(empty[key]))
+    schema = {key: empty[key] for key in allowed}
     candidate_overrides = _merge_sparse(
         stored.get("manualOverrides", {}), override, schema
     )
@@ -539,12 +758,8 @@ def handler(event, _context):
     else:
         try:
             scoreboard = fetch_json(SCOREBOARD_URL)
-            _games, scheduled, final = parse_scoreboard(scoreboard)
-            standings = (
-                fetch_json(STANDINGS_URL)
-                if scheduled >= EXPECTED_REGULAR_SEASON_GAMES and final >= scheduled
-                else None
-            )
+            _games, _scheduled, _final = parse_scoreboard(scoreboard)
+            standings = fetch_json(STANDINGS_URL)
             updated = sync_results(current or empty_results(), scoreboard, standings, now)
         except Exception:
             LOGGER.exception("NFL results provider sync failed; last known good results retained")

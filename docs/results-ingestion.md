@@ -14,15 +14,29 @@ calling ESPN until December 1, 2026, the Tuesday after the final Week 12 game.
 It also exits after a Super Bowl champion is stored. The updater fetches ESPN's
 season scoreboard, accepts only events for which `status.type.completed` is
 exactly `true`, normalizes every team name, and merges those games into the
-stored item by ESPN event ID. It fetches final seeds from ESPN standings only
-after all 272 scheduled regular-season games are final.
-Consequently, current records, projected seeds, temporary division leaders, and
-in-progress games never become scoring facts.
+stored item by ESPN event ID. On each active weekly run it also fetches ESPN's
+conference standings and reads the explicit NFL `clincher` marker. An `x`
+playoff-berth or `y` Wild Card clinch settles playoff-team points, a `z` division
+clinch settles both the playoff team and division winner, and `*` settles those
+categories plus the exact No. 1 seed because it denotes the conference's lone
+first-round bye. After all 272 scheduled regular-season games are final, all 14
+seeds settle.
+
+The current `playoffseed` values alone never settle points. ESPN does not expose
+a separate clincher marker for exact seeds 2–7, so the updater proves those only
+when the clinched teams' minimum and maximum possible final records are strictly
+separated from every possible competing division winner or Wild Card. If any
+possible records tie or overlap, the slot remains unsettled rather than trying to
+reproduce the NFL's multi-level tiebreakers from a standings snapshot. All slots
+settle after the full regular season is final. An IAM-only manual override remains
+available for an officially confirmed seed that depends on a tiebreaker. Previously
+stored clinches are merged monotonically and cannot disappear merely because a
+later provider response omits a marker.
 
 The durable item contains:
 
 - season, human-readable status, `updatedAt`, and `lastSuccessfulSync`;
-- AFC/NFC division winners and final seeds;
+- AFC/NFC clinched playoff teams, division winners, and settled exact seeds;
 - Wild Card, Divisional, conference, and Super Bowl winners;
 - source URLs and provider metadata;
 - normalized final games keyed by provider event ID, used for idempotency and
@@ -40,12 +54,12 @@ without duplicate credit.
 The provider adapter uses ESPN's public site JSON endpoints:
 
 - `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`
-- `https://site.api.espn.com/apis/v2/sports/football/nfl/standings`
+- `https://site.web.api.espn.com/apis/v2/sports/football/nfl/standings`
 
 They are free and require no secret or API key. The scoreboard includes an
 explicit final-state flag and identifies postseason weeks 1–4 as Wild Card,
 Divisional, conference championship, and Super Bowl. The standings response
-contains final playoff seeds.
+contains ESPN's explicit clincher markers and its ordered playoff seeds.
 
 These are public ESPN site endpoints, not a contracted data product: ESPN does
 not publish an availability SLA or compatibility guarantee. The adapter is
@@ -83,10 +97,13 @@ $payload = '{"manualOverride":{"roundWinners":{"superBowlChampion":"Buffalo Bill
 aws lambda invoke --function-name $functionName --cli-binary-format raw-in-base64-out --payload $payload results-override-response.json
 ```
 
-The same payload shape can override `divisionWinners`, `seeds`, or any field
-under `roundWinners`. Overrides are sparse and remain in force across scheduled
-provider refreshes. Team names and conference/division relationships are
-validated before the write.
+The same payload shape can override `playoffTeams`, `divisionWinners`, `seeds`,
+or any field under `roundWinners`. Overrides are sparse and remain in force
+across scheduled provider refreshes. Team names and conference/division
+relationships are validated before the write. A partially settled exact-seed
+list uses empty strings for unknown earlier slots; for example, an officially
+locked NFC No. 5 can be represented as
+`{"seeds":{"NFC":["","","","","Minnesota Vikings"]}}`.
 
 After ESPN is correct again, clear all manual overrides and restore the last
 provider-derived facts:
