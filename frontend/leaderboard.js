@@ -302,14 +302,11 @@ function rankLeaderboardEntries(entries, mode = "classic") {
       1,
     );
   });
-  let previousTotal = null;
-  let currentRank = 0;
-  return ordered.map((entry, index) => {
-    const total = leaderboardSortValue(entry, "total", mode);
-    if (index === 0 || total !== previousTotal) currentRank = index + 1;
-    previousTotal = total;
-    return { ...entry, rank: currentRank, scoringMode: mode };
-  });
+  return ordered.map((entry, index) => ({
+    ...entry,
+    rank: index + 1,
+    scoringMode: mode,
+  }));
 }
 
 function updateLeaderboardSortIndicators(body, sortState) {
@@ -357,6 +354,7 @@ function formatLeaderboardScore(value, decimals = 0) {
   if (value == null || value === "") return "—";
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
+  if (number === 0) return "0";
   return decimals ? number.toFixed(decimals) : String(value);
 }
 
@@ -401,9 +399,7 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
     row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
-    rank.textContent = entry.rank >= 1 && entry.rank <= 3
-      ? ["🥇", "🥈", "🥉"][entry.rank - 1]
-      : String(entry.rank ?? "—");
+    rank.textContent = String(entry.rank ?? "—");
     rank.setAttribute("aria-label", `Rank ${entry.rank ?? "unavailable"}`);
 
     const player = document.createElement("th");

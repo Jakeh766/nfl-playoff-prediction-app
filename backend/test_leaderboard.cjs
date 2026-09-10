@@ -43,6 +43,27 @@ test('public leaderboard ranks and sorts by the selected scoring mode', () => {
   assert.equal('upsetBonus' in entries[0].scores.vegas, false);
 });
 
+test('tied scores receive clear sequential ranks', () => {
+  context.tiedEntries = [
+    { leaderboardName: 'Charlie', total: 0, regularSeason: 0, playoffs: 0 },
+    { leaderboardName: 'Alpha', total: 0, regularSeason: 0, playoffs: 0 },
+    { leaderboardName: 'Bravo', total: 0, regularSeason: 0, playoffs: 0 },
+  ];
+
+  assert.deepEqual(
+    Array.from(vm.runInContext(
+      'rankLeaderboardEntries(tiedEntries).map((entry) => [entry.leaderboardName, entry.rank])',
+      context,
+    ), (entry) => Array.from(entry)),
+    [['Alpha', 1], ['Bravo', 2], ['Charlie', 3]],
+  );
+});
+
+test('Upset Edge zero scores do not show unnecessary decimals', () => {
+  assert.equal(vm.runInContext('formatLeaderboardScore(0, 2)', context), '0');
+  assert.equal(vm.runInContext('formatLeaderboardScore(7.25, 2)', context), '7.25');
+});
+
 test('private leaderboard reads only its fixed scoring mode', () => {
   context.privateEntry = {
     leaderboardName: 'Group Player',

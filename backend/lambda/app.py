@@ -292,13 +292,8 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
             entry["leaderboardName"].casefold(),
         )
     )
-    previous_score = None
-    current_rank = 0
     for position, entry in enumerate(entries, start=1):
-        if entry["total"] != previous_score:
-            current_rank = position
-            previous_score = entry["total"]
-        entry["rank"] = current_rank
+        entry["rank"] = position
 
     return {
         "season": results.get("season"),
