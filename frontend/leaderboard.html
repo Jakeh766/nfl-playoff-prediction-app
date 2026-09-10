@@ -49,7 +49,7 @@
           </div>
           <p class="input-hint leaderboard-sort-hint" id="public-leaderboard-sort-hint">Rankings and score columns follow the selected mode. Select a player to view their bracket.</p>
           <p class="leaderboard-status" id="leaderboard-status" role="status">Loading leaderboard…</p>
-          <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell">
+          <div class="leaderboard-table-shell hidden" id="leaderboard-table-shell" role="region" aria-label="Public leaderboard table" tabindex="0">
             <table class="leaderboard-table" aria-describedby="public-leaderboard-sort-hint">
               <thead><tr>
                 <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
@@ -82,7 +82,7 @@
               </div>
             </div>
             <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Rankings and scores use this group’s scoring option. Select a player to view their bracket.</p>
-            <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell">
+            <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell" role="region" aria-label="Group leaderboard table" tabindex="0">
               <table class="leaderboard-table" aria-describedby="group-leaderboard-sort-hint">
                 <thead><tr>
                   <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
