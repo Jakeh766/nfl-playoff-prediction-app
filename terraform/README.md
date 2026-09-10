@@ -29,8 +29,18 @@ Browser
             -> JWT-protected /api/profile    -> Lambda
                                                 -> DynamoDB unique leaderboard profiles
             -> public /api/leaderboard       -> Lambda
+                                                -> DynamoDB settled season results
                                                 -> Sanitized scores and leaderboard names
+
+EventBridge (every six hours)
+  -> results-updater Lambda
+       -> ESPN public scoreboard/standings JSON
+       -> DynamoDB settled season results
 ```
+
+See [`docs/results-ingestion.md`](../docs/results-ingestion.md) for provider
+limitations, finalized-only safeguards, the frozen Upset Edge boundary, manual
+refresh/correction commands, and the expected incremental cost.
 
 ## Environment isolation
 

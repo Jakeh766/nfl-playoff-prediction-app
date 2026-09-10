@@ -48,6 +48,16 @@ output "cognito_client_id" {
   value       = aws_cognito_user_pool_client.browser.id
 }
 
+output "season_results_table" {
+  description = "DynamoDB table containing the durable settled season results."
+  value       = aws_dynamodb_table.season_results.name
+}
+
+output "results_updater_function" {
+  description = "Lambda function that refreshes or manually corrects season results."
+  value       = aws_lambda_function.results_updater.function_name
+}
+
 output "analytics_dashboard_name" {
   description = "CloudWatch analytics dashboard name for environments where analytics are enabled."
   value       = aws_cloudwatch_dashboard.analytics[0].dashboard_name

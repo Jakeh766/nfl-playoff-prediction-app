@@ -7,6 +7,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(resource=lambda _name: None))
@@ -257,6 +258,68 @@ class PredictionScoringTests(unittest.TestCase):
         self.assertEqual(score["possible"], 10)
         self.assertEqual(score["breakdown"]["divisionWinners"]["settled"], 1)
         self.assertEqual(score["breakdown"]["wildCard"]["settled"], 1)
+
+    def test_leaderboard_ranking_updates_when_results_change(self):
+        class FakeTable:
+            def __init__(self, items):
+                self.items = items
+
+            def scan(self, **_kwargs):
+                return {"Items": self.items}
+
+        profiles = FakeTable([
+            {"profileKey": "user#one", "recordType": "profile", "leaderboardName": "Alpha"},
+            {"profileKey": "user#two", "recordType": "profile", "leaderboardName": "Beta"},
+        ])
+        predictions = FakeTable([
+            {"profileKey": "one", "picks": {"AFC": {"wc-2-7": "Buffalo Bills"}}},
+            {"profileKey": "two", "picks": {"AFC": {"wc-2-7": "Miami Dolphins"}}},
+        ])
+        preseason = {"season": 2026}
+        partial = {"season": 2026, "roundWinners": {"wildCard": ["Buffalo Bills"]}}
+        with mock.patch.object(lambda_app, "profiles_table", return_value=profiles), \
+             mock.patch.object(lambda_app, "predictions_table", return_value=predictions), \
+             mock.patch.object(lambda_app, "load_season_results", return_value=preseason):
+            before = lambda_app.build_leaderboard()
+        with mock.patch.object(lambda_app, "profiles_table", return_value=profiles), \
+             mock.patch.object(lambda_app, "predictions_table", return_value=predictions), \
+             mock.patch.object(lambda_app, "load_season_results", return_value=partial):
+            after = lambda_app.build_leaderboard()
+        self.assertEqual([entry["rank"] for entry in before["entries"]], [1, 1])
+        self.assertEqual(after["entries"][0]["leaderboardName"], "Alpha")
+        self.assertEqual(after["entries"][0]["total"], 5)
+        self.assertEqual(after["entries"][1]["rank"], 2)
+
+    def test_group_leaderboard_uses_its_selected_upset_edge_method(self):
+        class FakeTable:
+            def __init__(self, items):
+                self.items = items
+
+            def scan(self, **_kwargs):
+                return {"Items": self.items}
+
+        group_rows = FakeTable([
+            {"recordType": "membership", "groupId": "group", "userId": "one"},
+        ])
+        profiles = FakeTable([
+            {"profileKey": "user#one", "recordType": "profile", "leaderboardName": "Alpha"},
+        ])
+        predictions = FakeTable([
+            {"profileKey": "one", "picks": {"AFC": {"wc-2-7": "Miami Dolphins"}}},
+        ])
+        results = {"season": 2026, "roundWinners": {"wildCard": ["Miami Dolphins"]}}
+        with mock.patch.object(lambda_app, "get_group", return_value={
+                 "groupName": "Upsets", "scoringOption": "vegas"
+             }), \
+             mock.patch.object(lambda_app, "is_group_member", return_value=True), \
+             mock.patch.object(lambda_app, "groups_table", return_value=group_rows), \
+             mock.patch.object(lambda_app, "profiles_table", return_value=profiles), \
+             mock.patch.object(lambda_app, "predictions_table", return_value=predictions), \
+             mock.patch.object(lambda_app, "load_season_results", return_value=results):
+            leaderboard = lambda_app.get_group_leaderboard("group", "one")
+        self.assertEqual(leaderboard["scoringOption"], "vegas")
+        self.assertEqual(leaderboard["entries"][0]["total"], 7.0)
+        self.assertEqual(leaderboard["entries"][0]["scores"]["vegas"]["total"], 7.0)
 
 
 if __name__ == "__main__":

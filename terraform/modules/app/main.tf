@@ -148,6 +148,22 @@ resource "aws_dynamodb_table" "groups" {
   }
 }
 
+resource "aws_dynamodb_table" "season_results" {
+  name                        = "${local.resource_prefix}-season-results"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "season"
+  deletion_protection_enabled = var.stateful_table_protection_enabled
+
+  attribute {
+    name = "season"
+    type = "N"
+  }
+
+  point_in_time_recovery {
+    enabled = var.stateful_table_protection_enabled
+  }
+}
+
 data "archive_file" "custom_email_sender_zip" {
   count = var.custom_email_sender_enabled ? 1 : 0
 
@@ -436,6 +452,11 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:UpdateItem"
         ]
         Resource = aws_dynamodb_table.groups.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem"]
+        Resource = aws_dynamodb_table.season_results.arn
       }
     ]
   })
@@ -462,6 +483,8 @@ resource "aws_lambda_function" "backend" {
       PREDICTION_LOCK_AT = var.prediction_lock_at
       PREDICTIONS_TABLE  = aws_dynamodb_table.predictions.name
       PROFILES_TABLE     = aws_dynamodb_table.profiles.name
+      RESULTS_SEASON     = tostring(var.results_season)
+      RESULTS_TABLE      = aws_dynamodb_table.season_results.name
     }
   }
 
@@ -934,6 +957,87 @@ resource "aws_cloudfront_response_headers_policy" "noindex" {
       override = true
     }
   }
+}
+
+resource "aws_iam_role" "results_updater" {
+  name = "${local.resource_prefix}-results-updater-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "results_updater_logs" {
+  role       = aws_iam_role.results_updater.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "results_updater" {
+  name = "${local.resource_prefix}-season-results-access"
+  role = aws_iam_role.results_updater.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+      ]
+      Resource = aws_dynamodb_table.season_results.arn
+    }]
+  })
+}
+
+resource "aws_lambda_function" "results_updater" {
+  function_name = "${local.resource_prefix}-results-updater"
+  role          = aws_iam_role.results_updater.arn
+  runtime       = "python3.12"
+  handler       = "results_updater.handler"
+
+  filename         = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+
+  timeout     = 30
+  memory_size = 256
+
+  environment {
+    variables = {
+      RESULTS_SEASON = tostring(var.results_season)
+      RESULTS_TABLE  = aws_dynamodb_table.season_results.name
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy.results_updater,
+    aws_iam_role_policy_attachment.results_updater_logs,
+  ]
+}
+
+resource "aws_cloudwatch_event_rule" "results_update" {
+  name                = "${local.resource_prefix}-results-update"
+  description         = "Refresh finalized NFL results for leaderboard scoring"
+  schedule_expression = var.results_update_schedule
+}
+
+resource "aws_cloudwatch_event_target" "results_updater" {
+  rule = aws_cloudwatch_event_rule.results_update.name
+  arn  = aws_lambda_function.results_updater.arn
+}
+
+resource "aws_lambda_permission" "eventbridge_results_updater" {
+  statement_id  = "AllowEventBridgeResultsUpdate"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.results_updater.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.results_update.arn
 }
 
 resource "aws_cloudfront_distribution" "app" {

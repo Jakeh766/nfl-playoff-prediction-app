@@ -13,6 +13,7 @@ locals {
   dev_frontend_bucket   = "${local.dev_prefix}-frontend-${local.account_id}"
   dev_lambda_role       = "${local.dev_prefix}-lambda-role"
   dev_email_sender_role = "${local.dev_prefix}-email-sender-role"
+  dev_results_role      = "${local.dev_prefix}-results-updater-role"
   dev_dashboard_name    = "${local.dev_prefix}-analytics"
 
   prod_frontend_bucket   = "${var.project_name}-frontend-${local.account_id}"
@@ -295,6 +296,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     resources = [
       "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-backend",
       "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-email-sender",
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-results-updater",
     ]
   }
 
@@ -463,6 +465,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}",
       "arn:aws:iam::${local.account_id}:role/${local.dev_email_sender_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.dev_results_role}",
     ]
   }
 
@@ -472,6 +475,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}",
       "arn:aws:iam::${local.account_id}:role/${local.dev_email_sender_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.dev_results_role}",
     ]
 
     condition {
@@ -538,6 +542,24 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     sid       = "ListCloudWatchDashboards"
     actions   = ["cloudwatch:ListDashboards"]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageDevResultsSchedule"
+    actions = [
+      "events:DeleteRule",
+      "events:DescribeRule",
+      "events:DisableRule",
+      "events:EnableRule",
+      "events:ListTagsForResource",
+      "events:ListTargetsByRule",
+      "events:PutRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:TagResource",
+      "events:UntagResource",
+    ]
+    resources = ["arn:aws:events:${var.aws_region}:${local.account_id}:rule/${local.dev_prefix}-results-update"]
   }
 
   statement {

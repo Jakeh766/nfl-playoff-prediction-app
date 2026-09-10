@@ -172,3 +172,15 @@ variable "cognito_email_domain" {
     error_message = "cognito_email_domain must be a lowercase domain name."
   }
 }
+
+variable "results_season" {
+  description = "NFL season whose finalized results are ingested for scoring."
+  type        = number
+  default     = 2026
+}
+
+variable "results_update_schedule" {
+  description = "EventBridge schedule expression for the NFL results updater."
+  type        = string
+  default     = "rate(6 hours)"
+}

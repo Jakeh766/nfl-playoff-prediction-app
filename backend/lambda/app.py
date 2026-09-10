@@ -119,6 +119,10 @@ def groups_table():
     return boto3.resource("dynamodb").Table(os.environ["GROUPS_TABLE"])
 
 
+def results_table():
+    return boto3.resource("dynamodb").Table(os.environ["RESULTS_TABLE"])
+
+
 def normalize_name(
     value,
     field_name: str,
@@ -382,6 +386,25 @@ def get_public_bracket(leaderboard_name: str) -> dict | None:
 
 
 def load_season_results() -> dict:
+    if os.environ.get("RESULTS_TABLE"):
+        try:
+            item = results_table().get_item(
+                Key={"season": int(os.environ.get("RESULTS_SEASON", "2026"))},
+                ConsistentRead=True,
+            ).get("Item")
+            if item:
+                item["season"] = int(item["season"])
+                return item
+        except Exception as error:
+            print(
+                json.dumps(
+                    {
+                        "type": "results_read_failed",
+                        "message": str(error),
+                        "fallback": "bundled_preseason_results",
+                    }
+                )
+            )
     with RESULTS_PATH.open(encoding="utf-8") as results_file:
         return json.load(results_file)
 

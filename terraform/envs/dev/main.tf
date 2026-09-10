@@ -76,6 +76,14 @@ output "groups_table" {
   value = module.nfl_app.groups_table
 }
 
+output "season_results_table" {
+  value = module.nfl_app.season_results_table
+}
+
+output "results_updater_function" {
+  value = module.nfl_app.results_updater_function
+}
+
 output "cognito_user_pool_id" {
   value = module.nfl_app.cognito_user_pool_id
 }

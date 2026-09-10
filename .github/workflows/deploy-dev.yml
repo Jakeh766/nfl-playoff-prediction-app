@@ -53,7 +53,7 @@ jobs:
           node --check frontend/auth-config.js
 
       - name: Check backend Python syntax
-        run: python -m py_compile backend/lambda/app.py
+        run: python -m py_compile backend/lambda/app.py backend/lambda/results_updater.py
 
       - name: Install custom email sender dependencies
         run: npm ci --prefix backend/custom-email-sender

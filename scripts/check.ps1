@@ -54,7 +54,9 @@ try {
 
   if (Test-Scope "Backend") {
     Write-Host "Checking backend Python..."
-    Invoke-NativeCommand -FilePath $python -ArgumentList @("-m", "py_compile", "backend/lambda/app.py")
+    Invoke-NativeCommand -FilePath $python -ArgumentList @(
+      "-m", "py_compile", "backend/lambda/app.py", "backend/lambda/results_updater.py"
+    )
     Invoke-NativeCommand -FilePath $python -ArgumentList @("-m", "unittest", "discover", "-s", "backend", "-p", "test_*.py")
   }
 
