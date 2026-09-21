@@ -2,6 +2,10 @@
   "season": 2026,
   "status": "Preseason — scoring has not started",
   "updatedAt": null,
+  "playoffTeams": {
+    "AFC": [],
+    "NFC": []
+  },
   "divisionWinners": {
     "AFC": {},
     "NFC": {}
@@ -15,5 +19,11 @@
     "divisional": [],
     "conferenceChampions": {},
     "superBowlChampion": ""
-  }
+  },
+  "source": {
+    "provider": "ESPN public site API",
+    "scoreboardUrl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+    "standingsUrl": "https://site.web.api.espn.com/apis/v2/sports/football/nfl/standings?season=2026&seasontype=2&type=3&level=2&sort=playoffseed:asc"
+  },
+  "lastSuccessfulSync": null
 }

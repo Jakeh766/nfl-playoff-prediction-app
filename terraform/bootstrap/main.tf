@@ -13,6 +13,7 @@ locals {
   dev_frontend_bucket   = "${local.dev_prefix}-frontend-${local.account_id}"
   dev_lambda_role       = "${local.dev_prefix}-lambda-role"
   dev_email_sender_role = "${local.dev_prefix}-email-sender-role"
+  dev_results_role      = "${local.dev_prefix}-results-updater-role"
   dev_dashboard_name    = "${local.dev_prefix}-analytics"
 
   prod_frontend_bucket   = "${var.project_name}-frontend-${local.account_id}"
@@ -20,8 +21,111 @@ locals {
   prod_email_sender_role = "${var.project_name}-email-sender-role"
   prod_dashboard_name    = "${var.project_name}-analytics"
 
+  codex_audit_role_name       = "${var.project_name}-codex-audit"
+  codex_audit_login_user_name = "${var.project_name}-codex-audit-login"
+  prod_dynamodb_table_arns = [
+    for suffix in ["groups", "predictions", "profiles", "win-totals-cache"] :
+    "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-${suffix}"
+  ]
+
   github_oidc_subject      = "repo:${var.github_repository}:environment:${var.github_environment}"
   github_prod_oidc_subject = "repo:${var.github_repository}:environment:${var.github_prod_environment}"
+}
+
+data "aws_iam_policy_document" "codex_audit_assume_role" {
+  statement {
+    sid     = "CodexAuditLoginUser"
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_user.codex_audit_login.arn]
+    }
+  }
+}
+
+resource "aws_iam_user" "codex_audit_login" {
+  name = local.codex_audit_login_user_name
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+    Purpose   = "CodexAuditLogin"
+  }
+}
+
+resource "aws_iam_role" "codex_audit" {
+  name                 = local.codex_audit_role_name
+  description          = "Read-only production DynamoDB audit access for Codex"
+  assume_role_policy   = data.aws_iam_policy_document.codex_audit_assume_role.json
+  max_session_duration = 3600
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+    Purpose   = "CodexAudit"
+  }
+}
+
+data "aws_iam_policy_document" "codex_audit" {
+  statement {
+    sid = "ReadProductionTables"
+    actions = [
+      "dynamodb:BatchGetItem",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTable",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:GetItem",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+    ]
+    resources = local.prod_dynamodb_table_arns
+  }
+
+  statement {
+    sid = "ReadDynamoDbInventory"
+    actions = [
+      "dynamodb:ListBackups",
+      "dynamodb:ListTables",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid     = "DescribeProductionBackups"
+    actions = ["dynamodb:DescribeBackup"]
+    resources = [
+      for table_arn in local.prod_dynamodb_table_arns : "${table_arn}/backup/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "codex_audit" {
+  name   = "${var.project_name}-dynamodb-read-only"
+  role   = aws_iam_role.codex_audit.id
+  policy = data.aws_iam_policy_document.codex_audit.json
+}
+
+data "aws_iam_policy_document" "codex_audit_login" {
+  statement {
+    sid       = "AssumeCodexAuditRole"
+    effect    = "Allow"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.codex_audit.arn]
+  }
+}
+
+resource "aws_iam_user_policy" "codex_audit_login" {
+  name   = "${var.project_name}-assume-codex-audit-role"
+  user   = aws_iam_user.codex_audit_login.name
+  policy = data.aws_iam_policy_document.codex_audit_login.json
+}
+
+resource "aws_iam_user_policy_attachment" "codex_audit_login" {
+  user       = aws_iam_user.codex_audit_login.name
+  policy_arn = "arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess"
 }
 
 resource "aws_s3_bucket" "terraform_state" {
@@ -192,6 +296,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     resources = [
       "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-backend",
       "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-email-sender",
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${local.dev_prefix}-results-updater",
     ]
   }
 
@@ -360,6 +465,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}",
       "arn:aws:iam::${local.account_id}:role/${local.dev_email_sender_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.dev_results_role}",
     ]
   }
 
@@ -369,6 +475,7 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.dev_lambda_role}",
       "arn:aws:iam::${local.account_id}:role/${local.dev_email_sender_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.dev_results_role}",
     ]
 
     condition {
@@ -435,6 +542,24 @@ data "aws_iam_policy_document" "github_dev_deploy" {
     sid       = "ListCloudWatchDashboards"
     actions   = ["cloudwatch:ListDashboards"]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageDevResultsSchedule"
+    actions = [
+      "events:DeleteRule",
+      "events:DescribeRule",
+      "events:DisableRule",
+      "events:EnableRule",
+      "events:ListTagsForResource",
+      "events:ListTargetsByRule",
+      "events:PutRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:TagResource",
+      "events:UntagResource",
+    ]
+    resources = ["arn:aws:events:${var.aws_region}:${local.account_id}:rule/${local.dev_prefix}-results-update"]
   }
 
   statement {

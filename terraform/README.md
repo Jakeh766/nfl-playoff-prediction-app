@@ -11,14 +11,16 @@ terraform/
   envs/prod/      Production resources and existing production state
 ```
 
-Both environments deploy the same architecture:
+Both environments share the application architecture, with environment-specific
+Cognito email delivery:
 
 ```text
 Browser
   -> CloudFront
        -> private S3 bucket (index.html, app.js, styles.css, generated auth-config.js)
        -> Cognito user pool APIs (in-app email/password forms)
-            -> custom email sender Lambda -> Resend
+            -> dev: Cognito built-in email
+            -> prod: KMS -> custom email sender Lambda -> Resend
        -> API Gateway
             -> public /api/win-totals -> Lambda -> VegasInsider
                                                   -> DynamoDB scrape cache
@@ -27,8 +29,18 @@ Browser
             -> JWT-protected /api/profile    -> Lambda
                                                 -> DynamoDB unique leaderboard profiles
             -> public /api/leaderboard       -> Lambda
+                                                -> DynamoDB settled season results
                                                 -> Sanitized scores and leaderboard names
+
+EventBridge (Tuesdays at 16:00 UTC, beginning after 2026 Week 12)
+  -> results-updater Lambda
+       -> ESPN public scoreboard/standings JSON
+       -> DynamoDB settled season results
 ```
+
+See [`docs/results-ingestion.md`](../docs/results-ingestion.md) for provider
+limitations, settled-outcome safeguards, the frozen Upset Edge boundary, manual
+refresh/correction commands, and the expected incremental cost.
 
 ## Environment isolation
 
@@ -76,9 +88,36 @@ The one-time AWS prerequisites are managed by `terraform/bootstrap`:
   `Jakeh766/nfl-playoff-prediction-app` repository's `dev` environment;
 - role `nfl-playoff-predictor-prod-github-actions`, trusted only by the
   repository's `prod` environment.
+- role `nfl-playoff-predictor-codex-audit`, limited to read-only access for the
+  four production DynamoDB tables and their backups.
+- login-only IAM user `nfl-playoff-predictor-codex-audit-login`, permitted only
+  to authenticate with `aws login` and assume the audit role. It has no direct
+  application access or access keys.
 
 The existing dev state has been migrated into the state bucket. The workflow
 also verifies that remote state is nonempty before it plans or applies.
+
+## Local read-only AWS inspection
+
+Routine deployments use the GitHub OIDC roles above and do not need persistent
+local AWS credentials. The `codex-audit-login` profile provides a short-lived,
+interactive IAM-user session; `codex-audit` assumes the Terraform-managed
+`nfl-playoff-predictor-codex-audit` role from that source. The login-only user
+can assume that role but has no direct application permissions or access keys.
+
+Authenticate the source session, then verify the constrained audit role:
+
+```powershell
+aws login --profile codex-audit-login
+aws sts get-caller-identity --profile codex-audit --output json
+```
+
+The expected account is `410533922944`. Complete browser authentication and MFA
+interactively; never create, paste, or store root access keys. Keep audit commands
+read-only and select only the fields needed for the report rather than returning
+raw table items or secret values. Do not use `nfl-prod-setup` for application
+inspection; it exists only to refresh the source session and perform explicitly
+requested bootstrap administration.
 
 The GitHub environment named `dev` must define these environment variables:
 
@@ -86,18 +125,14 @@ The GitHub environment named `dev` must define these environment variables:
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-dev-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
-It must also define the encrypted environment secret `RESEND_API_KEY` with a
-Resend sending key that begins with `re_`.
-
 The GitHub environment named `prod` must define:
 
 - `AWS_ROLE_ARN` =
   `arn:aws:iam::410533922944:role/nfl-playoff-predictor-prod-github-actions`
 - `TF_STATE_BUCKET` = `nfl-playoff-predictor-tfstate-410533922944`
 
-The `prod` environment must also define its encrypted `RESEND_API_KEY` secret.
-The environments may use the same restricted sending key, but separate keys
-make rotation and revocation safer.
+The `prod` environment must also define its encrypted `RESEND_API_KEY` secret
+with a Resend sending key that begins with `re_`.
 
 ## One-time production automation setup
 
@@ -186,11 +221,11 @@ by the authenticated API.
 The module also publishes `cognito_user_pool_id` and `cognito_client_id`
 outputs. Email verification is required and MFA is explicitly `OFF`.
 
-## Resend email delivery
+## Cognito email delivery
 
-Cognito routes all account-confirmation, resend-code, password-reset, email
-verification, authentication-code, administrator-created-user, and account
-security messages to a dedicated Node.js Lambda. Cognito encrypts codes with a
+Dev uses Cognito's built-in email service, so it does not create a KMS key,
+Resend secret, or custom email sender Lambda. Prod routes account email to the
+dedicated Node.js Lambda instead. Cognito encrypts production codes with a
 customer-managed KMS key; the Lambda uses the AWS Encryption SDK to decrypt
 them and sends both HTML and plain-text messages through Resend. The Lambda
 never logs codes, API keys, or full recipient addresses.
@@ -202,15 +237,15 @@ Before the first deployment:
    verified. Existing SES DNS records can remain while SES approval is pending,
    provided Cloudflare contains only one SPF TXT record per hostname.
 2. Create a Resend API key with sending access. Store it as the encrypted GitHub
-   environment secret `RESEND_API_KEY` in both `dev` and `prod` (or use separate
-   keys in each environment).
+   environment secret `RESEND_API_KEY` in `prod`.
 3. Apply `terraform/bootstrap` once with AWS administrator credentials to grant
    the existing GitHub deployment roles permission to manage the new Lambda,
    KMS, Secrets Manager, and IAM resources.
-4. Push or rerun the `dev` workflow. Its configuration check fails before
-   Terraform changes anything if `RESEND_API_KEY` is missing.
-5. Create a dev account, resend its confirmation code, and exercise password
-   recovery before promoting the change to `prod`.
+4. Run the prod workflow when you are ready to deploy the custom sender. Its
+   configuration check fails before Terraform changes anything if
+   `RESEND_API_KEY` is missing.
+5. Create a production test account, resend its confirmation code, and exercise
+   password recovery after deployment.
 
 Terraform writes the API key to Secrets Manager with the provider's write-only
 field. The root and module variables are ephemeral, so the value is absent from

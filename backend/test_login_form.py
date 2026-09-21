@@ -82,6 +82,21 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('AuthFlow: "USER_PASSWORD_AUTH"', app_javascript)
         self.assertIn('"ALLOW_USER_PASSWORD_AUTH"', terraform)
 
+    def test_authentication_survives_closing_the_browser(self):
+        auth_storage = self.app_javascript[
+            self.app_javascript.index("function loadAuthSession") :
+            self.app_javascript.index("function decodeJwtPayload")
+        ]
+
+        self.assertIn(
+            "localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session))",
+            auth_storage,
+        )
+        self.assertIn("localStorage.getItem(AUTH_SESSION_KEY)", auth_storage)
+        self.assertIn("localStorage.removeItem(AUTH_SESSION_KEY)", auth_storage)
+        self.assertIn("sessionStorage.getItem(AUTH_SESSION_KEY)", auth_storage)
+        self.assertIn("sessionStorage.removeItem(AUTH_SESSION_KEY)", auth_storage)
+
     def test_all_account_flows_stay_in_the_application(self):
         app_javascript = self.app_javascript
         terraform = (

@@ -493,9 +493,20 @@ function resetSignInButton() {
 
 function loadAuthSession() {
   try {
-    return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || "null");
+    const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
+    const legacySession = sessionStorage.getItem(AUTH_SESSION_KEY);
+    const serializedSession = savedSession || legacySession;
+    if (!serializedSession) return null;
+
+    const session = JSON.parse(serializedSession);
+    if (!savedSession && legacySession) {
+      localStorage.setItem(AUTH_SESSION_KEY, legacySession);
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+    }
+    return session;
   } catch (error) {
     console.warn("Discarding an invalid authentication session.", error);
+    localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     return null;
   }
@@ -509,11 +520,13 @@ function saveAuthSession(tokenResponse, previousSession = null) {
       tokenResponse.refresh_token || previousSession?.refreshToken || "",
     expiresAt: Date.now() + Number(tokenResponse.expires_in || 3600) * 1000,
   };
-  sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
   return session;
 }
 
 function clearAuthSession() {
+  localStorage.removeItem(AUTH_SESSION_KEY);
   sessionStorage.removeItem(AUTH_SESSION_KEY);
 }
 

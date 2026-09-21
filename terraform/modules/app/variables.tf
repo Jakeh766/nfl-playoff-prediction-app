@@ -30,6 +30,12 @@ variable "resource_prefix" {
   default     = null
 }
 
+variable "stateful_table_protection_enabled" {
+  description = "Whether saved predictions, profiles, and groups use deletion protection and point-in-time recovery."
+  type        = bool
+  default     = false
+}
+
 variable "frontend_dir" {
   description = "Absolute path to the frontend files uploaded to S3."
   type        = string
@@ -48,11 +54,19 @@ variable "lambda_zip_path" {
 variable "custom_email_sender_source_dir" {
   description = "Absolute path to the Node.js custom email sender Lambda source and installed dependencies."
   type        = string
+  default     = null
 }
 
 variable "custom_email_sender_zip_path" {
   description = "Environment-specific output path for the custom email sender Lambda archive."
   type        = string
+  default     = null
+}
+
+variable "custom_email_sender_enabled" {
+  description = "Whether Cognito sends account email through the KMS, Lambda, and Resend custom sender."
+  type        = bool
+  default     = false
 }
 
 variable "resend_api_key" {
@@ -60,9 +74,10 @@ variable "resend_api_key" {
   type        = string
   sensitive   = true
   ephemeral   = true
+  default     = null
 
   validation {
-    condition     = startswith(var.resend_api_key, "re_")
+    condition     = var.resend_api_key == null || startswith(var.resend_api_key, "re_")
     error_message = "resend_api_key must be a Resend API key beginning with re_."
   }
 }
@@ -150,9 +165,28 @@ variable "acm_certificate_arn" {
 variable "cognito_email_domain" {
   description = "Verified Resend domain used for branded Cognito verification and recovery email."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", var.cognito_email_domain))
+    condition     = var.cognito_email_domain == null || can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", var.cognito_email_domain))
     error_message = "cognito_email_domain must be a lowercase domain name."
   }
+}
+
+variable "results_season" {
+  description = "NFL season whose finalized results are ingested for scoring."
+  type        = number
+  default     = 2026
+}
+
+variable "results_automation_start_at" {
+  description = "UTC timestamp before which scheduled NFL results syncs exit without polling."
+  type        = string
+  default     = "2026-12-01T16:00:00Z"
+}
+
+variable "results_update_schedule" {
+  description = "EventBridge schedule expression for the NFL results updater."
+  type        = string
+  default     = "cron(0 16 ? * TUE *)"
 }

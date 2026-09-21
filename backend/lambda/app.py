@@ -119,6 +119,10 @@ def groups_table():
     return boto3.resource("dynamodb").Table(os.environ["GROUPS_TABLE"])
 
 
+def results_table():
+    return boto3.resource("dynamodb").Table(os.environ["RESULTS_TABLE"])
+
+
 def normalize_name(
     value,
     field_name: str,
@@ -288,13 +292,8 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
             entry["leaderboardName"].casefold(),
         )
     )
-    previous_score = None
-    current_rank = 0
     for position, entry in enumerate(entries, start=1):
-        if entry["total"] != previous_score:
-            current_rank = position
-            previous_score = entry["total"]
-        entry["rank"] = current_rank
+        entry["rank"] = position if entry["total"] > 0 else None
 
     return {
         "season": results.get("season"),
@@ -382,6 +381,25 @@ def get_public_bracket(leaderboard_name: str) -> dict | None:
 
 
 def load_season_results() -> dict:
+    if os.environ.get("RESULTS_TABLE"):
+        try:
+            item = results_table().get_item(
+                Key={"season": int(os.environ.get("RESULTS_SEASON", "2026"))},
+                ConsistentRead=True,
+            ).get("Item")
+            if item:
+                item["season"] = int(item["season"])
+                return item
+        except Exception as error:
+            print(
+                json.dumps(
+                    {
+                        "type": "results_read_failed",
+                        "message": str(error),
+                        "fallback": "bundled_preseason_results",
+                    }
+                )
+            )
     with RESULTS_PATH.open(encoding="utf-8") as results_file:
         return json.load(results_file)
 
@@ -402,7 +420,10 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
     actual_playoff_teams = {
         team
         for conference in ("AFC", "NFC")
-        for team in actual_seeds.get(conference, [])
+        for team in [
+            *results.get("playoffTeams", {}).get(conference, []),
+            *actual_seeds.get(conference, []),
+        ]
         if team
     }
     predicted_playoff_teams = {
@@ -576,7 +597,10 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     predicted_field = {team for conference in ("AFC", "NFC")
                        for team in predicted_seeds.get(conference, []) if team}
     actual_field = {team for conference in ("AFC", "NFC")
-                    for team in actual_seeds.get(conference, []) if team}
+                    for team in [
+                        *results.get("playoffTeams", {}).get(conference, []),
+                        *actual_seeds.get(conference, []),
+                    ] if team}
     for team in actual_field:
         add("playoffField", team, team in predicted_field, 5)
     for conference in ("AFC", "NFC"):
