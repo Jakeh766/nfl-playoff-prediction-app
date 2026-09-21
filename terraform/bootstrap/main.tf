@@ -19,12 +19,13 @@ locals {
   prod_frontend_bucket   = "${var.project_name}-frontend-${local.account_id}"
   prod_lambda_role       = "${var.project_name}-lambda-role"
   prod_email_sender_role = "${var.project_name}-email-sender-role"
+  prod_results_role      = "${var.project_name}-results-updater-role"
   prod_dashboard_name    = "${var.project_name}-analytics"
 
   codex_audit_role_name       = "${var.project_name}-codex-audit"
   codex_audit_login_user_name = "${var.project_name}-codex-audit-login"
   prod_dynamodb_table_arns = [
-    for suffix in ["groups", "predictions", "profiles", "win-totals-cache"] :
+    for suffix in ["groups", "predictions", "profiles", "win-totals-cache", "season-results"] :
     "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-${suffix}"
   ]
 
@@ -661,7 +662,7 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     sid     = "ProdDynamoDbTables"
     actions = ["dynamodb:*"]
     resources = [
-      for suffix in ["groups", "predictions", "profiles", "win-totals-cache"] :
+      for suffix in ["groups", "predictions", "profiles", "win-totals-cache", "season-results"] :
       "arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-${suffix}"
     ]
   }
@@ -672,6 +673,7 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     resources = [
       "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-backend",
       "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-email-sender",
+      "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${var.project_name}-results-updater",
     ]
   }
 
@@ -840,6 +842,7 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.prod_lambda_role}",
       "arn:aws:iam::${local.account_id}:role/${local.prod_email_sender_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.prod_results_role}",
     ]
   }
 
@@ -849,6 +852,7 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     resources = [
       "arn:aws:iam::${local.account_id}:role/${local.prod_lambda_role}",
       "arn:aws:iam::${local.account_id}:role/${local.prod_email_sender_role}",
+      "arn:aws:iam::${local.account_id}:role/${local.prod_results_role}",
     ]
 
     condition {
@@ -901,6 +905,24 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     sid       = "ListCloudWatchDashboards"
     actions   = ["cloudwatch:ListDashboards"]
     resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageProdResultsSchedule"
+    actions = [
+      "events:DeleteRule",
+      "events:DescribeRule",
+      "events:DisableRule",
+      "events:EnableRule",
+      "events:ListTagsForResource",
+      "events:ListTargetsByRule",
+      "events:PutRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:TagResource",
+      "events:UntagResource",
+    ]
+    resources = ["arn:aws:events:${var.aws_region}:${local.account_id}:rule/${var.project_name}-results-update"]
   }
 
   statement {
