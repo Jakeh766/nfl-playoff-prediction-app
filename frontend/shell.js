@@ -1,15 +1,21 @@
 const pageName = document.body.dataset.page || "home";
 const localPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-const routeHref = (path) => localPreview && path !== "/" ? `${path}.html` : path;
+const routeHref = (path) => sportUrl(localPreview && path !== "/" ? `${path}.html` : path);
 
 const header = document.querySelector("#site-header");
 if (header) {
   header.className = "site-header";
   header.innerHTML = `
-    <a class="brand" href="/" aria-label="Predict Playoffs home">
+    <a class="brand" href="${sportUrl("/")}" aria-label="Predict Playoffs home">
       <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
       <span class="brand-name">PREDICT PLAYOFFS</span>
     </a>
+    <label class="sport-selector">Sport
+      <select id="sport-selector" aria-label="Sport">
+        <option value="nfl" ${!IS_NBA ? "selected" : ""}>NFL</option>
+        <option value="nba" ${IS_NBA ? "selected" : ""}>NBA</option>
+      </select>
+    </label>
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
       <a href="${routeHref("/leaderboard")}" data-nav-page="leaderboard">Leaderboard</a>
@@ -52,7 +58,7 @@ if (dialogs) {
       <div id="account-auth-view">
         <div id="signed-out-panel">
           <h3>Sign in to your bracket.</h3>
-          <p class="auth-description">Keep one prediction synced across your devices.</p>
+          <p class="auth-description">Keep one prediction per sport synced across your devices.</p>
           <form class="sign-in-form" id="sign-in-form" method="post">
             <label for="login-email">Email address</label>
             <input id="login-email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
@@ -261,7 +267,7 @@ if (dialogs) {
       <form id="delete-account-form" method="post">
         <p class="card-kicker">PERMANENT ACTION</p>
         <h2 id="delete-account-title">Delete your account?</h2>
-        <p id="delete-account-description">This permanently deletes your account, leaderboard name, group memberships, and saved bracket. This cannot be undone.</p>
+        <p id="delete-account-description">This permanently deletes your account, leaderboard name, group memberships, and saved brackets for both sports. This cannot be undone.</p>
         <label for="delete-account-confirmation">Type <strong>DELETE</strong> to confirm</label>
         <input id="delete-account-confirmation" name="confirmation" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
         <p class="dialog-message" id="delete-account-message" role="status" aria-live="polite"></p>
@@ -284,12 +290,59 @@ if (footer) {
         <small>CALL IT BEFORE KICKOFF</small>
       </div>
     </div>
-    <p>Your account details stay private. Not affiliated with the NFL.</p>
+    <p>Your account details stay private. Not affiliated with the NFL or NBA.</p>
   `;
 }
 
-if (localPreview) {
+{
   document.querySelectorAll("a[data-clean-route]").forEach((link) => {
     link.href = routeHref(link.getAttribute("data-clean-route"));
   });
+}
+
+document.querySelector("#sport-selector")?.addEventListener("change", event => {
+  if (typeof state !== "undefined" && state.bracketBuilt && !state.savedAt &&
+      !window.confirm("Switch sports and discard your unsaved bracket?")) {
+    event.target.value = SPORT;
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("sport", event.target.value);
+  url.searchParams.delete("invite");
+  window.location.assign(url.href);
+});
+if (IS_NBA) applyNbaPresentation();
+
+function applyNbaPresentation() {
+  document.body.dataset.sport = "nba";
+  document.title = document.title.replace("NFL", "NBA");
+  const copy = new Map([
+    ["Predict the 2026", "Predict the 2026–27"], ["NFL", "NBA"],
+    ["Super Bowl", "NBA Finals"], ["SUPER BOWL", "NBA FINALS"],
+    ["AFC", "East"], ["NFC", "West"],
+    ["AMERICAN FOOTBALL CONFERENCE", "EASTERN CONFERENCE"],
+    ["NATIONAL FOOTBALL CONFERENCE", "WESTERN CONFERENCE"],
+    ["Choose the 14", "Choose the 16"], ["300", "284"],
+    ["before kickoff", "before tip-off"], ["BEFORE KICKOFF", "BEFORE TIP-OFF"],
+    ["kickoff deadline", "tip-off deadline"],
+    ["Choose every division winner and wild card.", "Rank eight playoff teams from each conference."],
+    ["Pick each North, South, East, and West winner first. Rank those four teams as seeds 1–4, then choose three wild cards. The No. 1 seeds earn a first-round bye.", "Rank the final eight playoff teams in each conference, after the Play-In. Pick each best-of-seven series winner through the NBA Finals. No byes or reseeding."],
+    ["pick every game", "pick every series"], ["PICK EVERY GAME", "PICK EVERY SERIES"],
+  ]);
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement.closest("script, style, select")) continue;
+    let value = node.nodeValue;
+    for (const [from, to] of copy) value = value.split(from).join(to);
+    node.nodeValue = value;
+  }
+  document.querySelectorAll(".conference-logo, .bracket-conference-logo").forEach(logo => logo.remove());
+  document.querySelectorAll(".conference-logo-fallback").forEach((node, index) => node.textContent = index ? "W" : "E");
+  const stats = document.querySelector(".countdown-stats");
+  if (stats) stats.innerHTML = "<span>16 <small>TEAMS</small></span><span>284 <small>CLASSIC POINTS</small></span>";
+  const disclaimer = document.querySelector("#site-footer > p");
+  if (disclaimer) disclaimer.textContent = "Your account details stay private. Not affiliated with the NFL or NBA.";
+  const trophy = document.querySelector(".trophy");
+  if (trophy) trophy.innerHTML = '<circle cx="32" cy="21" r="18"/><path d="M28 40h8v25H28zM17 65h30v9H17zM11 74h42v11H11z"/><path class="trophy-detail" d="M14 21h36M32 3v36M20 8q24 13 0 26M44 8q-24 13 0 26"/>';
 }

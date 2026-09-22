@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import calendar
+from contextvars import ContextVar
 import hashlib
 import hmac
+from html import unescape
 import json
 import os
 import re
@@ -101,6 +103,78 @@ FALLBACK_TOTALS = {
     "Tennessee Titans": 6.5,
     "Washington Commanders": 7.5,
 }
+
+
+# Request-local league selection prevents warm Lambda invocations leaking sports.
+SPORT = ContextVar("sport", default="nfl")
+NBA = json.loads(Path(__file__).with_name("nba_season.json").read_text(encoding="utf-8"))
+
+
+def conferences():
+    return ("East", "West") if SPORT.get() == "nba" else ("AFC", "NFC")
+
+
+def exact_seed_values():
+    return (*EXACT_SEED_POINTS, 2) if SPORT.get() == "nba" else EXACT_SEED_POINTS
+
+
+def first_round_games():
+    return ("r1-1-8", "r1-4-5", "r1-2-7", "r1-3-6") if SPORT.get() == "nba" else ("wc-2-7", "wc-3-6", "wc-4-5")
+
+
+def scoring_rules():
+    if SPORT.get() != "nba":
+        return SCORING_RULES
+    return {
+        **SCORING_RULES,
+        "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 80},
+        "divisionWinners": {"label": "Not scored in NBA", "points": 0, "maximum": 0},
+        "exactSeeds": {"label": "Exact playoff seed", "maximum": 44},
+        "wildCard": {"label": "Correct first-round winner", "points": 5, "maximum": 40},
+        "divisional": {"label": "Correct conference semifinal winner", "points": 10, "maximum": 40},
+        "superBowlChampion": {"label": "Correct NBA Finals champion", "points": 40, "maximum": 40},
+    }
+
+
+def maximum_score():
+    return sum(rule["maximum"] for rule in scoring_rules().values())
+
+
+def prediction_key(user_id):
+    return f"nba#{NBA['season']}#{user_id}" if SPORT.get() == "nba" else user_id
+
+
+def validate_nba_bracket(prediction):
+    seeds, picks = prediction.get("seeds"), prediction.get("picks")
+    if not isinstance(seeds, dict) or not isinstance(picks, dict):
+        raise ValueError("Seeds and picks must be objects")
+    finalists = []
+    for conference, teams in NBA["teams"].items():
+        selected = seeds.get(conference)
+        if (not isinstance(selected, list) or len(selected) != 8
+                or any(not isinstance(team, str) or team not in teams for team in selected)
+                or len(set(selected)) != 8):
+            raise ValueError(f"Choose eight different {conference} teams")
+        choices = picks.get(conference)
+        if not isinstance(choices, dict):
+            raise ValueError(f"Complete the {conference} bracket")
+        winners = []
+        for game, (a, b) in zip(first_round_games(), ((1, 8), (4, 5), (2, 7), (3, 6))):
+            winner = choices.get(game)
+            if winner not in (selected[a-1], selected[b-1]):
+                raise ValueError("First-round winner must be in its series")
+            winners.append(winner)
+        semifinalists = []
+        for index, game in enumerate(("div-1", "div-2")):
+            winner = choices.get(game)
+            if winner not in winners[index*2:index*2+2]:
+                raise ValueError("Semifinal winner must advance from its fixed bracket")
+            semifinalists.append(winner)
+        if choices.get("conf") not in semifinalists:
+            raise ValueError("Conference champion must win its semifinal")
+        finalists.append(choices["conf"])
+    if picks.get("superBowl") not in finalists:
+        raise ValueError("NBA champion must be a conference champion")
 
 
 def cache_table():
@@ -262,6 +336,11 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
     }
     entries = []
     for prediction in scan_all(predictions_table()):
+        if prediction.get("sport", "nfl") != SPORT.get():
+            continue
+        if SPORT.get() == "nba" and prediction.get("season") != NBA["season"]:
+            continue
+        prediction = {**prediction, "profileKey": prediction.get("ownerId", prediction.get("profileKey"))}
         if member_ids is not None and prediction.get("profileKey") not in member_ids:
             continue
         profile = profiles.get(prediction.get("profileKey"))
@@ -299,8 +378,8 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         "season": results.get("season"),
         "status": results.get("status", "Results unavailable"),
         "updatedAt": results.get("updatedAt"),
-        "maximum": MAX_SCORE if scoring_option == "classic" else None,
-        "classicMaximum": MAX_SCORE,
+        "maximum": maximum_score() if scoring_option == "classic" else None,
+        "classicMaximum": maximum_score(),
         "entries": entries,
         "scoringOption": scoring_option,
     }
@@ -325,25 +404,18 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
                 division: division_winners.get(conference, {}).get(division, "")
                 for division in ("North", "South", "East", "West")
             }
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
         },
         "seeds": {
-            conference: list(seeds.get(conference, []))[:7]
-            for conference in ("AFC", "NFC")
+            conference: list(seeds.get(conference, []))[:len(exact_seed_values())]
+            for conference in conferences()
         },
         "picks": {
             conference: {
                 game_id: picks.get(conference, {}).get(game_id, "")
-                for game_id in (
-                    "wc-2-7",
-                    "wc-3-6",
-                    "wc-4-5",
-                    "div-1",
-                    "div-2",
-                    "conf",
-                )
+                for game_id in (*first_round_games(), "div-1", "div-2", "conf")
             }
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
         }
         | {"superBowl": picks.get("superBowl", "")},
         "bracketBuilt": bool(prediction.get("bracketBuilt")),
@@ -381,6 +453,8 @@ def get_public_bracket(leaderboard_name: str) -> dict | None:
 
 
 def load_season_results() -> dict:
+    if SPORT.get() == "nba":
+        return load_nba_results()
     if os.environ.get("RESULTS_TABLE"):
         try:
             item = results_table().get_item(
@@ -419,7 +493,7 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
     actual_playoff_teams = {
         team
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         for team in [
             *results.get("playoffTeams", {}).get(conference, []),
             *actual_seeds.get(conference, []),
@@ -428,14 +502,14 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
     }
     predicted_playoff_teams = {
         team
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         for team in predicted_seeds.get(conference, [])
         if team
     }
     playoff_field_hits = len(actual_playoff_teams & predicted_playoff_teams)
 
     division_hits = 0
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         for division in ("North", "South", "East", "West"):
             actual = actual_divisions.get(conference, {}).get(division)
             predicted = predicted_divisions.get(conference, {}).get(division)
@@ -445,15 +519,15 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
     seed_points = 0
     possible_seed_points = 0
     settled_seed_slots = 0
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         actual_conference_seeds = actual_seeds.get(conference, [])
         predicted_conference_seeds = predicted_seeds.get(conference, [])
         for index, actual in enumerate(actual_conference_seeds):
             if not actual:
                 continue
-            if index >= len(EXACT_SEED_POINTS):
+            if index >= len(exact_seed_values()):
                 continue
-            point_value = EXACT_SEED_POINTS[index]
+            point_value = exact_seed_values()[index]
             settled_seed_slots += 1
             possible_seed_points += point_value
             if index < len(predicted_conference_seeds):
@@ -463,14 +537,14 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
     predicted_wild_card = {
         predicted_picks.get(conference, {}).get(game_id)
-        for conference in ("AFC", "NFC")
-        for game_id in ("wc-2-7", "wc-3-6", "wc-4-5")
+        for conference in conferences()
+        for game_id in first_round_games()
     } - {None, ""}
     actual_wild_card = {team for team in round_winners.get("wildCard", []) if team}
 
     predicted_divisional = {
         predicted_picks.get(conference, {}).get(game_id)
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         for game_id in ("div-1", "div-2")
     } - {None, ""}
     actual_divisional = {
@@ -479,12 +553,12 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
     predicted_conference_champions = {
         conference: predicted_picks.get(conference, {}).get("conf")
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
     }
     actual_conference_champions = round_winners.get("conferenceChampions", {})
     conference_hits = sum(
         1
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         if actual_conference_champions.get(conference)
         and actual_conference_champions[conference]
         == predicted_conference_champions[conference]
@@ -509,7 +583,7 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
         "playoffField": len(actual_playoff_teams),
         "divisionWinners": sum(
             bool(team)
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
             for team in actual_divisions.get(conference, {}).values()
         ),
         "exactSeeds": settled_seed_slots,
@@ -517,13 +591,13 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
         "divisional": len(actual_divisional),
         "conferenceChampions": sum(
             bool(actual_conference_champions.get(conference))
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
         ),
         "superBowlChampion": int(bool(actual_super_bowl_champion)),
     }
 
     breakdown = {}
-    for key, rule in SCORING_RULES.items():
+    for key, rule in scoring_rules().items():
         points = seed_points if key == "exactSeeds" else hit_counts[key] * rule["points"]
         possible = (
             possible_seed_points
@@ -561,20 +635,23 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
         "playoffs": playoffs,
         "total": regular_season + playoffs,
         "possible": sum(category["possible"] for category in breakdown.values()),
-        "maximum": MAX_SCORE,
+        "maximum": maximum_score(),
     }
 
 
 def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     """Weight each correct pick by its team's frozen preseason win total."""
     classic = score_prediction(prediction, results)
-    with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
-        snapshot = json.load(file)
+    if SPORT.get() == "nba":
+        snapshot = NBA
+    else:
+        with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
+            snapshot = json.load(file)
     if snapshot["season"] != results.get("season"):
         raise ValueError("Upset Edge scoring needs a market snapshot for this season")
     totals = snapshot["totals"]
-    earned = {key: Decimal("0.00") for key in SCORING_RULES}
-    available = {key: Decimal("0.00") for key in SCORING_RULES}
+    earned = {key: Decimal("0.00") for key in scoring_rules()}
+    available = {key: Decimal("0.00") for key in scoring_rules()}
 
     def rounded(value: Decimal) -> Decimal:
         return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -584,8 +661,8 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
             return
         if team not in totals:
             raise ValueError(f"Missing frozen Vegas win total for {team}")
-        multiplier = Decimal("1") + Decimal("0.10") * (
-            Decimal("8.5") - Decimal(str(totals[team]))
+        multiplier = Decimal("1") + Decimal("0.02" if SPORT.get() == "nba" else "0.10") * (
+            Decimal("41" if SPORT.get() == "nba" else "8.5") - Decimal(str(totals[team]))
         )
         points = rounded(Decimal(base) * multiplier)
         available[category] += points
@@ -594,20 +671,20 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
 
     predicted_seeds = prediction.get("seeds", {})
     actual_seeds = results.get("seeds", {})
-    predicted_field = {team for conference in ("AFC", "NFC")
+    predicted_field = {team for conference in conferences()
                        for team in predicted_seeds.get(conference, []) if team}
-    actual_field = {team for conference in ("AFC", "NFC")
+    actual_field = {team for conference in conferences()
                     for team in [
                         *results.get("playoffTeams", {}).get(conference, []),
                         *actual_seeds.get(conference, []),
                     ] if team}
     for team in actual_field:
         add("playoffField", team, team in predicted_field, 5)
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         seeds = predicted_seeds.get(conference, [])
-        for index, team in enumerate(actual_seeds.get(conference, [])[:7]):
+        for index, team in enumerate(actual_seeds.get(conference, [])[:len(exact_seed_values())]):
             add("exactSeeds", team, index < len(seeds) and seeds[index] == team,
-                EXACT_SEED_POINTS[index])
+                exact_seed_values()[index])
         for division in ("North", "South", "East", "West"):
             team = results.get("divisionWinners", {}).get(conference, {}).get(division)
             selected = prediction.get("divisionWinners", {}).get(conference, {}).get(division)
@@ -616,14 +693,14 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     picks = prediction.get("picks", {})
     winners = results.get("roundWinners", {})
     for category, games, base in (
-        ("wildCard", ("wc-2-7", "wc-3-6", "wc-4-5"), 5),
+        ("wildCard", first_round_games(), 5),
         ("divisional", ("div-1", "div-2"), 10),
     ):
         selected = {picks.get(conference, {}).get(game)
-                    for conference in ("AFC", "NFC") for game in games}
+                    for conference in conferences() for game in games}
         for team in set(winners.get(category, [])):
             add(category, team, team in selected, base)
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         team = winners.get("conferenceChampions", {}).get(conference)
         add("conferenceChampions", team, picks.get(conference, {}).get("conf") == team, 20)
     team = winners.get("superBowlChampion")
@@ -656,7 +733,7 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
         "playoffs": float(playoffs),
         "total": float(total),
         "possible": float(possible),
-        "classicMaximum": MAX_SCORE, "maximum": None,
+        "classicMaximum": maximum_score(), "maximum": None,
     }
 
 
@@ -745,6 +822,8 @@ def save_cache(payload: dict) -> None:
 
 
 def get_win_totals() -> dict:
+    if SPORT.get() == "nba":
+        return get_nba_win_totals()
     cached = None
     try:
         cached = load_cache()
@@ -854,14 +933,21 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
     if not isinstance(picks, dict):
         raise ValueError("picks must be an object")
 
-    for conference in ("AFC", "NFC"):
-        if not isinstance(seeds.get(conference), list) or len(seeds[conference]) != 7:
+    if SPORT.get() == "nba":
+        validate_nba_bracket(prediction)
+        seeds = {conference: seeds[conference] for conference in conferences()}
+        picks = {conference: {game: picks[conference][game]
+                              for game in (*first_round_games(), "div-1", "div-2", "conf")}
+                 for conference in conferences()} | {"superBowl": picks["superBowl"]}
+    for conference in conferences():
+        if not isinstance(seeds.get(conference), list) or len(seeds[conference]) != len(exact_seed_values()):
             raise ValueError(f"{conference} seeds must contain seven teams")
 
     saved_at = int(time.time() * 1000)
     return {
-        "profileKey": user_id,
-        "divisionWinners": division_winners,
+        "profileKey": prediction_key(user_id),
+        **({"ownerId": user_id, "sport": "nba", "season": NBA["season"]} if SPORT.get() == "nba" else {}),
+        "divisionWinners": {} if SPORT.get() == "nba" else division_winners,
         "seeds": seeds,
         "picks": picks,
         "bracketBuilt": bool(prediction.get("bracketBuilt")),
@@ -870,7 +956,7 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
 
 
 def get_prediction(user_id: str) -> dict | None:
-    result = predictions_table().get_item(Key={"profileKey": user_id})
+    result = predictions_table().get_item(Key={"profileKey": prediction_key(user_id)})
     return result.get("Item")
 
 
@@ -881,7 +967,7 @@ def put_prediction(user_id: str, event: dict) -> dict:
 
 
 def delete_prediction(user_id: str) -> None:
-    predictions_table().delete_item(Key={"profileKey": user_id})
+    predictions_table().delete_item(Key={"profileKey": prediction_key(user_id)})
 
 
 GROUP_PASSWORD_ITERATIONS = 310_000
@@ -978,19 +1064,20 @@ def public_group(
 
 
 def prediction_window(now_seconds: float | None = None) -> dict:
+    lock_at = NBA["lockAt"] if SPORT.get() == "nba" else PREDICTION_LOCK_AT
     try:
         lock_seconds = calendar.timegm(
-            time.strptime(PREDICTION_LOCK_AT, "%Y-%m-%dT%H:%M:%SZ")
+            time.strptime(lock_at, "%Y-%m-%dT%H:%M:%SZ")
         )
     except ValueError as error:
         raise RuntimeError("PREDICTION_LOCK_AT must be an ISO-8601 UTC timestamp") from error
 
     server_seconds = time.time() if now_seconds is None else now_seconds
     return {
-        "lockAt": PREDICTION_LOCK_AT,
+        "lockAt": lock_at,
         "locked": server_seconds >= lock_seconds,
         "serverTime": int(server_seconds * 1000),
-        "season": int(PREDICTION_LOCK_AT[:4]),
+        "season": NBA["season"] if SPORT.get() == "nba" else int(PREDICTION_LOCK_AT[:4]),
     }
 
 
@@ -1378,6 +1465,17 @@ def authenticated_user_id(event: dict) -> str | None:
 
 
 def handler(event, context):
+    sport = (event.get("queryStringParameters") or {}).get("sport", "nfl")
+    if sport not in ("nfl", "nba"):
+        return response(400, {"message": "Unknown sport"})
+    token = SPORT.set(sport)
+    try:
+        return handle_request(event, context)
+    finally:
+        SPORT.reset(token)
+
+
+def handle_request(event, context):
     del context
     method = event.get("requestContext", {}).get("http", {}).get("method")
     path = event.get("rawPath")
@@ -1544,6 +1642,10 @@ def handler(event, context):
         if method == "DELETE":
             try:
                 delete_group_memberships(user_id)
+                table = predictions_table()
+                for prediction in scan_all(table):
+                    if prediction.get("profileKey") == user_id or prediction.get("ownerId") == user_id:
+                        table.delete_item(Key={"profileKey": prediction["profileKey"]})
                 delete_profile(user_id)
                 return response(200, {"deleted": True})
             except ValueError as error:
@@ -1566,7 +1668,7 @@ def handler(event, context):
                     {
                         **window,
                         "message": (
-                            "Brackets locked at the start of the NFL regular season "
+                            "Brackets locked at the start of the regular season "
                             "and can no longer be created or changed."
                         ),
                     },
@@ -1583,3 +1685,54 @@ def handler(event, context):
         return response(200, {"deleted": True})
 
     return response(404, {"message": "Not found"})
+
+
+def load_nba_results():
+    # Numeric namespace preserves the existing DynamoDB key schema and NFL rows.
+    if os.environ.get("RESULTS_TABLE"):
+        item = results_table().get_item(Key={"season": 100000 + NBA["season"]}, ConsistentRead=True).get("Item")
+        if item:
+            return {**item, "season": NBA["season"]}
+    return {"season": NBA["season"], "status": "Preseason — scoring has not started",
+            "updatedAt": None, "playoffTeams": {}, "seeds": {}, "divisionWinners": {},
+            "roundWinners": {}}
+
+
+def parse_nba_win_totals(html):
+    if "2026-27" not in html and "2026–27" not in html:
+        raise ValueError("NBA win-total source is for a different season")
+    totals = {}
+    for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html, flags=re.S | re.I):
+        cells = [unescape(re.sub(r"<[^>]+>", "", cell)).strip()
+                 for cell in re.findall(r"<td\b[^>]*>(.*?)</td>", row, flags=re.S | re.I)]
+        if len(cells) >= 2 and cells[0] in NBA["totals"]:
+            total = float(cells[1])
+            if not 0 < total < 82:
+                raise ValueError("NBA win total is out of range")
+            totals[cells[0]] = total
+    if set(totals) != set(NBA["totals"]):
+        raise ValueError("Incomplete NBA win-total source")
+    return totals
+
+
+def get_nba_win_totals():
+    key = f"nba#{NBA['season']}"
+    base = {"apiVersion": API_VERSION, "sourceUrl": NBA["sourceUrl"]}
+    cached = None
+    try:
+        cached = cache_table().get_item(Key={"cacheKey": key}).get("Item")
+        if cached and set(cached.get("totals", {})) != set(NBA["totals"]):
+            cached = None
+        if cached and time.time() - int(cached["updatedAt"]) < CACHE_TTL_SECONDS:
+            return {**base, **cached, "status": "cached"}
+        request = Request(NBA["sourceUrl"], headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=12) as result:
+            totals = parse_nba_win_totals(result.read().decode("utf-8"))
+        payload = {"cacheKey": key, "totals": {team: Decimal(str(value)) for team, value in totals.items()},
+                   "source": "BetMGM season win totals", "updatedAt": int(time.time())}
+        cache_table().put_item(Item=payload)
+        return {**base, **payload, "status": "live"}
+    except Exception:
+        if cached:
+            return {**base, **cached, "status": "cached"}
+        return {**base, "totals": NBA["totals"], "source": NBA["source"], "status": "fallback", "updatedAt": None}

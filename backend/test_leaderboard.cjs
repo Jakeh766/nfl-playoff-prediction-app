@@ -6,6 +6,20 @@ const vm = require('node:vm');
 const context = vm.createContext({});
 vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), context);
 
+test('NBA uses a fixed eight-team bracket and invalidates downstream winners', () => {
+  const nba = vm.createContext({ IS_NBA: true });
+  vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), nba);
+  nba.seeds = { East: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'] };
+  nba.picks = { East: { 'r1-1-8': 'eight', 'r1-4-5': 'four', 'r1-2-7': 'two', 'r1-3-6': 'three', 'div-1': 'eight', 'div-2': 'two', conf: 'eight' } };
+  const games = () => JSON.parse(vm.runInContext('JSON.stringify(buildConferenceGames(seeds, picks, "East"))', nba));
+  assert.equal(games().wildCard.length, 4);
+  assert.deepEqual(games().divisional[0].teams.map(t => t.name), ['eight', 'four']);
+  assert.deepEqual(games().divisional[1].teams.map(t => t.name), ['two', 'three']);
+  nba.picks.East['r1-1-8'] = 'one';
+  assert.equal(games().championship[0].teams[0], null);
+  assert.equal(games().championship[0].teams[1].name, 'two');
+});
+
 test('local preview has enough entries to exercise leaderboard scrolling', () => {
   assert.equal(vm.runInContext('LOCAL_PREVIEW_LEADERBOARD_NAMES.length', context), 16);
 });

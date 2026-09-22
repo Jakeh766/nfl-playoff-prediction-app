@@ -1,7 +1,14 @@
 # Predict Playoffs
 
-Predict the NFL playoff field and bracket, save one prediction, and compare
-your results on public or private leaderboards.
+Predict NFL and NBA playoff fields and brackets, save one prediction per sport,
+and compare your results on public or private leaderboards. Use the Sport
+selector to switch; NBA links retain `?sport=nba` across pages and invites.
+
+NBA predictions rank eight teams in each conference after the Play-In and pick
+all 15 best-of-seven series winners through the Finals. There are no Play-In
+picks, division-winner picks, byes, or reseeding. Your account, public name, and
+group memberships are shared; predictions, deadlines, results, and leaderboard
+scores are separate for each sport.
 
 ## Features
 
@@ -35,6 +42,18 @@ verification and password recovery are handled in-app; no Cognito managed-login
 domain is required.
 
 ## Scoring and season data
+
+The scoring rules below describe NFL. NBA Classic awards 5 per playoff team,
+5 for an exact #1 seed, 3 for #2–#4, and 2 for #5–#8. Series winners earn
+5 / 10 / 20 / 40 through the four rounds, for a maximum of **284**. NBA Upset
+Edge uses `Classic points × [1 + 0.02 × (41 − preseason win total)]`.
+
+NBA season configuration, the verified tip-off deadline, and frozen BetMGM
+scoring snapshot are in `backend/lambda/nba_season.json`; `frontend/sports.js`
+contains the matching static-preview copy, checked by a regression test. The
+2026–27 prediction deadline is October 20, 2026 at 19:00 UTC. Live BetMGM
+projections have their own cache and cannot change the frozen scoring weights.
+See [NBA results ingestion](docs/nba-results-ingestion.md) for automation details.
 
 Classic scoring is capped at 300 points:
 

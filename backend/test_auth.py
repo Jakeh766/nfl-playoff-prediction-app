@@ -304,6 +304,8 @@ class PredictionWindowTests(unittest.TestCase):
 
 class LeaderboardProfileTests(unittest.TestCase):
     def setUp(self):
+        self.predictions = FakeTable()
+        lambda_app.predictions_table = lambda: self.predictions
         self.profiles = FakeTable()
         self.groups = FakeGroupTable()
         lambda_app.profiles_table = lambda: self.profiles

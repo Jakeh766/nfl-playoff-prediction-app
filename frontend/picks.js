@@ -83,17 +83,17 @@ function appendProjectedOptions(select, teams, selectedTeam) {
 
 async function loadWinTotals() {
   elements.oddsStatus.textContent =
-    `${PROJECTION_HELP_TEXT} Using the bundled 2026 sportsbook snapshot while live odds load…`;
+    `${PROJECTION_HELP_TEXT} Using the bundled preseason sportsbook snapshot while live odds load…`;
 
   try {
-    const response = await fetch("/api/win-totals", { cache: "no-store" });
+    const response = await fetch(sportUrl("/api/win-totals"), { cache: "no-store" });
     if (!response.ok) throw new Error("Odds endpoint unavailable");
 
     const data = await response.json();
     if (data.apiVersion !== 2) {
       throw new Error("The odds API version does not match this frontend.");
     }
-    if (!data.totals || Object.keys(data.totals).length < 32) {
+    if (!data.totals || Object.keys(data.totals).length < (IS_NBA ? 30 : 32)) {
       throw new Error("Incomplete odds response");
     }
 
@@ -111,7 +111,7 @@ async function loadWinTotals() {
     const isMismatchedApi = error.message.includes("does not match");
     elements.oddsStatus.textContent = isMismatchedApi
       ? `${PROJECTION_HELP_TEXT} The odds API and frontend versions do not match. Deploy the latest dev build.`
-      : `${PROJECTION_HELP_TEXT} Live odds are unavailable; using the bundled 2026 sportsbook snapshot.`;
+      : `${PROJECTION_HELP_TEXT} Live odds are unavailable; using the bundled preseason sportsbook snapshot.`;
     elements.oddsStatus.title = error.message;
   }
 
@@ -121,11 +121,12 @@ async function loadWinTotals() {
 }
 
 function renderSeedSelectors() {
-  renderConferenceSeeds("AFC", elements.afcSeeds);
-  renderConferenceSeeds("NFC", elements.nfcSeeds);
+  renderConferenceSeeds(CONFERENCES[0], elements.afcSeeds);
+  renderConferenceSeeds(CONFERENCES[1], elements.nfcSeeds);
 }
 
 function renderConferenceSeeds(conference, container) {
+  if (IS_NBA) return renderNbaSeeds(conference, container);
   container.innerHTML = "";
 
   const divisionHeading = document.createElement("div");
@@ -266,7 +267,7 @@ function handleSeedChange(event) {
   updateSaveState(false);
   renderConferenceSeeds(
     conference,
-    conference === "AFC" ? elements.afcSeeds : elements.nfcSeeds,
+    conference === CONFERENCES[0] ? elements.afcSeeds : elements.nfcSeeds,
   );
 }
 
@@ -295,7 +296,7 @@ function handleDivisionWinnerChange(event) {
   updateSaveState(false);
   renderConferenceSeeds(
     conference,
-    conference === "AFC" ? elements.afcSeeds : elements.nfcSeeds,
+    conference === CONFERENCES[0] ? elements.afcSeeds : elements.nfcSeeds,
   );
 }
 
@@ -351,16 +352,16 @@ function updateDisabledTeamOptions(conference) {
 }
 
 function validateSeeding() {
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
     const selections = state.seeds[conference];
-    if (!divisionWinnersComplete(conference)) {
+    if (!IS_NBA && !divisionWinnersComplete(conference)) {
       return `Choose the ${conference} North, South, East, and West winners first.`;
     }
-    if (!divisionSeedingComplete(conference)) {
+    if (!IS_NBA && !divisionSeedingComplete(conference)) {
       return `Rank all four ${conference} division winners as seeds 1–4.`;
     }
     if (selections.some((team) => !team)) {
-      return `Choose all seven ${conference} playoff teams first.`;
+      return `Choose all ${SEED_COUNT} ${conference} playoff teams first.`;
     }
     if (new Set(selections).size !== selections.length) {
       return `Each ${conference} team can only be seeded once.`;
@@ -395,10 +396,14 @@ function randomizeBracket() {
   if (!TEST_MODE || state.predictionsLocked) return;
 
   state.divisionWinners = createEmptyDivisionWinners();
-  state.seeds = { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
+  state.seeds = emptySeeds();
   state.picks = createEmptyPicks();
 
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
+    if (IS_NBA) {
+      state.seeds[conference] = shuffled(TEAMS[conference]).slice(0, 8);
+      continue;
+    }
     for (const division of DIVISION_ORDER) {
       state.divisionWinners[conference][division] = randomTeam(
         DIVISION_TEAMS[conference][division],
@@ -415,7 +420,7 @@ function randomizeBracket() {
   state.bracketBuilt = true;
   state.savedAt = null;
 
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
     let games = getConferenceGames(conference);
     games.wildCard.forEach((game) => {
       state.picks[conference][game.id] = randomTeam(game.teams).name;
@@ -434,8 +439,8 @@ function randomizeBracket() {
   }
 
   state.picks.superBowl = randomTeam([
-    getConferenceWinner("AFC"),
-    getConferenceWinner("NFC"),
+    getConferenceWinner(CONFERENCES[0]),
+    getConferenceWinner(CONFERENCES[1]),
   ]).name;
 
   elements.seedingMessage.textContent = "";
@@ -466,7 +471,7 @@ function clearInvalidDownstreamPicks(conference, games) {
   const conferenceWinner = getConferenceWinner(conference, games);
   if (
     state.picks.superBowl &&
-    !["AFC", "NFC"].some((side) => {
+    !CONFERENCES.some((side) => {
       const winner = side === conference ? conferenceWinner : getConferenceWinner(side);
       return winner?.name === state.picks.superBowl;
     })
@@ -482,21 +487,21 @@ function getConferenceWinner(conference, precomputedGames) {
 }
 
 function renderBracket() {
-  const afcGames = getConferenceGames("AFC");
-  const nfcGames = getConferenceGames("NFC");
-  clearInvalidDownstreamPicks("AFC", afcGames);
-  clearInvalidDownstreamPicks("NFC", nfcGames);
+  const afcGames = getConferenceGames(CONFERENCES[0]);
+  const nfcGames = getConferenceGames(CONFERENCES[1]);
+  clearInvalidDownstreamPicks(CONFERENCES[0], afcGames);
+  clearInvalidDownstreamPicks(CONFERENCES[1], nfcGames);
 
-  renderConferenceBracket("AFC", elements.afcBracket, getConferenceGames("AFC"));
-  renderConferenceBracket("NFC", elements.nfcBracket, getConferenceGames("NFC"));
+  renderConferenceBracket(CONFERENCES[0], elements.afcBracket, getConferenceGames(CONFERENCES[0]));
+  renderConferenceBracket(CONFERENCES[1], elements.nfcBracket, getConferenceGames(CONFERENCES[1]));
   renderSuperBowl();
 }
 
 function renderConferenceBracket(conference, container, games) {
   container.innerHTML = "";
   const rounds = [
-    { key: "wildCard", label: "Wild Card" },
-    { key: "divisional", label: "Divisional" },
+    { key: "wildCard", label: IS_NBA ? "First Round" : "Wild Card" },
+    { key: "divisional", label: IS_NBA ? "Conference Semifinals" : "Divisional" },
     { key: "championship", label: `Pick ${conference} Champion` },
   ];
 
@@ -541,7 +546,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
       button.setAttribute(
         "aria-label",
         isSuperBowl
-          ? `Choose ${team.name} as Super Bowl champion`
+          ? `Choose ${team.name} as ${FINAL_NAME} champion`
           : `Choose ${team.name} to win ${game.title}`,
       );
       if (isSelected) button.classList.add("selected");
@@ -588,7 +593,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
 function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   if (state.predictionsLocked) return;
   const hadBothFinalists = Boolean(
-    getConferenceWinner("AFC") && getConferenceWinner("NFC"),
+    getConferenceWinner(CONFERENCES[0]) && getConferenceWinner(CONFERENCES[1]),
   );
 
   if (isSuperBowl) {
@@ -601,7 +606,7 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   renderBracket();
 
   const hasBothFinalists = Boolean(
-    getConferenceWinner("AFC") && getConferenceWinner("NFC"),
+    getConferenceWinner(CONFERENCES[0]) && getConferenceWinner(CONFERENCES[1]),
   );
   if (!isSuperBowl && gameId === "conf" && !hadBothFinalists && hasBothFinalists) {
     requestAnimationFrame(() => {
@@ -611,11 +616,11 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
 }
 
 function renderSuperBowl() {
-  const afcWinner = getConferenceWinner("AFC");
-  const nfcWinner = getConferenceWinner("NFC");
+  const afcWinner = getConferenceWinner(CONFERENCES[0]);
+  const nfcWinner = getConferenceWinner(CONFERENCES[1]);
   const missingFinalists = [
-    !afcWinner ? "AFC champion" : "",
-    !nfcWinner ? "NFC champion" : "",
+    !afcWinner ? `${CONFERENCES[0]} champion` : "",
+    !nfcWinner ? `${CONFERENCES[1]} champion` : "",
   ].filter(Boolean);
 
   elements.superBowlStatus.textContent = missingFinalists.length
@@ -624,7 +629,7 @@ function renderSuperBowl() {
 
   const game = {
     id: "super-bowl",
-    title: afcWinner && nfcWinner ? "Pick the Super Bowl champion" : "Super Bowl",
+    title: afcWinner && nfcWinner ? `Pick the ${FINAL_NAME} champion` : FINAL_NAME,
     teams: [afcWinner, nfcWinner],
   };
   elements.superBowlGame.innerHTML = "";
@@ -646,9 +651,9 @@ function renderSuperBowl() {
 }
 
 function allGamesPicked() {
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
     const picks = state.picks[conference];
-    const required = ["wc-2-7", "wc-3-6", "wc-4-5", "div-1", "div-2", "conf"];
+    const required = IS_NBA ? ["r1-1-8", "r1-4-5", "r1-2-7", "r1-3-6", "div-1", "div-2", "conf"] : ["wc-2-7", "wc-3-6", "wc-4-5", "div-1", "div-2", "conf"];
     if (required.some((id) => !picks[id])) return false;
   }
   return Boolean(state.picks.superBowl);
@@ -717,20 +722,20 @@ function updateSaveState(saved) {
 
 function openPrediction(scrollToPredictor = true) {
   if (PAGE !== "picks") {
-    window.location.assign(LOCAL_PREVIEW ? "/picks.html" : "/picks");
+    window.location.assign(sportUrl(LOCAL_PREVIEW ? "/picks.html" : "/picks"));
     return;
   }
   closeAccountModal();
   const stored = state.savedPrediction;
   state.seeds = stored?.seeds
     ? clone(stored.seeds)
-    : { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
+    : emptySeeds();
   state.divisionWinners = stored?.divisionWinners
     ? clone(stored.divisionWinners)
     : createEmptyDivisionWinners();
 
   if (stored?.seeds && !stored?.divisionWinners) {
-    for (const conference of ["AFC", "NFC"]) {
+    for (const conference of CONFERENCES) {
       stored.seeds[conference].slice(0, 4).forEach((team) => {
         const division = TEAM_DIVISIONS[team]?.split(" ")[1];
         if (division) state.divisionWinners[conference][division] = team;
@@ -879,4 +884,31 @@ async function deletePrediction() {
   } catch (error) {
     showToast(`Could not delete: ${error.message}`);
   }
+}
+
+function renderNbaSeeds(conference, container) {
+  container.replaceChildren();
+  state.seeds[conference].forEach((selected, index) => {
+    const row = document.createElement("label");
+    row.className = "seed-row";
+    const number = document.createElement("span");
+    number.className = "seed-number";
+    number.textContent = index + 1;
+    const logo = document.createElement("span");
+    logo.className = "seed-logo-slot";
+    if (selected) logo.append(createTeamLogo(selected, "seed-team-logo"));
+    const select = document.createElement("select");
+    select.dataset.conference = conference;
+    select.dataset.seedIndex = index;
+    select.setAttribute("aria-label", `${conference} seed ${index + 1}`);
+    select.append(new Option(`Select seed ${index + 1}`, ""));
+    appendProjectedOptions(select, TEAMS[conference], selected);
+    for (const option of select.options) {
+      option.disabled = Boolean(option.value && option.value !== selected && state.seeds[conference].includes(option.value));
+    }
+    select.disabled = state.predictionsLocked;
+    select.addEventListener("change", handleSeedChange);
+    row.append(number, logo, select);
+    container.append(row);
+  });
 }

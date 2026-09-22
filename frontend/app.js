@@ -1,4 +1,4 @@
-const TEAMS = {
+const TEAMS = IS_NBA ? NBA_SEASON.teams : {
   AFC: [
     "Baltimore Ravens",
     "Buffalo Bills",
@@ -100,7 +100,7 @@ const DIVISION_TEAMS = {
   },
 };
 
-const TEAM_LOGO_CODES = {
+const TEAM_LOGO_CODES = IS_NBA ? NBA_LOGOS : {
   "Arizona Cardinals": "ari",
   "Atlanta Falcons": "atl",
   "Baltimore Ravens": "bal",
@@ -135,7 +135,7 @@ const TEAM_LOGO_CODES = {
   "Washington Commanders": "wsh",
 };
 
-const FALLBACK_WIN_TOTALS = {
+const FALLBACK_WIN_TOTALS = IS_NBA ? NBA_SEASON.totals : {
   "Arizona Cardinals": 4.5,
   "Atlanta Falcons": 7.5,
   "Baltimore Ravens": 11.5,
@@ -171,6 +171,7 @@ const FALLBACK_WIN_TOTALS = {
 };
 
 function createEmptyDivisionWinners() {
+  if (IS_NBA) return { East: {}, West: {} };
   return {
     AFC: { North: "", South: "", East: "", West: "" },
     NFC: { North: "", South: "", East: "", West: "" },
@@ -184,8 +185,8 @@ const state = {
   winTotals: { ...FALLBACK_WIN_TOTALS },
   oddsSource: "2026 sportsbook snapshot",
   divisionWinners: createEmptyDivisionWinners(),
-  seeds: { AFC: Array(7).fill(""), NFC: Array(7).fill("") },
-  picks: { AFC: {}, NFC: {}, superBowl: "" },
+  seeds: emptySeeds(),
+  picks: { [CONFERENCES[0]]: {}, [CONFERENCES[1]]: {}, superBowl: "" },
   bracketBuilt: false,
   savedAt: null,
   savedPrediction: null,
@@ -432,7 +433,7 @@ if (!TEST_MODE && elements.randomizeBracket) {
 }
 
 function createEmptyPicks() {
-  return { AFC: {}, NFC: {}, superBowl: "" };
+  return { [CONFERENCES[0]]: {}, [CONFERENCES[1]]: {}, superBowl: "" };
 }
 
 function clone(value) {
@@ -1159,7 +1160,7 @@ async function apiRequest(path, options = {}) {
     throw error;
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(sportUrl(path), {
     cache: "no-store",
     ...options,
     headers: {
@@ -1245,18 +1246,18 @@ function renderPredictionCountdown() {
 
   if (!remaining && !state.predictionsLocked) {
     state.predictionWindow.locked = true;
-    setPredictionEditingLocked(true, "The NFL regular season has kicked off. Saved brackets are now read-only.");
+    setPredictionEditingLocked(true, "The regular season has started. Saved brackets are now read-only.");
   }
 
   elements.countdownStatus.textContent = remaining
-    ? "Finish and save your bracket before kickoff."
-    : "Kickoff has arrived. All saved brackets are read-only.";
+    ? "Finish and save your bracket before the season starts."
+    : "The season has started. All saved brackets are read-only.";
   elements.kickoffCountdown.classList.toggle("locked", !remaining);
 }
 
 async function initializePredictionWindow() {
   try {
-    const response = await fetch("/api/prediction-window", { cache: "no-store" });
+    const response = await fetch(sportUrl("/api/prediction-window"), { cache: "no-store" });
     if (!response.ok) throw new Error("Prediction deadline unavailable");
     const windowState = await response.json();
     if (!windowState.lockAt || !Number.isFinite(windowState.serverTime)) {
@@ -1273,7 +1274,7 @@ async function initializePredictionWindow() {
     setPredictionEditingLocked(
       Boolean(windowState.locked),
       windowState.locked
-        ? `The ${windowState.season} NFL regular season has kicked off. Saved brackets are read-only.`
+        ? `The ${SPORT.toUpperCase()} regular season has started. Saved brackets are read-only.`
         : `Create or change your bracket until ${label}.`,
     );
     renderPredictionCountdown();
@@ -1281,7 +1282,7 @@ async function initializePredictionWindow() {
     predictionCountdownTimer = setInterval(renderPredictionCountdown, 1000);
   } catch (error) {
     if (elements.countdownStatus) {
-      elements.countdownStatus.textContent = "The kickoff countdown is temporarily unavailable.";
+      elements.countdownStatus.textContent = "The season countdown is temporarily unavailable.";
       elements.countdownStatus.title = error.message;
     }
     if (!LOCAL_PREVIEW) {
@@ -1298,7 +1299,7 @@ function getTeamNickname(teamName) {
 }
 
 function teamLogoUrl(teamName) {
-  return `https://a.espncdn.com/i/teamlogos/nfl/500/${TEAM_LOGO_CODES[teamName]}.png`;
+  return `https://a.espncdn.com/i/teamlogos/${SPORT}/500/${TEAM_LOGO_CODES[teamName]}.png`;
 }
 
 function createTeamLogo(teamName, className = "team-logo") {

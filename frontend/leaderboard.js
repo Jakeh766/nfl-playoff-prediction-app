@@ -4,6 +4,20 @@ function buildConferenceGames(seeds, picksByConference, conference) {
     const name = seeds?.[conference]?.[number - 1];
     return name ? { name, seed: number } : null;
   };
+  if (typeof IS_NBA !== "undefined" && IS_NBA) {
+    const wildCard = [[1, 8], [4, 5], [2, 7], [3, 6]].map(([a, b]) => ({
+      id: `r1-${a}-${b}`, title: `First Round · ${a} vs ${b}`, teams: [seed(a), seed(b)],
+    }));
+    const winner = game => game.teams.every(Boolean)
+      ? game.teams.find(team => team.name === picks[game.id]) || null : null;
+    const divisional = [0, 2].map((offset, index) => ({
+      id: `div-${index + 1}`, title: "Conference Semifinal",
+      teams: [winner(wildCard[offset]), winner(wildCard[offset + 1])],
+    }));
+    return { wildCard, divisional, championship: [{
+      id: "conf", title: `${conference} Finals`, teams: divisional.map(winner),
+    }] };
+  }
   const wildCard = [
     { id: "wc-2-7", title: "Wild Card · 2 vs 7", teams: [seed(2), seed(7)] },
     { id: "wc-3-6", title: "Wild Card · 3 vs 6", teams: [seed(3), seed(6)] },
@@ -96,14 +110,15 @@ function createPublicConferenceBracket(conference, bracket) {
   logo.alt = `${conference} logo`;
   const label = document.createElement("span");
   label.textContent = conference;
-  heading.append(logo, label);
+  if (IS_NBA) heading.append(label);
+  else heading.append(logo, label);
 
   const rounds = document.createElement("div");
   rounds.className = "public-bracket-rounds";
   const games = buildConferenceGames(bracket.seeds, bracket.picks, conference);
   [
-    { key: "wildCard", label: "Wild Card" },
-    { key: "divisional", label: "Divisional" },
+    { key: "wildCard", label: IS_NBA ? "First Round" : "Wild Card" },
+    { key: "divisional", label: IS_NBA ? "Conference Semifinals" : "Divisional" },
     { key: "championship", label: `${conference} Champion` },
   ].forEach(({ key, label: roundLabel }) => {
     const round = document.createElement("div");
@@ -135,20 +150,20 @@ function renderPublicBracket(bracket, scoringMode = "classic") {
     : "";
   elements.publicBracketStatus.textContent = scoringMode === "vegas"
     ? `${scoreLabel}: ${formatLeaderboardScore(score.total, 2)} points${savedAt}`
-    : `${scoreLabel}: ${formatLeaderboardScore(score.total)} / 300${savedAt}`;
+    : `${scoreLabel}: ${formatLeaderboardScore(score.total)} / ${CLASSIC_MAXIMUM}${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
   conferences.append(
-    createPublicConferenceBracket("AFC", bracket),
-    createPublicConferenceBracket("NFC", bracket),
+    createPublicConferenceBracket(CONFERENCES[0], bracket),
+    createPublicConferenceBracket(CONFERENCES[1], bracket),
   );
 
   const champion = document.createElement("section");
   champion.className = "public-champion";
   const kicker = document.createElement("p");
   kicker.className = "card-kicker";
-  kicker.textContent = "SUPER BOWL CHAMPION";
+  kicker.textContent = `${FINAL_NAME.toUpperCase()} CHAMPION`;
   const championName = bracket.picks?.superBowl || "No champion selected";
   champion.appendChild(kicker);
   if (bracket.picks?.superBowl) {
@@ -378,7 +393,7 @@ function createLeaderboardChampionCell(entry) {
   const champion = leaderboardChampion(entry);
   if (!champion) {
     cell.textContent = "—";
-    cell.setAttribute("aria-label", "No Super Bowl pick");
+    cell.setAttribute("aria-label", `No ${FINAL_NAME} pick`);
     return cell;
   }
 
@@ -389,7 +404,7 @@ function createLeaderboardChampionCell(entry) {
   logo.setAttribute("aria-hidden", "true");
   pick.appendChild(logo);
   cell.appendChild(pick);
-  cell.setAttribute("aria-label", `Super Bowl pick: ${champion}`);
+  cell.setAttribute("aria-label", `${FINAL_NAME} pick: ${champion}`);
   return cell;
 }
 
@@ -554,7 +569,7 @@ async function loadLeaderboard() {
   try {
     state.leaderboard = await apiRequest("/api/leaderboard");
   } catch (error) {
-    if (LOCAL_PREVIEW) {
+    if (LOCAL_PREVIEW && !IS_NBA) {
       state.leaderboard = {
         status: "Preseason — scoring has not started",
         entries: LOCAL_PREVIEW_LEADERBOARD_NAMES.map((leaderboardName) => ({
@@ -1042,6 +1057,7 @@ async function resumePendingGroupAction() {
 
 function groupInviteUrl(groupId, inviteCode) {
   const url = new URL("/", window.location.origin);
+  if (IS_NBA) url.searchParams.set("sport", SPORT);
   url.searchParams.set("invite", `${groupId}.${inviteCode}`);
   return url.toString();
 }
