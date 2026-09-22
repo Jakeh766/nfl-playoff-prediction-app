@@ -1,8 +1,11 @@
 # NBA results ingestion
 
-`nba_results_updater.handler` runs on the existing results schedule in a separate
-Lambda using the existing constrained results-writer role. It never writes NFL
-results. Deployments remain on GitHub Actions; no local AWS changes are needed.
+`results_dispatcher.handler` runs NFL and NBA ingestion on the existing results
+schedule and Lambda, using the existing constrained results-writer role. NBA
+ingestion never writes NFL results. Each sport runs even if the other fails; a
+failure is then surfaced for normal Lambda retry and monitoring. Manual NFL
+invocations retain their existing behavior; specify `{"sport": "nba"}` to invoke
+NBA ingestion alone. Deployments remain on GitHub Actions; no local AWS changes are needed.
 
 NBA uses season-ending years: 2026–27 is `2027`. Its DynamoDB results key is
 `100000 + season` (currently `102027`), preserving the existing numeric table

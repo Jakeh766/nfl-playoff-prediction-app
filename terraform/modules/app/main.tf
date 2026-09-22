@@ -1004,12 +1004,12 @@ resource "aws_lambda_function" "results_updater" {
   function_name = "${local.resource_prefix}-results-updater"
   role          = aws_iam_role.results_updater.arn
   runtime       = "python3.12"
-  handler       = "results_updater.handler"
+  handler       = "results_dispatcher.handler"
 
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
-  timeout     = 30
+  timeout     = 120
   memory_size = 256
 
   environment {
@@ -1035,36 +1035,6 @@ resource "aws_cloudwatch_event_rule" "results_update" {
 resource "aws_cloudwatch_event_target" "results_updater" {
   rule = aws_cloudwatch_event_rule.results_update.name
   arn  = aws_lambda_function.results_updater.arn
-}
-
-resource "aws_lambda_function" "nba_results_updater" {
-  function_name    = "${local.resource_prefix}-nba-results-updater"
-  role             = aws_iam_role.results_updater.arn
-  runtime          = "python3.12"
-  handler          = "nba_results_updater.handler"
-  filename         = data.archive_file.lambda_zip.output_path
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
-  timeout          = 90
-  memory_size      = 256
-  environment {
-    variables = {
-      RESULTS_TABLE = aws_dynamodb_table.season_results.name
-    }
-  }
-  depends_on = [aws_iam_role_policy.results_updater, aws_iam_role_policy_attachment.results_updater_logs]
-}
-
-resource "aws_cloudwatch_event_target" "nba_results_updater" {
-  rule = aws_cloudwatch_event_rule.results_update.name
-  arn  = aws_lambda_function.nba_results_updater.arn
-}
-
-resource "aws_lambda_permission" "eventbridge_nba_results_updater" {
-  statement_id  = "AllowEventBridgeNbaResultsUpdate"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.nba_results_updater.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.results_update.arn
 }
 
 resource "aws_lambda_permission" "eventbridge_results_updater" {

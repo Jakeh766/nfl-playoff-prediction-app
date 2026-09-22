@@ -164,6 +164,21 @@ class NbaTests(unittest.TestCase):
 
 
 class NbaResultsTests(unittest.TestCase):
+    def test_dispatcher_runs_both_sports_even_when_one_fails(self):
+        dispatcher = load("results_dispatcher")
+        nfl, nba = Mock(), Mock()
+        nfl.handler.side_effect = ValueError("provider unavailable")
+        nba.handler.return_value = {"skipped": True}
+        with patch.dict(sys.modules, {"results_updater": nfl, "nba_results_updater": nba}):
+            with self.assertRaises(RuntimeError), self.assertLogs(level="ERROR"):
+                dispatcher.handler({"source": "aws.events"}, None)
+            nba.handler.assert_called_once()
+            nfl.handler.reset_mock()
+            nba.handler.reset_mock()
+            dispatcher.handler({"sport": "nba"}, None)
+            nba.handler.assert_called_once()
+            nfl.handler.assert_not_called()
+
     def test_series_requires_four_wins_and_post_playin_seeds(self):
         teams = app.NBA["teams"]["East"]
         game = {"round": "wildCard", "teams": [teams[0], teams[9]], "winner": teams[0]}
