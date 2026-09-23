@@ -86,6 +86,14 @@ locals {
       source       = "${var.frontend_dir}/assets/predict-playoffs-social.png"
       content_type = "image/png"
     }
+    "assets/nba-western-conference.png" = {
+      source       = "${var.frontend_dir}/assets/nba-western-conference.png"
+      content_type = "image/png"
+    }
+    "assets/nba-eastern-conference.png" = {
+      source       = "${var.frontend_dir}/assets/nba-eastern-conference.png"
+      content_type = "image/png"
+    }
     "assets/predict-playoffs-mark.svg" = {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
       content_type = "image/svg+xml"
