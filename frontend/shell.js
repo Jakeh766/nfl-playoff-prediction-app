@@ -318,9 +318,9 @@ function applyNbaPresentation() {
   const copy = new Map([
     ["Predict the 2026", "Predict the 2026–27"], ["NFL", "NBA"],
     ["Super Bowl", "NBA Finals"], ["SUPER BOWL", "NBA FINALS"],
-    ["AFC", "East"], ["NFC", "West"],
-    ["AMERICAN FOOTBALL CONFERENCE", "EASTERN CONFERENCE"],
-    ["NATIONAL FOOTBALL CONFERENCE", "WESTERN CONFERENCE"],
+    ["AFC", "West"], ["NFC", "East"],
+    ["AMERICAN FOOTBALL CONFERENCE", "WESTERN CONFERENCE"],
+    ["NATIONAL FOOTBALL CONFERENCE", "EASTERN CONFERENCE"],
     ["Choose the 14", "Choose the 16"], ["300", "284"],
     ["before kickoff", "before tip-off"], ["BEFORE KICKOFF", "BEFORE TIP-OFF"],
     ["kickoff deadline", "tip-off deadline"],
@@ -336,8 +336,15 @@ function applyNbaPresentation() {
     for (const [from, to] of copy) value = value.split(from).join(to);
     node.nodeValue = value;
   }
-  document.querySelectorAll(".conference-logo, .bracket-conference-logo").forEach(logo => logo.remove());
-  document.querySelectorAll(".conference-logo-fallback").forEach((node, index) => node.textContent = index ? "W" : "E");
+  document.querySelectorAll(".afc-card .conference-logo, .afc-label .bracket-conference-logo").forEach(logo => {
+    logo.src = NBA_CONFERENCE_LOGOS.West;
+    logo.alt = "Western Conference logo";
+  });
+  document.querySelectorAll(".nfc-card .conference-logo, .nfc-label .bracket-conference-logo").forEach(logo => {
+    logo.src = NBA_CONFERENCE_LOGOS.East;
+    logo.alt = "Eastern Conference logo";
+  });
+  document.querySelectorAll(".conference-logo-fallback").forEach((node, index) => node.textContent = index ? "E" : "W");
   const stats = document.querySelector(".countdown-stats");
   if (stats) stats.innerHTML = "<span>16 <small>TEAMS</small></span><span>284 <small>CLASSIC POINTS</small></span>";
   const disclaimer = document.querySelector("#site-footer > p");

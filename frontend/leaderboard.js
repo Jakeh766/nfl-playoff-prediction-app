@@ -106,12 +106,13 @@ function createPublicConferenceBracket(conference, bracket) {
   heading.className = `bracket-conference-label ${conference.toLowerCase()}-label`;
   const logo = document.createElement("img");
   logo.className = "bracket-conference-logo";
-  logo.src = `https://a.espncdn.com/i/teamlogos/nfl/500/${conference.toLowerCase()}.png`;
+  logo.src = IS_NBA
+    ? NBA_CONFERENCE_LOGOS[conference]
+    : `https://a.espncdn.com/i/teamlogos/nfl/500/${conference.toLowerCase()}.png`;
   logo.alt = `${conference} logo`;
   const label = document.createElement("span");
   label.textContent = conference;
-  if (IS_NBA) heading.append(label);
-  else heading.append(logo, label);
+  heading.append(logo, label);
 
   const rounds = document.createElement("div");
   rounds.className = "public-bracket-rounds";

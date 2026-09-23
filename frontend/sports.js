@@ -1,7 +1,11 @@
 // League is explicit in shareable URLs; NFL remains the legacy default.
 const SPORT = new URLSearchParams(window.location.search).get("sport") === "nba" ? "nba" : "nfl";
 const IS_NBA = SPORT === "nba";
-const CONFERENCES = IS_NBA ? ["East", "West"] : ["AFC", "NFC"];
+const CONFERENCES = IS_NBA ? ["West", "East"] : ["AFC", "NFC"];
+const NBA_CONFERENCE_LOGOS = {
+  West: "/assets/nba-western-conference.png",
+  East: "/assets/nba-eastern-conference.png",
+};
 const SEED_COUNT = IS_NBA ? 8 : 7;
 const CLASSIC_MAXIMUM = IS_NBA ? 284 : 300;
 const FINAL_NAME = IS_NBA ? "NBA Finals" : "Super Bowl";

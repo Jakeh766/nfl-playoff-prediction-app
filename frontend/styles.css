@@ -1383,6 +1383,21 @@ body.predictions-locked .predictor .final-actions button {
   visibility: hidden;
 }
 
+body[data-sport="nba"] .conference-icon,
+body[data-sport="nba"] .conference-logo {
+  width: 64px;
+  height: 64px;
+}
+
+body[data-sport="nba"] .conference-icon {
+  border: 0;
+  background: transparent;
+}
+
+body[data-sport="nba"] .conference-logo-fallback {
+  color: white;
+}
+
 .conference-title p {
   margin-bottom: 3px;
   font-size: 9px;
@@ -1651,11 +1666,26 @@ body.predictions-locked .predictor .final-actions button {
   object-fit: contain;
 }
 
+body[data-sport="nba"] .bracket-conference-logo {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+}
+
 .afc-label {
   background: var(--red);
 }
 
 .nfc-label {
+  background: var(--blue);
+}
+
+.west-label {
+  background: var(--red);
+}
+
+.east-label {
   background: var(--blue);
 }
 
