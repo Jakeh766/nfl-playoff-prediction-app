@@ -59,12 +59,23 @@ class NbaTests(unittest.TestCase):
 
     def test_perfect_classic_and_frozen_upset_edge(self):
         result = app.score_prediction(prediction(), final_results())
-        self.assertEqual(result["total"], 284)
-        self.assertEqual(result["maximum"], 284)
+        self.assertEqual(result["total"], 300)
+        self.assertEqual(result["maximum"], 300)
+        self.assertEqual(result["breakdown"]["playoffField"]["points"], 80)
+        self.assertEqual(result["breakdown"]["exactSeeds"]["points"], 60)
+        self.assertEqual(result["breakdown"]["exactSeeds"]["maximum"], 60)
+        self.assertEqual(result["playoffs"], 160)
         weighted = app.score_prediction(prediction(), final_results(), "vegas")
         self.assertGreater(weighted["total"], 0)
         self.assertEqual(weighted["total"], weighted["possible"])
         self.assertEqual(weighted["breakdown"]["divisionWinners"]["points"], 0)
+
+    def test_exact_top_seed_bonus_adds_to_playoff_team_points(self):
+        top_seed = prediction()["seeds"]["East"][0]
+        result = app.score_prediction(prediction(), {"seeds": {"East": [top_seed]}})
+        self.assertEqual(result["breakdown"]["playoffField"]["points"], 5)
+        self.assertEqual(result["breakdown"]["exactSeeds"]["points"], 6)
+        self.assertEqual(result["regularSeason"], 11)
 
     def test_duplicate_wrong_conference_and_impossible_advancement_rejected(self):
         app.validate_prediction("user", prediction())
@@ -90,7 +101,7 @@ class NbaTests(unittest.TestCase):
         with patch.object(app, "profiles_table", return_value=profiles), patch.object(app, "predictions_table", return_value=predictions), patch.object(app, "load_season_results", return_value=final_results()):
             entries = app.build_leaderboard({"user"})["entries"]
             self.assertEqual(len(entries), 1)
-            self.assertEqual(entries[0]["total"], 284)
+            self.assertEqual(entries[0]["total"], 300)
             app.delete_prediction("user")
             predictions.delete_item.assert_called_once_with(Key={"profileKey": "nba#2027#user"})
 

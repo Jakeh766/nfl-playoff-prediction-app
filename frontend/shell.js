@@ -321,7 +321,7 @@ function applyNbaPresentation() {
     ["AFC", "West"], ["NFC", "East"],
     ["AMERICAN FOOTBALL CONFERENCE", "WESTERN CONFERENCE"],
     ["NATIONAL FOOTBALL CONFERENCE", "EASTERN CONFERENCE"],
-    ["Choose the 14", "Choose the 16"], ["300", "284"],
+    ["Choose the 14", "Choose the 16"],
     ["before kickoff", "before tip-off"], ["BEFORE KICKOFF", "BEFORE TIP-OFF"],
     ["kickoff deadline", "tip-off deadline"],
     ["Choose every division winner and wild card.", "Rank eight playoff teams from each conference."],
@@ -346,7 +346,7 @@ function applyNbaPresentation() {
   });
   document.querySelectorAll(".conference-logo-fallback").forEach((node, index) => node.textContent = index ? "E" : "W");
   const stats = document.querySelector(".countdown-stats");
-  if (stats) stats.innerHTML = "<span>16 <small>TEAMS</small></span><span>284 <small>CLASSIC POINTS</small></span>";
+  if (stats) stats.innerHTML = "<span>16 <small>TEAMS</small></span><span>300 <small>CLASSIC POINTS</small></span>";
   const disclaimer = document.querySelector("#site-footer > p");
   if (disclaimer) disclaimer.textContent = "Your account details stay private. Not affiliated with the NFL or NBA.";
   const trophy = document.querySelector(".trophy");

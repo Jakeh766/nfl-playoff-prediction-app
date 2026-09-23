@@ -7,7 +7,7 @@ const NBA_CONFERENCE_LOGOS = {
   East: "/assets/nba-eastern-conference.png",
 };
 const SEED_COUNT = IS_NBA ? 8 : 7;
-const CLASSIC_MAXIMUM = IS_NBA ? 284 : 300;
+const CLASSIC_MAXIMUM = 300;
 const FINAL_NAME = IS_NBA ? "NBA Finals" : "Super Bowl";
 const NBA_SEASON = {
   "season": 2027,

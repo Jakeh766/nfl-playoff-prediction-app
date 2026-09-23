@@ -46,6 +46,7 @@ ANALYTICS_EVENTS = {
 ANALYTICS_PAGES = {"/", "/leaderboard", "/picks", "/scoring"}
 
 EXACT_SEED_POINTS = (5, 3, 3, 3, 2, 2, 2)
+NBA_EXACT_SEED_POINTS = (6, 4, 4, 4, 3, 3, 3, 3)
 
 SCORING_RULES = {
     "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 70},
@@ -115,7 +116,7 @@ def conferences():
 
 
 def exact_seed_values():
-    return (*EXACT_SEED_POINTS, 2) if SPORT.get() == "nba" else EXACT_SEED_POINTS
+    return NBA_EXACT_SEED_POINTS if SPORT.get() == "nba" else EXACT_SEED_POINTS
 
 
 def first_round_games():
@@ -129,7 +130,7 @@ def scoring_rules():
         **SCORING_RULES,
         "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 80},
         "divisionWinners": {"label": "Not scored in NBA", "points": 0, "maximum": 0},
-        "exactSeeds": {"label": "Exact playoff seed", "maximum": 44},
+        "exactSeeds": {"label": "Exact playoff seed", "maximum": sum(NBA_EXACT_SEED_POINTS) * 2},
         "wildCard": {"label": "Correct first-round winner", "points": 5, "maximum": 40},
         "divisional": {"label": "Correct conference semifinal winner", "points": 10, "maximum": 40},
         "superBowlChampion": {"label": "Correct NBA Finals champion", "points": 40, "maximum": 40},

@@ -44,8 +44,8 @@ domain is required.
 ## Scoring and season data
 
 The scoring rules below describe NFL. NBA Classic awards 5 per playoff team,
-5 for an exact #1 seed, 3 for #2–#4, and 2 for #5–#8. Series winners earn
-5 / 10 / 20 / 40 through the four rounds, for a maximum of **284**. NBA Upset
+plus an exact-seed bonus of 6 for #1, 4 for #2–#4, and 3 for #5–#8. Series winners earn
+5 / 10 / 20 / 40 through the four rounds, for a maximum of **300**. NBA Upset
 Edge uses `Classic points × [1 + 0.02 × (41 − preseason win total)]`.
 
 NBA season configuration, the verified tip-off deadline, and frozen BetMGM
