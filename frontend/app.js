@@ -135,6 +135,74 @@ const TEAM_LOGO_CODES = IS_NBA ? NBA_LOGOS : {
   "Washington Commanders": "wsh",
 };
 
+// Primary team colors are used only for bracket-row presentation. The selected
+// surface mixes each color with the site's dark ink to keep white labels legible.
+const TEAM_COLORS = IS_NBA ? {
+  "Atlanta Hawks": "#c8102e",
+  "Boston Celtics": "#007a33",
+  "Brooklyn Nets": "#000000",
+  "Charlotte Hornets": "#1d1160",
+  "Chicago Bulls": "#ce1141",
+  "Cleveland Cavaliers": "#860038",
+  "Dallas Mavericks": "#00538c",
+  "Denver Nuggets": "#0e2240",
+  "Detroit Pistons": "#c8102e",
+  "Golden State Warriors": "#1d428a",
+  "Houston Rockets": "#ce1141",
+  "Indiana Pacers": "#002d62",
+  "Los Angeles Clippers": "#c8102e",
+  "Los Angeles Lakers": "#552583",
+  "Memphis Grizzlies": "#5d76a9",
+  "Miami Heat": "#98002e",
+  "Milwaukee Bucks": "#00471b",
+  "Minnesota Timberwolves": "#0c2340",
+  "New Orleans Pelicans": "#0c2340",
+  "New York Knicks": "#006bb6",
+  "Oklahoma City Thunder": "#007ac1",
+  "Orlando Magic": "#0077c0",
+  "Philadelphia 76ers": "#006bb6",
+  "Phoenix Suns": "#1d1160",
+  "Portland Trail Blazers": "#e03a3e",
+  "Sacramento Kings": "#5a2d81",
+  "San Antonio Spurs": "#c4ced4",
+  "Toronto Raptors": "#ce1141",
+  "Utah Jazz": "#002b5c",
+  "Washington Wizards": "#002b5c",
+} : {
+  "Arizona Cardinals": "#97233f",
+  "Atlanta Falcons": "#a71930",
+  "Baltimore Ravens": "#241773",
+  "Buffalo Bills": "#00338d",
+  "Carolina Panthers": "#0085ca",
+  "Chicago Bears": "#c83803",
+  "Cincinnati Bengals": "#fb4f14",
+  "Cleveland Browns": "#ff3c00",
+  "Dallas Cowboys": "#003594",
+  "Denver Broncos": "#fb4f14",
+  "Detroit Lions": "#0076b6",
+  "Green Bay Packers": "#203731",
+  "Houston Texans": "#03202f",
+  "Indianapolis Colts": "#002c5f",
+  "Jacksonville Jaguars": "#006778",
+  "Kansas City Chiefs": "#e31837",
+  "Las Vegas Raiders": "#000000",
+  "Los Angeles Chargers": "#0080c6",
+  "Los Angeles Rams": "#003594",
+  "Miami Dolphins": "#008e97",
+  "Minnesota Vikings": "#4f2683",
+  "New England Patriots": "#002244",
+  "New Orleans Saints": "#b49f61",
+  "New York Giants": "#0b2265",
+  "New York Jets": "#125740",
+  "Philadelphia Eagles": "#004c54",
+  "Pittsburgh Steelers": "#ffb612",
+  "San Francisco 49ers": "#aa0000",
+  "Seattle Seahawks": "#002244",
+  "Tampa Bay Buccaneers": "#d50a0a",
+  "Tennessee Titans": "#4b92db",
+  "Washington Commanders": "#5a1414",
+};
+
 const FALLBACK_WIN_TOTALS = IS_NBA ? NBA_SEASON.totals : {
   "Arizona Cardinals": 4.5,
   "Atlanta Falcons": 7.5,
@@ -1294,10 +1362,6 @@ async function initializePredictionWindow() {
   }
 }
 
-function getTeamNickname(teamName) {
-  return teamName.split(" ").at(-1);
-}
-
 function teamLogoUrl(teamName) {
   return `https://a.espncdn.com/i/teamlogos/${SPORT}/500/${TEAM_LOGO_CODES[teamName]}.png`;
 }
@@ -1309,5 +1373,16 @@ function createTeamLogo(teamName, className = "team-logo") {
   logo.alt = `${teamName} logo`;
   logo.loading = "lazy";
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
+  return logo;
+}
+
+function setTeamRowColor(row, teamName) {
+  row.style.setProperty("--team-color", TEAM_COLORS[teamName] || "#1859a9");
+}
+
+function createTeamWatermark(teamName) {
+  const logo = createTeamLogo(teamName, "team-watermark");
+  logo.alt = "";
+  logo.setAttribute("aria-hidden", "true");
   return logo;
 }

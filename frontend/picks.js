@@ -33,7 +33,7 @@ function projectedWins(team) {
 }
 
 const PROJECTION_HELP_TEXT =
-  "The number in parentheses is each team's projected regular-season win total.";
+  "Teams are ordered by projected regular-season wins.";
 
 function sortTeamsByProjection(teams) {
   return [...teams].sort(
@@ -56,10 +56,7 @@ function appendDivisionGroupedOptions(select, conference, teams, selectedTeam) {
     divisionTeams.forEach((team) => {
       const option = document.createElement("option");
       option.value = team;
-      option.textContent =
-        selectedTeam === team
-          ? team
-          : `${team} (${projectedWins(team).toFixed(1)})`;
+      option.textContent = team;
       option.selected = selectedTeam === team;
       group.appendChild(option);
     });
@@ -72,10 +69,7 @@ function appendProjectedOptions(select, teams, selectedTeam) {
   sortTeamsByProjection(teams).forEach((team) => {
     const option = document.createElement("option");
     option.value = team;
-    option.textContent =
-      selectedTeam === team
-        ? team
-        : `${team} (${projectedWins(team).toFixed(1)})`;
+    option.textContent = team;
     option.selected = selectedTeam === team;
     select.appendChild(option);
   });
@@ -542,6 +536,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
 
     if (team) {
       const isSelected = team.name === selectedTeam;
+      setTeamRowColor(button, team.name);
       button.setAttribute("aria-pressed", String(isSelected));
       button.setAttribute(
         "aria-label",
@@ -559,27 +554,23 @@ function createGameCard(conference, game, isSuperBowl = false) {
     const name = document.createElement("span");
     name.className = "team-name";
     name.textContent = team
-      ? getTeamNickname(team.name)
+      ? team.name
       : index === 0
         ? "Awaiting winner"
         : "Pick prior games";
     if (team) button.title = team.name;
-
-    const check = document.createElement("span");
-    check.className = "pick-check";
-    check.textContent = team && team.name === selectedTeam ? "✓" : "";
 
     if (team) {
       button.append(
         seed,
         createTeamLogo(team.name, "bracket-team-logo"),
         name,
-        check,
+        createTeamWatermark(team.name),
       );
     } else {
       const emptyLogo = document.createElement("span");
       emptyLogo.className = "bracket-logo-placeholder";
-      button.append(seed, emptyLogo, name, check);
+      button.append(seed, emptyLogo, name);
     }
     if (team) {
       button.addEventListener("click", () => handleGamePick(conference, game.id, team.name, isSuperBowl));

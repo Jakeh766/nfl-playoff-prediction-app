@@ -63,6 +63,7 @@ function createPublicTeamPick(team, selected) {
   const row = document.createElement("div");
   row.className = "public-team-pick";
   row.classList.toggle("selected", Boolean(team && team.name === selected));
+  if (team) setTeamRowColor(row, team.name);
 
   const seed = document.createElement("span");
   seed.className = "team-seed";
@@ -77,10 +78,8 @@ function createPublicTeamPick(team, selected) {
   name.className = "team-name";
   name.textContent = team?.name || "TBD";
 
-  const check = document.createElement("span");
-  check.className = "pick-check";
-  check.textContent = team?.name === selected ? "✓" : "";
-  row.append(seed, logo, name, check);
+  row.append(seed, logo, name);
+  if (team) row.append(createTeamWatermark(team.name));
   return row;
 }
 
