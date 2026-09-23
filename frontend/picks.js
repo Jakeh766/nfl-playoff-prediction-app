@@ -119,6 +119,23 @@ function renderSeedSelectors() {
   renderConferenceSeeds(CONFERENCES[1], elements.nfcSeeds);
 }
 
+function completeSeedRow(row, selectedTeam, select) {
+  const name = document.createElement("span");
+  name.className = "seed-team-name";
+  name.textContent = selectedTeam || select.options[0].textContent;
+
+  const chevron = document.createElement("span");
+  chevron.className = "seed-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+
+  row.append(name, chevron, select);
+  if (selectedTeam) {
+    row.classList.add("has-team");
+    setTeamRowColor(row, selectedTeam);
+    row.append(createTeamWatermark(selectedTeam));
+  }
+}
+
 function renderConferenceSeeds(conference, container) {
   if (IS_NBA) return renderNbaSeeds(conference, container);
   container.innerHTML = "";
@@ -236,12 +253,8 @@ function renderConferenceSeeds(conference, container) {
 
     select.addEventListener("change", handleSeedChange);
 
-    const note = document.createElement("span");
-    note.className = "seed-note";
-    note.textContent =
-      index === 0 ? "Division winner · bye" : index < 4 ? "Division winner" : "Wild card";
-
-    row.append(number, logoSlot, select, note);
+    row.append(number, logoSlot);
+    completeSeedRow(row, selectedSeedTeam, select);
     container.appendChild(row);
   }
 
@@ -328,12 +341,14 @@ function updateDisabledTeamOptions(conference) {
       select.disabled =
         state.predictionsLocked ||
         (isDivisionWinner ? !divisionPicksComplete : !wildCardsUnlocked);
-      select.closest(".seed-row").classList.toggle("locked", select.disabled);
+      const row = select.closest(".seed-row");
+      row.classList.toggle("locked", select.disabled);
       select.options[0].textContent = select.disabled
         ? "Pick all division winners first"
         : isDivisionWinner
           ? `Select seed ${seedIndex + 1}`
           : "Select a wild-card team";
+      if (!ownValue) row.querySelector(".seed-team-name").textContent = select.options[0].textContent;
 
       Array.from(select.options).forEach((option) => {
         if (!option.value) return;
@@ -536,7 +551,6 @@ function createGameCard(conference, game, isSuperBowl = false) {
 
     if (team) {
       const isSelected = team.name === selectedTeam;
-      setTeamRowColor(button, team.name);
       button.setAttribute("aria-pressed", String(isSelected));
       button.setAttribute(
         "aria-label",
@@ -554,23 +568,27 @@ function createGameCard(conference, game, isSuperBowl = false) {
     const name = document.createElement("span");
     name.className = "team-name";
     name.textContent = team
-      ? team.name
+      ? getTeamNickname(team.name)
       : index === 0
         ? "Awaiting winner"
         : "Pick prior games";
     if (team) button.title = team.name;
+
+    const check = document.createElement("span");
+    check.className = "pick-check";
+    check.textContent = team && team.name === selectedTeam ? "✓" : "";
 
     if (team) {
       button.append(
         seed,
         createTeamLogo(team.name, "bracket-team-logo"),
         name,
-        createTeamWatermark(team.name),
+        check,
       );
     } else {
       const emptyLogo = document.createElement("span");
       emptyLogo.className = "bracket-logo-placeholder";
-      button.append(seed, emptyLogo, name);
+      button.append(seed, emptyLogo, name, check);
     }
     if (team) {
       button.addEventListener("click", () => handleGamePick(conference, game.id, team.name, isSuperBowl));
@@ -899,7 +917,9 @@ function renderNbaSeeds(conference, container) {
     }
     select.disabled = state.predictionsLocked;
     select.addEventListener("change", handleSeedChange);
-    row.append(number, logo, select);
+    row.classList.toggle("locked", select.disabled);
+    row.append(number, logo);
+    completeSeedRow(row, selected, select);
     container.append(row);
   });
 }

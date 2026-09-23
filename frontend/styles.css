@@ -670,6 +670,26 @@ select:focus {
   box-shadow: none;
 }
 
+.public-team-pick {
+  min-height: 40px;
+  padding: 7px 6px;
+  display: grid;
+  grid-template-columns: 23px 21px minmax(0, 1fr) 12px;
+  gap: 3px;
+  align-items: center;
+  color: var(--ink);
+  background: white;
+}
+
+.public-team-pick + .public-team-pick {
+  border-top: 1px solid #ebe8e2;
+}
+
+.public-team-pick.selected {
+  color: white;
+  background: var(--ink);
+}
+
 .public-champion {
   margin-top: 18px;
   padding: 24px;
@@ -1505,12 +1525,98 @@ body[data-sport="nba"] .conference-logo-fallback {
 }
 
 .seed-row {
-  padding: 11px 0;
+  position: relative;
+  isolation: isolate;
+  min-height: 64px;
+  margin: 7px 0;
+  padding: 9px 12px;
   display: grid;
-  grid-template-columns: 30px 34px minmax(0, 1fr) 66px;
-  gap: 9px;
+  grid-template-columns: 30px 34px minmax(0, 1fr) 12px;
+  gap: 10px;
   align-items: center;
-  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.seed-row:not(.locked):not(.has-team):hover {
+  background: #f7f7f4;
+}
+
+.seed-row.has-team {
+  color: white;
+  background: color-mix(in srgb, var(--team-color) 40%, var(--ink));
+  border-color: color-mix(in srgb, var(--team-color) 48%, white);
+  box-shadow: 0 3px 10px rgba(16, 34, 58, 0.12);
+}
+
+.seed-row.has-team:not(.locked):hover {
+  background: color-mix(in srgb, var(--team-color) 48%, var(--ink));
+}
+
+.seed-row:focus-within {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.seed-row.has-team:focus-within {
+  outline-color: var(--gold);
+}
+
+.seed-row > :not(select):not(.seed-watermark) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.seed-row select {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.seed-team-name {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.seed-row:not(.has-team) .seed-team-name {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.seed-chevron {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  opacity: 0.8;
+}
+
+.seed-watermark {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: 25px;
+  width: 110px;
+  height: 120%;
+  object-fit: contain;
+  opacity: 0.1;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .seed-logo-slot {
@@ -1529,35 +1635,23 @@ body[data-sport="nba"] .conference-logo-fallback {
   object-fit: contain;
 }
 
-.seed-row.locked {
-  opacity: 0.52;
+.seed-row.has-team .seed-logo-slot {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+}
+
+.seed-row.locked:not(.has-team) {
+  background: #f5f4f0;
 }
 
 .seed-row.locked select {
   cursor: not-allowed;
 }
 
-.seed-row:last-child {
-  border-bottom: 0;
-}
-
 .seed-number {
   font-family: var(--display);
   font-size: 23px;
   text-align: center;
-}
-
-.seed-note {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-align: right;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.seed-row:nth-of-type(2) .seed-note {
-  color: var(--green);
 }
 
 .field-actions {
@@ -1716,7 +1810,7 @@ body[data-sport="nba"] .bracket-conference-logo {
 
 .round.championship {
   justify-content: center;
-  padding: 3px;
+  padding: 10px;
   background: rgba(244, 185, 66, 0.1);
   border: 2px solid rgba(244, 185, 66, 0.8);
   border-radius: 7px;
@@ -1747,32 +1841,25 @@ body[data-sport="nba"] .bracket-conference-logo {
   text-transform: uppercase;
 }
 
-.team-pick,
-.public-team-pick {
-  position: relative;
-  isolation: isolate;
+.team-pick {
   width: 100%;
-  min-height: 54px;
-  padding: 8px 5px;
+  min-height: 42px;
+  padding: 8px 6px;
   display: grid;
-  grid-template-columns: 18px 22px minmax(0, 1fr);
-  gap: 2px;
+  grid-template-columns: 23px 21px minmax(0, 1fr) 12px;
+  gap: 3px;
   align-items: center;
   color: var(--ink);
-  background: color-mix(in srgb, var(--team-color, var(--ink)) 7%, white);
+  background: white;
   border: 0;
   text-align: left;
 }
 
-.team-pick {
-  transition: background 160ms ease, box-shadow 160ms ease;
-}
-
 .bracket-team-logo {
-  width: 22px;
-  height: 22px;
-  max-width: 22px;
-  max-height: 22px;
+  width: 20px;
+  height: 20px;
+  max-width: 20px;
+  max-height: 20px;
   display: block;
   object-fit: contain;
 }
@@ -1781,82 +1868,36 @@ body[data-sport="nba"] .bracket-conference-logo {
   width: 24px;
 }
 
-.team-pick > :not(.team-watermark),
-.public-team-pick > :not(.team-watermark) {
-  position: relative;
-  z-index: 1;
-}
-
-.team-watermark {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  right: 2%;
-  width: min(92px, 54%);
-  height: 115%;
-  object-fit: contain;
-  opacity: 0;
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
 .logo-error {
   visibility: hidden;
 }
 
-.team-pick + .team-pick,
-.public-team-pick + .public-team-pick {
+.team-pick + .team-pick {
   border-top: 1px solid #ebe8e2;
 }
 
 .team-pick:not(:disabled):not(.selected):hover {
-  background: color-mix(in srgb, var(--team-color) 14%, white);
+  background: #f7f7f4;
 }
 
-.team-pick.selected,
-.public-team-pick.selected {
+.team-pick.selected {
   color: white;
-  background: color-mix(in srgb, var(--team-color) 40%, var(--ink));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--team-color) 55%, white),
-    0 3px 12px rgba(16, 34, 58, 0.16);
-}
-
-.team-pick.selected .team-watermark,
-.public-team-pick.selected .team-watermark {
-  opacity: 0.1;
-}
-
-.team-pick:focus-visible {
-  z-index: 2;
-  outline: 3px solid var(--blue);
-  outline-offset: -3px;
-}
-
-.team-pick.selected:focus-visible {
-  outline-color: var(--gold);
+  background: var(--ink);
 }
 
 .team-pick:disabled {
+  color: #a3a8af;
   cursor: not-allowed;
 }
 
-.team-pick:disabled:not(.selected) {
-  color: #536071;
-  background: color-mix(in srgb, var(--team-color, var(--ink)) 4%, #f5f4f0);
-}
-
-.team-pick.selected:disabled {
-  color: white;
-}
-
 .team-seed {
-  width: 18px;
-  height: 18px;
+  width: 23px;
+  height: 23px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.82);
+  background: #eeece6;
   border-radius: 50%;
-  color: var(--ink);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 700;
 }
@@ -1867,11 +1908,16 @@ body[data-sport="nba"] .bracket-conference-logo {
 }
 
 .team-name {
-  min-width: 0;
-  font-size: 11px;
+  overflow: hidden;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1.18;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-check {
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .super-bowl-card {
@@ -1910,6 +1956,15 @@ body[data-sport="nba"] .bracket-conference-logo {
 
 .super-bowl-card .team-pick:not(:disabled) {
   min-height: 54px;
+}
+
+.super-bowl-card .team-pick:not(:disabled):not(.selected):hover {
+  color: white;
+  background: var(--red);
+}
+
+.super-bowl-card .team-pick.selected {
+  background: var(--red);
 }
 
 .champion-display {
@@ -3206,8 +3261,26 @@ footer p {
   }
 
   .seed-row {
-    grid-template-columns: 24px 28px minmax(0, 1fr) 52px;
+    grid-template-columns: 24px 28px minmax(0, 1fr) 10px;
     gap: 8px;
+    min-height: 60px;
+    padding: 8px 9px;
+  }
+
+  .seed-logo-slot,
+  .seed-team-logo {
+    width: 28px;
+    height: 28px;
+  }
+
+  .seed-team-name {
+    font-size: 14px;
+  }
+
+  .seed-watermark {
+    right: 20px;
+    width: 78px;
+    opacity: 0.08;
   }
 
   .field-actions,
@@ -3227,24 +3300,6 @@ footer p {
 
   .public-bracket-rounds {
     grid-template-columns: 1fr;
-  }
-
-  .team-pick,
-  .public-team-pick {
-    grid-template-columns: 24px 28px minmax(0, 1fr);
-    gap: 8px;
-    padding: 10px 12px;
-  }
-
-  .bracket-team-logo {
-    width: 28px;
-    height: 28px;
-    max-width: 28px;
-    max-height: 28px;
-  }
-
-  .team-name {
-    font-size: 13px;
   }
 
   .round.divisional,
@@ -3338,7 +3393,6 @@ footer p {
 .sport-selector button:hover { background: rgba(16, 34, 58, 0.06); }
 .sport-selector button[aria-pressed="true"] { color: white; background: var(--ink); }
 .sport-selector button:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; position: relative; z-index: 1; }
-body[data-sport="nba"] .seed-row { grid-template-columns: 28px 28px minmax(0, 1fr); }
 @media (max-width: 760px) {
   .site-header { height: auto; min-height: 78px; flex-wrap: wrap; gap: 10px; padding-block: 12px 0; }
   .sport-selector { margin-left: auto; }

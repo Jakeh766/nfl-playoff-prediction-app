@@ -135,8 +135,8 @@ const TEAM_LOGO_CODES = IS_NBA ? NBA_LOGOS : {
   "Washington Commanders": "wsh",
 };
 
-// Primary team colors are used only for bracket-row presentation. The selected
-// surface mixes each color with the site's dark ink to keep white labels legible.
+// Primary team colors are used for seed-selection rows. Selected surfaces mix
+// each color with the site's dark ink to keep white labels legible.
 const TEAM_COLORS = IS_NBA ? {
   "Atlanta Hawks": "#c8102e",
   "Boston Celtics": "#007a33",
@@ -1362,6 +1362,10 @@ async function initializePredictionWindow() {
   }
 }
 
+function getTeamNickname(teamName) {
+  return teamName.split(" ").at(-1);
+}
+
 function teamLogoUrl(teamName) {
   return `https://a.espncdn.com/i/teamlogos/${SPORT}/500/${TEAM_LOGO_CODES[teamName]}.png`;
 }
@@ -1381,7 +1385,7 @@ function setTeamRowColor(row, teamName) {
 }
 
 function createTeamWatermark(teamName) {
-  const logo = createTeamLogo(teamName, "team-watermark");
+  const logo = createTeamLogo(teamName, "seed-watermark");
   logo.alt = "";
   logo.setAttribute("aria-hidden", "true");
   return logo;
