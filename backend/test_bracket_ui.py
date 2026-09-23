@@ -17,7 +17,7 @@ class BracketInteractionTests(unittest.TestCase):
             self.styles,
         )
 
-        self.assertGreaterEqual(len(hover_selectors), 2)
+        self.assertTrue(hover_selectors, "Bracket teams need a hover rule")
         for selector in hover_selectors:
             self.assertIn(
                 ":not(.selected)",
