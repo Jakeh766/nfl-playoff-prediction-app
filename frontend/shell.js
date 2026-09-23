@@ -10,12 +10,10 @@ if (header) {
       <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
       <span class="brand-name">PREDICT PLAYOFFS</span>
     </a>
-    <label class="sport-selector">Sport
-      <select id="sport-selector" aria-label="Sport">
-        <option value="nfl" ${!IS_NBA ? "selected" : ""}>NFL</option>
-        <option value="nba" ${IS_NBA ? "selected" : ""}>NBA</option>
-      </select>
-    </label>
+    <div class="sport-selector" role="group" aria-label="Sport">
+      <button type="button" data-sport="nfl" aria-pressed="${!IS_NBA}">NFL</button>
+      <button type="button" data-sport="nba" aria-pressed="${IS_NBA}">NBA</button>
+    </div>
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
       <a href="${routeHref("/leaderboard")}" data-nav-page="leaderboard">Leaderboard</a>
@@ -300,17 +298,18 @@ if (footer) {
   });
 }
 
-document.querySelector("#sport-selector")?.addEventListener("change", event => {
+document.querySelectorAll(".sport-selector button").forEach(button => button.addEventListener("click", () => {
+  const sport = button.dataset.sport;
+  if (sport === SPORT) return;
   if (typeof state !== "undefined" && state.bracketBuilt && !state.savedAt &&
       !window.confirm("Switch sports and discard your unsaved bracket?")) {
-    event.target.value = SPORT;
     return;
   }
   const url = new URL(window.location.href);
-  url.searchParams.set("sport", event.target.value);
+  url.searchParams.set("sport", sport);
   url.searchParams.delete("invite");
   window.location.assign(url.href);
-});
+}));
 if (IS_NBA) applyNbaPresentation();
 
 function applyNbaPresentation() {
@@ -332,7 +331,7 @@ function applyNbaPresentation() {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (node.parentElement.closest("script, style, select")) continue;
+    if (node.parentElement.closest("script, style, select, .sport-selector")) continue;
     let value = node.nodeValue;
     for (const [from, to] of copy) value = value.split(from).join(to);
     node.nodeValue = value;
