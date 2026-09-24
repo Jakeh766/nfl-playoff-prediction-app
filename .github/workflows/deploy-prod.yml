@@ -51,6 +51,9 @@ jobs:
           node --check frontend/shell.js
           node --check frontend/auth-config.js
 
+      - name: Test account modal autofill compatibility
+        run: node --test backend/test_account_modal.cjs
+
       - name: Check backend Python syntax
         run: python -m py_compile backend/lambda/app.py backend/lambda/results_updater.py
 
