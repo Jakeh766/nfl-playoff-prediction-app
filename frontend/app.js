@@ -436,7 +436,11 @@ function accountModalFocusableElements() {
 }
 
 function setAccountModalBackgroundInert(isInert) {
-  document.querySelectorAll("body > :not(#site-dialogs)").forEach((element) => {
+  // Only our page chrome belongs to the modal background. Password managers
+  // append their clickable autofill menus to body as separate elements.
+  document.querySelectorAll(
+    "body > #site-header, body > main, body > #toast, body > #site-footer",
+  ).forEach((element) => {
     if (isInert) {
       if (!element.inert) {
         element.inert = true;

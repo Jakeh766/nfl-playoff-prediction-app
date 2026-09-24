@@ -51,6 +51,7 @@ try {
       Invoke-NativeCommand -FilePath node -ArgumentList @("--check", $file)
     }
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_leaderboard.cjs")
+    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_account_modal.cjs")
   }
 
   if (Test-Scope "Backend") {
