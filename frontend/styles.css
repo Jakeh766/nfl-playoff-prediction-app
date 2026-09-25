@@ -1561,6 +1561,19 @@ body[data-sport="nba"] .conference-logo-fallback {
   background: #26313d;
 }
 
+body[data-sport="nba"] .seed-row {
+  background: linear-gradient(110deg, #344a63, #415a77);
+  border-color: #71869c;
+}
+
+body[data-sport="nba"] .seed-row:not(.locked):hover {
+  background: linear-gradient(110deg, #405773, #4b6481);
+}
+
+body[data-sport="nba"] .seed-row.locked:not(.has-team) {
+  background: #3c5068;
+}
+
 .seed-row:focus-within {
   outline: 3px solid var(--blue);
   outline-offset: 2px;
@@ -1606,6 +1619,10 @@ body[data-sport="nba"] .conference-logo-fallback {
   font-size: 14px;
   font-weight: 500;
   text-transform: none;
+}
+
+body[data-sport="nba"] .seed-row:not(.has-team) .seed-team-name {
+  color: #e6edf5;
 }
 
 .seed-logo-slot {
