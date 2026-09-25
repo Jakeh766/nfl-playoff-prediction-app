@@ -23,6 +23,9 @@
     <script src="/bootstrap.js?v=8" defer></script>
   </head>
   <body data-page="picks">
+    <!-- Keep account fields ahead of dynamically rebuilt selectors so password
+         managers retain stable field positions while projections load. -->
+    <div id="site-dialogs"></div>
     <header id="site-header"></header>
     <main>
       <section class="page-intro">
@@ -114,7 +117,6 @@
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <div id="site-dialogs"></div>
     <footer id="site-footer"></footer>
   </body>
 </html>
