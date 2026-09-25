@@ -435,11 +435,53 @@ function accountModalFocusableElements() {
   )).filter((element) => !element.closest(".hidden") && !element.hidden);
 }
 
+let restoreAccountModalMain = null;
+
+function setAccountModalMainBlocked(blocked) {
+  if (!blocked) {
+    restoreAccountModalMain?.();
+    restoreAccountModalMain = null;
+    return;
+  }
+  const main = document.querySelector("body > main");
+  if (!main || restoreAccountModalMain) return;
+
+  // Inert team selects cause Bitwarden to fail filling the separate login form.
+  // The modal backdrop blocks pointer access; hide the background from assistive
+  // technology and the tab order without making these selects inert.
+  const previousAriaHidden = main.getAttribute("aria-hidden");
+  const tabStops = new Map();
+  const blockTabStops = () => {
+    main.querySelectorAll(
+      'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
+    ).forEach((element) => {
+      if (!tabStops.has(element)) {
+        tabStops.set(element, element.getAttribute("tabindex"));
+        element.setAttribute("tabindex", "-1");
+      }
+    });
+  };
+  main.setAttribute("aria-hidden", "true");
+  blockTabStops();
+  // Odds loading can replace the seed selectors while the modal is open.
+  const observer = new MutationObserver(blockTabStops);
+  observer.observe(main, { childList: true, subtree: true });
+  restoreAccountModalMain = () => {
+    observer.disconnect();
+    if (previousAriaHidden === null) main.removeAttribute("aria-hidden");
+    else main.setAttribute("aria-hidden", previousAriaHidden);
+    tabStops.forEach((tabindex, element) => {
+      if (tabindex === null) element.removeAttribute("tabindex");
+      else element.setAttribute("tabindex", tabindex);
+    });
+  };
+}
+
 function setAccountModalBackgroundInert(isInert) {
   // Only our page chrome belongs to the modal background. Password managers
   // append their clickable autofill menus to body as separate elements.
   document.querySelectorAll(
-    "body > #site-header, body > main, body > #toast, body > #site-footer",
+    "body > #site-header, body > #toast, body > #site-footer",
   ).forEach((element) => {
     if (isInert) {
       if (!element.inert) {
@@ -451,6 +493,7 @@ function setAccountModalBackgroundInert(isInert) {
       delete element.dataset.accountModalInert;
     }
   });
+  setAccountModalMainBlocked(isInert);
 }
 
 function openAccountModal(initialFocus = null) {
@@ -459,9 +502,9 @@ function openAccountModal(initialFocus = null) {
   elements.accountDialog.hidden = false;
   elements.accountDialog.setAttribute("aria-hidden", "false");
   document.body.classList.add("account-modal-open");
-  setAccountModalBackgroundInert(true);
   const focusTarget = initialFocus || elements.closeAccountDialog;
-  requestAnimationFrame(() => focusTarget?.focus());
+  focusTarget?.focus();
+  setAccountModalBackgroundInert(true);
 }
 
 function closeAccountModal({ restoreFocus = true } = {}) {

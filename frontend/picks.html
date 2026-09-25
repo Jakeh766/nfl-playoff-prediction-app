@@ -18,7 +18,7 @@
     <script src="/shell.js?v=17" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
-    <script src="/app.js?v=30" defer></script>
+    <script src="/app.js?v=31" defer></script>
     <script src="/leaderboard.js?v=18" defer></script>
     <script src="/picks.js?v=7" defer></script>
     <script src="/bootstrap.js?v=9" defer></script>
@@ -117,23 +117,5 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div id="site-dialogs"></div>
     <footer id="site-footer"></footer>
-    <script>
-      // Temporary dev-only probes to isolate the Bitwarden picks-page failure.
-      if (location.hostname === "dfnte4ot8bboc.cloudfront.net") {
-        const probe = new URLSearchParams(location.search).get("autofill_probe");
-        const main = document.querySelector("main");
-        if (probe === "no-main-inert") {
-          new MutationObserver(() => {
-            if (main.hasAttribute("inert")) main.removeAttribute("inert");
-          }).observe(main, { attributes: true, attributeFilter: ["inert"] });
-        } else if (probe === "no-picks-controls") {
-          const removePicksControls = () => {
-            main.querySelectorAll("select").forEach((select) => select.remove());
-          };
-          new MutationObserver(removePicksControls).observe(main, { childList: true, subtree: true });
-          removePicksControls();
-        }
-      }
-    </script>
   </body>
 </html>
