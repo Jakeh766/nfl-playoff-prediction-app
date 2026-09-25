@@ -214,12 +214,7 @@ function renderConferenceSeeds(conference, container) {
     number.className = "seed-number";
     number.textContent = index + 1;
 
-    const logoSlot = document.createElement("span");
-    logoSlot.className = "seed-logo-slot";
     const selectedSeedTeam = state.seeds[conference][index];
-    if (selectedSeedTeam) {
-      logoSlot.appendChild(createTeamLogo(selectedSeedTeam, "seed-team-logo"));
-    }
 
     const select = document.createElement("select");
     select.dataset.conference = conference;
@@ -253,7 +248,7 @@ function renderConferenceSeeds(conference, container) {
 
     select.addEventListener("change", handleSeedChange);
 
-    row.append(number, logoSlot);
+    row.append(number);
     completeSeedRow(row, selectedSeedTeam, select);
     container.appendChild(row);
   }
@@ -903,9 +898,6 @@ function renderNbaSeeds(conference, container) {
     const number = document.createElement("span");
     number.className = "seed-number";
     number.textContent = index + 1;
-    const logo = document.createElement("span");
-    logo.className = "seed-logo-slot";
-    if (selected) logo.append(createTeamLogo(selected, "seed-team-logo"));
     const select = document.createElement("select");
     select.dataset.conference = conference;
     select.dataset.seedIndex = index;
@@ -918,7 +910,7 @@ function renderNbaSeeds(conference, container) {
     select.disabled = state.predictionsLocked;
     select.addEventListener("change", handleSeedChange);
     row.classList.toggle("locked", select.disabled);
-    row.append(number, logo);
+    row.append(number);
     completeSeedRow(row, selected, select);
     container.append(row);
   });
