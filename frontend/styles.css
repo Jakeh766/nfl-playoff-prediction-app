@@ -1595,6 +1595,10 @@ body[data-sport="nba"] .conference-logo-fallback {
   overflow-wrap: anywhere;
 }
 
+.seed-row.has-team .seed-team-name {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
 .seed-row:not(.has-team) .seed-team-name {
   color: var(--muted);
   font-weight: 500;
@@ -1619,8 +1623,7 @@ body[data-sport="nba"] .conference-logo-fallback {
   width: 180px;
   height: 140%;
   object-fit: contain;
-  filter: brightness(0) invert(1);
-  opacity: 0.15;
+  opacity: 0.4;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
