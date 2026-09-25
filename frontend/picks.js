@@ -119,7 +119,7 @@ function renderSeedSelectors() {
   renderConferenceSeeds(CONFERENCES[1], elements.nfcSeeds);
 }
 
-function completeSeedRow(row, selectedTeam, select) {
+function completeSeedRow(row, selectedTeam, control, placeholder) {
   const logoSlot = document.createElement("span");
   logoSlot.className = "seed-logo-slot";
   if (selectedTeam) {
@@ -131,13 +131,13 @@ function completeSeedRow(row, selectedTeam, select) {
 
   const name = document.createElement("span");
   name.className = "seed-team-name";
-  name.textContent = selectedTeam || select.options[0].textContent;
+  name.textContent = selectedTeam || placeholder;
 
   const chevron = document.createElement("span");
   chevron.className = "seed-chevron";
   chevron.setAttribute("aria-hidden", "true");
 
-  row.append(logoSlot, name, chevron, select);
+  row.append(logoSlot, name, chevron, control);
   if (selectedTeam) {
     row.classList.add("has-team");
     setTeamRowColor(row, selectedTeam);
@@ -257,7 +257,7 @@ function renderConferenceSeeds(conference, container) {
     select.addEventListener("change", handleSeedChange);
 
     row.append(number);
-    completeSeedRow(row, selectedSeedTeam, select);
+    completeSeedRow(row, selectedSeedTeam, select, placeholder.textContent);
     container.appendChild(row);
   }
 
@@ -898,28 +898,183 @@ async function deletePrediction() {
   }
 }
 
+let openNbaCombobox = null;
+
+function closeNbaCombobox() {
+  if (!openNbaCombobox) return;
+  const { button, listbox, row } = openNbaCombobox;
+  button.setAttribute("aria-expanded", "false");
+  button.removeAttribute("aria-activedescendant");
+  listbox.hidden = true;
+  row.classList.remove("is-open", "opens-up");
+  row.closest(".conference-card").classList.remove("has-open-seed");
+  openNbaCombobox = null;
+}
+
+document.addEventListener("pointerdown", (event) => {
+  if (openNbaCombobox && !openNbaCombobox.row.contains(event.target)) {
+    closeNbaCombobox();
+  }
+});
+
+document.addEventListener("focusin", (event) => {
+  if (openNbaCombobox && !openNbaCombobox.row.contains(event.target)) {
+    closeNbaCombobox();
+  }
+});
+
 function renderNbaSeeds(conference, container) {
+  closeNbaCombobox();
   container.replaceChildren();
   state.seeds[conference].forEach((selected, index) => {
-    const row = document.createElement("label");
+    const row = document.createElement("div");
     row.className = "seed-row";
     const number = document.createElement("span");
     number.className = "seed-number";
     number.textContent = index + 1;
-    const select = document.createElement("select");
-    select.dataset.conference = conference;
-    select.dataset.seedIndex = index;
-    select.setAttribute("aria-label", `${conference} seed ${index + 1}`);
-    select.append(new Option(`Select seed ${index + 1}`, ""));
-    appendProjectedOptions(select, TEAMS[conference], selected);
-    for (const option of select.options) {
-      option.disabled = Boolean(option.value && option.value !== selected && state.seeds[conference].includes(option.value));
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "seed-combobox";
+    button.dataset.conference = conference;
+    button.dataset.seedIndex = index;
+    button.setAttribute("role", "combobox");
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-label", `${conference} seed ${index + 1}: ${selected || `Select seed ${index + 1}`}`);
+    const listbox = document.createElement("div");
+    listbox.className = "seed-listbox";
+    listbox.id = `seed-options-${conference.toLowerCase().replace(/\W+/g, "-")}-${index}`;
+    listbox.setAttribute("role", "listbox");
+    listbox.setAttribute("aria-label", `${conference} seed ${index + 1} teams, ordered by projected wins`);
+    listbox.hidden = true;
+    button.setAttribute("aria-controls", listbox.id);
+
+    const available = sortTeamsByProjection(TEAMS[conference]);
+    const options = available.map((team, optionIndex) => {
+      const option = document.createElement("div");
+      option.className = "seed-option";
+      option.id = `${listbox.id}-option-${optionIndex}`;
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(team === selected));
+      const wins = projectedWins(team).toFixed(1);
+      option.setAttribute("aria-label", `${team}, ${wins} projected wins`);
+      option.dataset.team = team;
+      const unavailable = team !== selected && state.seeds[conference].includes(team);
+      if (unavailable) option.setAttribute("aria-disabled", "true");
+      const teamName = document.createElement("span");
+      teamName.className = "seed-option-name";
+      teamName.textContent = team;
+      const winTotal = document.createElement("span");
+      winTotal.className = "seed-option-wins";
+      winTotal.textContent = wins;
+      option.append(teamName, winTotal);
+      listbox.append(option);
+      option.addEventListener("pointermove", (event) => {
+        if (event.pointerType === "mouse" && openNbaCombobox?.button === button && !unavailable) {
+          setActiveOption(optionIndex);
+        }
+      });
+      option.addEventListener("click", () => {
+        if (!unavailable) chooseTeam(team);
+      });
+      return option;
+    });
+    if (selected) {
+      const clearOption = document.createElement("div");
+      clearOption.className = "seed-option seed-option-clear";
+      clearOption.id = `${listbox.id}-clear`;
+      clearOption.dataset.team = "";
+      clearOption.setAttribute("role", "option");
+      clearOption.setAttribute("aria-selected", "false");
+      clearOption.textContent = `Clear seed ${index + 1}`;
+      clearOption.addEventListener("pointermove", (event) => {
+        if (event.pointerType === "mouse" && openNbaCombobox?.button === button) {
+          setActiveOption(options.length - 1);
+        }
+      });
+      clearOption.addEventListener("click", () => chooseTeam(""));
+      options.push(clearOption);
+      listbox.append(clearOption);
     }
-    select.disabled = state.predictionsLocked;
-    select.addEventListener("change", handleSeedChange);
-    row.classList.toggle("locked", select.disabled);
+    let activeIndex = -1;
+
+    function setActiveOption(nextIndex) {
+      if (activeIndex >= 0) options[activeIndex].classList.remove("is-active");
+      activeIndex = nextIndex;
+      const active = options[activeIndex];
+      active.classList.add("is-active");
+      button.setAttribute("aria-activedescendant", active.id);
+      active.scrollIntoView({ block: "nearest" });
+    }
+
+    function moveActive(direction) {
+      let next = activeIndex;
+      do {
+        next = (next + direction + options.length) % options.length;
+      } while (options[next].getAttribute("aria-disabled") === "true" && next !== activeIndex);
+      if (options[next].getAttribute("aria-disabled") !== "true") setActiveOption(next);
+    }
+
+    function openListbox(direction = 0) {
+      if (button.disabled) return;
+      closeNbaCombobox();
+      listbox.hidden = false;
+      row.classList.add("is-open");
+      row.closest(".conference-card").classList.add("has-open-seed");
+      const below = window.innerHeight - row.getBoundingClientRect().bottom;
+      const above = row.getBoundingClientRect().top;
+      if (below < 300 && above > below) row.classList.add("opens-up");
+      const space = row.classList.contains("opens-up") ? above : below;
+      listbox.style.maxHeight = `${Math.max(120, Math.min(360, space - 16))}px`;
+      button.setAttribute("aria-expanded", "true");
+      openNbaCombobox = { button, listbox, row };
+      const selectedIndex = options.findIndex((option) => option.dataset.team === selected);
+      const enabled = options.filter((option) => option.getAttribute("aria-disabled") !== "true");
+      const initial = selectedIndex >= 0 ? options[selectedIndex] : direction < 0 ? enabled.at(-1) : enabled[0];
+      setActiveOption(options.indexOf(initial));
+      if (direction && selectedIndex >= 0) moveActive(direction);
+    }
+
+    function chooseTeam(team) {
+      if (team && team !== selected && state.seeds[conference].includes(team)) return;
+      closeNbaCombobox();
+      if (team === selected) return;
+      handleSeedChange({ target: { dataset: button.dataset, value: team } });
+      container.querySelector(`.seed-combobox[data-seed-index="${index}"]`)?.focus();
+    }
+
+    button.addEventListener("click", () => {
+      if (openNbaCombobox?.button === button) closeNbaCombobox();
+      else openListbox();
+    });
+    button.addEventListener("keydown", (event) => {
+      const isOpen = openNbaCombobox?.button === button;
+      if (event.key === "Escape" && isOpen) {
+        event.preventDefault();
+        closeNbaCombobox();
+      } else if (event.key === "Tab" && isOpen) {
+        closeNbaCombobox();
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (isOpen) moveActive(event.key === "ArrowDown" ? 1 : -1);
+        else openListbox(event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Home" || event.key === "End") {
+        if (!isOpen) return;
+        event.preventDefault();
+        const ordered = event.key === "Home" ? options : [...options].reverse();
+        const target = ordered.find((option) => option.getAttribute("aria-disabled") !== "true");
+        if (target) setActiveOption(options.indexOf(target));
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (isOpen) chooseTeam(options[activeIndex].dataset.team);
+        else openListbox();
+      }
+    });
+    button.disabled = state.predictionsLocked;
+    row.classList.toggle("locked", button.disabled);
     row.append(number);
-    completeSeedRow(row, selected, select);
+    completeSeedRow(row, selected, button, `Select seed ${index + 1}`);
+    row.append(listbox);
     container.append(row);
   });
 }

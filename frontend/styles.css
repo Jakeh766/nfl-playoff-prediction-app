@@ -1692,7 +1692,10 @@ body[data-sport="nba"] .seed-row.locked:not(.has-team) {
   outline-color: var(--gold);
 }
 
-.seed-row > :not(select) {
+.seed-row > .seed-number,
+.seed-row > .seed-logo-slot,
+.seed-row > .seed-team-name,
+.seed-row > .seed-chevron {
   position: relative;
   z-index: 1;
   pointer-events: none;
@@ -1760,6 +1763,131 @@ body[data-sport="nba"] .seed-row:not(.has-team) .seed-team-name {
 
 .seed-row.locked select {
   cursor: not-allowed;
+}
+
+body[data-sport="nba"] .conference-card {
+  overflow: visible;
+}
+
+body[data-sport="nba"] .conference-title {
+  border-radius: 7px 7px 0 0;
+}
+
+body[data-sport="nba"] .conference-card.has-open-seed {
+  position: relative;
+  z-index: 5;
+}
+
+body[data-sport="nba"] .seed-row.is-open {
+  z-index: 4;
+  overflow: visible;
+}
+
+.seed-combobox {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.seed-combobox:focus-visible {
+  outline: none;
+}
+
+.seed-combobox:disabled {
+  cursor: not-allowed;
+}
+
+.seed-listbox {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  overflow-y: auto;
+  padding: 5px;
+  color: var(--nba-seed-ink);
+  background: var(--nba-seed-start);
+  border: 1px solid var(--nba-seed-border);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(16, 34, 58, 0.22);
+  overscroll-behavior: contain;
+  scrollbar-color: var(--nba-seed-border) transparent;
+  scrollbar-width: thin;
+}
+
+.seed-listbox[hidden] {
+  display: none;
+}
+
+.seed-row.opens-up .seed-listbox {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.seed-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border-radius: 5px;
+  color: var(--nba-seed-ink);
+  font-size: 14px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.seed-option-name {
+  min-width: 0;
+}
+
+.seed-option-wins {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.seed-option:hover,
+.seed-option.is-active {
+  background: var(--nba-seed-hover-end);
+  outline: 2px solid var(--focus-outline);
+  outline-offset: -2px;
+}
+
+.seed-option[aria-selected="true"] {
+  color: #ffffff;
+  background: var(--blue);
+}
+
+.seed-option[aria-selected="true"].is-active,
+.seed-option[aria-selected="true"]:hover {
+  outline-color: #ffffff;
+}
+
+.seed-option[aria-disabled="true"] {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.seed-option[aria-disabled="true"]:hover {
+  background: transparent;
+  outline: none;
+}
+
+.seed-option-clear {
+  margin-top: 4px;
+  border-top: 1px solid var(--nba-seed-border);
+  border-radius: 0 0 5px 5px;
+  font-weight: 700;
 }
 
 .seed-number {
