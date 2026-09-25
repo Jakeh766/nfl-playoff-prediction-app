@@ -135,12 +135,11 @@ const TEAM_LOGO_CODES = IS_NBA ? NBA_LOGOS : {
   "Washington Commanders": "wsh",
 };
 
-// Seed-row accents use team palette colors; NBA alternates distinguish teams
-// whose primary colors would otherwise produce the same strip.
+// Seed-row accents use recognizable team palette colors.
 const TEAM_COLORS = IS_NBA ? {
   "Atlanta Hawks": "#c8102e",
   "Boston Celtics": "#007a33",
-  "Brooklyn Nets": "#ffffff",
+  "Brooklyn Nets": "#777777",
   "Charlotte Hornets": "#1d1160",
   "Chicago Bulls": "#ce1141",
   "Cleveland Cavaliers": "#860038",
@@ -148,15 +147,15 @@ const TEAM_COLORS = IS_NBA ? {
   "Denver Nuggets": "#0e2240",
   "Detroit Pistons": "#1d42ba",
   "Golden State Warriors": "#1d428a",
-  "Houston Rockets": "#ffc72c",
+  "Houston Rockets": "#ce1141",
   "Indiana Pacers": "#002d62",
-  "Los Angeles Clippers": "#418fde",
+  "Los Angeles Clippers": "#c8102e",
   "Los Angeles Lakers": "#552583",
   "Memphis Grizzlies": "#5d76a9",
   "Miami Heat": "#98002e",
   "Milwaukee Bucks": "#00471b",
-  "Minnesota Timberwolves": "#78be20",
-  "New Orleans Pelicans": "#b99c5b",
+  "Minnesota Timberwolves": "#0c2340",
+  "New Orleans Pelicans": "#0c2340",
   "New York Knicks": "#f58426",
   "Oklahoma City Thunder": "#007ac1",
   "Orlando Magic": "#0077c0",
@@ -165,7 +164,7 @@ const TEAM_COLORS = IS_NBA ? {
   "Portland Trail Blazers": "#e03a3e",
   "Sacramento Kings": "#5a2d81",
   "San Antonio Spurs": "#c4ced4",
-  "Toronto Raptors": "#a1a1a4",
+  "Toronto Raptors": "#ce1141",
   "Utah Jazz": "#5b2b82",
   "Washington Wizards": "#e31837",
 } : {
