@@ -435,51 +435,11 @@ function accountModalFocusableElements() {
   )).filter((element) => !element.closest(".hidden") && !element.hidden);
 }
 
-let restoreAccountModalMain = null;
-
-function setAccountModalMainBlocked(blocked) {
-  if (!blocked) {
-    restoreAccountModalMain?.();
-    restoreAccountModalMain = null;
-    return;
-  }
-  const main = document.querySelector("body > main");
-  if (!main || restoreAccountModalMain) return;
-
-  // Inert team selects cause Bitwarden to fail filling the separate login form.
-  // The modal backdrop blocks pointer access; hide the background from assistive
-  // technology and the tab order without making these selects inert.
-  const previousAriaHidden = main.getAttribute("aria-hidden");
-  const tabStops = new Map();
-  const blockTabStops = () => {
-    main.querySelectorAll(
-      'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
-    ).forEach((element) => {
-      if (!tabStops.has(element)) {
-        tabStops.set(element, element.getAttribute("tabindex"));
-        element.setAttribute("tabindex", "-1");
-      }
-    });
-  };
-  main.setAttribute("aria-hidden", "true");
-  blockTabStops();
-  // Odds loading can replace the seed selectors while the modal is open.
-  const observer = new MutationObserver(blockTabStops);
-  observer.observe(main, { childList: true, subtree: true });
-  restoreAccountModalMain = () => {
-    observer.disconnect();
-    if (previousAriaHidden === null) main.removeAttribute("aria-hidden");
-    else main.setAttribute("aria-hidden", previousAriaHidden);
-    tabStops.forEach((tabindex, element) => {
-      if (tabindex === null) element.removeAttribute("tabindex");
-      else element.setAttribute("tabindex", tabindex);
-    });
-  };
-}
-
 function setAccountModalBackgroundInert(isInert) {
-  // Only our page chrome belongs to the modal background. Password managers
-  // append their clickable autofill menus to body as separate elements.
+  // Leave main and its team selectors unchanged: altering their inert, aria-hidden,
+  // or tabindex state breaks Bitwarden filling the separate login form. The full-screen
+  // backdrop, aria-modal, and modal Tab handling contain interaction. Only make our
+  // page chrome inert; password-manager menus appended to body stay interactive.
   document.querySelectorAll(
     "body > #site-header, body > #toast, body > #site-footer",
   ).forEach((element) => {
@@ -493,7 +453,7 @@ function setAccountModalBackgroundInert(isInert) {
       delete element.dataset.accountModalInert;
     }
   });
-  setAccountModalMainBlocked(isInert);
+
 }
 
 function openAccountModal(initialFocus = null) {
