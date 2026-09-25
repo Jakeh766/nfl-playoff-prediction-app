@@ -1528,32 +1528,37 @@ body[data-sport="nba"] .conference-logo-fallback {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: 64px;
-  margin: 7px 0;
-  padding: 9px 14px;
+  --team-color: #74869a;
+  min-height: 72px;
+  margin: 8px 0;
+  padding: 7px 13px 7px 19px;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  grid-template-columns: 50px 68px minmax(0, 1fr) 18px;
+  gap: 10px;
   align-items: center;
-  color: var(--ink);
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  color: white;
+  background: linear-gradient(110deg, #171e28, #273544);
+  border: 1px solid #435469;
+  border-radius: 8px;
+  box-shadow: 0 3px 8px rgba(16, 34, 58, 0.12);
   transition: background 160ms ease, box-shadow 160ms ease;
 }
 
-.seed-row:not(.locked):not(.has-team):hover {
-  background: #f7f7f4;
+.seed-row::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 9px;
+  background: color-mix(in srgb, var(--team-color) 78%, white);
+  content: "";
 }
 
-.seed-row.has-team {
-  color: white;
-  background: color-mix(in srgb, var(--team-color) 40%, var(--ink));
-  border-color: color-mix(in srgb, var(--team-color) 48%, white);
-  box-shadow: 0 3px 10px rgba(16, 34, 58, 0.12);
+.seed-row:not(.locked):hover {
+  background: linear-gradient(110deg, #202a36, #304154);
+  box-shadow: 0 4px 12px rgba(16, 34, 58, 0.17);
 }
 
-.seed-row.has-team:not(.locked):hover {
-  background: color-mix(in srgb, var(--team-color) 48%, var(--ink));
+.seed-row.locked:not(.has-team) {
+  background: #26313d;
 }
 
 .seed-row:focus-within {
@@ -1565,7 +1570,7 @@ body[data-sport="nba"] .conference-logo-fallback {
   outline-color: var(--gold);
 }
 
-.seed-row > :not(select):not(.seed-watermark) {
+.seed-row > :not(select) {
   position: relative;
   z-index: 1;
   pointer-events: none;
@@ -1586,23 +1591,35 @@ body[data-sport="nba"] .conference-logo-fallback {
 
 .seed-team-name {
   min-width: 0;
-  text-align: center;
+  font-family: var(--display);
   text-transform: uppercase;
-  font-size: clamp(15px, 1.4vw, 21px);
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  line-height: 1.15;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
-.seed-row.has-team .seed-team-name {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
-}
-
 .seed-row:not(.has-team) .seed-team-name {
-  color: var(--muted);
+  color: #cad4df;
+  font-family: var(--body);
+  font-size: 14px;
   font-weight: 500;
   text-transform: none;
+}
+
+.seed-logo-slot {
+  width: 68px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+}
+
+.seed-team-logo {
+  display: block;
+  width: 64px;
+  height: 56px;
+  object-fit: contain;
 }
 
 .seed-chevron {
@@ -1615,34 +1632,21 @@ body[data-sport="nba"] .conference-logo-fallback {
   opacity: 0.8;
 }
 
-.seed-watermark {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  left: 50%;
-  width: 180px;
-  height: 140%;
-  object-fit: contain;
-  opacity: 0.4;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.seed-row.locked:not(.has-team) {
-  background: #f5f4f0;
-}
-
 .seed-row.locked select {
   cursor: not-allowed;
 }
 
 .seed-number {
-  min-height: 36px;
+  width: 50px;
+  height: 50px;
   display: grid;
   place-items: center;
-  border-right: 1px solid currentColor;
+  background: rgba(196, 211, 230, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 11px;
   font-family: var(--display);
-  font-size: 23px;
+  font-size: 25px;
+  font-weight: 600;
 }
 
 .field-actions {
@@ -3252,17 +3256,26 @@ footer p {
   }
 
   .seed-row {
-    grid-template-columns: 30px minmax(0, 1fr) 30px;
-    min-height: 60px;
-    padding: 8px 9px;
+    grid-template-columns: 38px 44px minmax(0, 1fr) 16px;
+    gap: 6px;
+    min-height: 64px;
+    padding: 6px 8px 6px 14px;
   }
 
   .seed-team-name {
-    font-size: 15px;
+    font-size: 16px;
   }
 
-  .seed-watermark {
-    width: 130px;
+  .seed-logo-slot,
+  .seed-team-logo {
+    width: 44px;
+    height: 48px;
+  }
+
+  .seed-number {
+    width: 38px;
+    height: 42px;
+    font-size: 22px;
   }
 
   .field-actions,

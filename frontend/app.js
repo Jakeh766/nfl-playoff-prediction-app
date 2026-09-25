@@ -1387,10 +1387,3 @@ function createTeamLogo(teamName, className = "team-logo") {
 function setTeamRowColor(row, teamName) {
   row.style.setProperty("--team-color", TEAM_COLORS[teamName] || "#1859a9");
 }
-
-function createTeamWatermark(teamName) {
-  const logo = createTeamLogo(teamName, "seed-watermark");
-  logo.alt = "";
-  logo.setAttribute("aria-hidden", "true");
-  return logo;
-}

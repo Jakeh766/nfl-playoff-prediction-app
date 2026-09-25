@@ -120,6 +120,15 @@ function renderSeedSelectors() {
 }
 
 function completeSeedRow(row, selectedTeam, select) {
+  const logoSlot = document.createElement("span");
+  logoSlot.className = "seed-logo-slot";
+  if (selectedTeam) {
+    const logo = createTeamLogo(selectedTeam, "seed-team-logo");
+    logo.alt = "";
+    logo.setAttribute("aria-hidden", "true");
+    logoSlot.append(logo);
+  }
+
   const name = document.createElement("span");
   name.className = "seed-team-name";
   name.textContent = selectedTeam || select.options[0].textContent;
@@ -128,11 +137,10 @@ function completeSeedRow(row, selectedTeam, select) {
   chevron.className = "seed-chevron";
   chevron.setAttribute("aria-hidden", "true");
 
-  row.append(name, chevron, select);
+  row.append(logoSlot, name, chevron, select);
   if (selectedTeam) {
     row.classList.add("has-team");
     setTeamRowColor(row, selectedTeam);
-    row.append(createTeamWatermark(selectedTeam));
   }
 }
 
