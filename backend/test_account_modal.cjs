@@ -16,7 +16,7 @@ function makeElement(id, tagName, inert = false) {
 
 test("account modal leaves password-manager UI outside the page interactive", () => {
   const header = makeElement("site-header", "HEADER");
-  const main = Object.freeze(makeElement("", "MAIN"));
+  const main = makeElement("", "MAIN");
   const toast = makeElement("toast", "DIV");
   const dialogs = makeElement("site-dialogs", "DIV");
   const footer = makeElement("site-footer", "FOOTER", true);
@@ -38,10 +38,9 @@ test("account modal leaves password-manager UI outside the page interactive", ()
   vm.runInContext(handlerSource, context);
 
   vm.runInContext("setAccountModalBackgroundInert(true)", context);
-  for (const element of [header, toast, footer]) {
+  for (const element of [header, main, toast, footer]) {
     assert.equal(element.inert, true, `${element.id || "main"} is background`);
   }
-  assert.equal(main.inert, false, "picks controls keep the same state while login is open");
   assert.equal(dialogs.inert, false, "account dialog remains interactive");
   assert.equal(extensionOverlay.inert, false, "injected autofill suggestion remains clickable");
 

@@ -436,12 +436,10 @@ function accountModalFocusableElements() {
 }
 
 function setAccountModalBackgroundInert(isInert) {
-  // Leave main and its team selectors unchanged: altering their inert, aria-hidden,
-  // or tabindex state breaks Bitwarden filling the separate login form. The full-screen
-  // backdrop, aria-modal, and modal Tab handling contain interaction. Only make our
-  // page chrome inert; password-manager menus appended to body stay interactive.
+  // Only our page chrome belongs to the modal background. Password managers
+  // append their clickable autofill menus to body as separate elements.
   document.querySelectorAll(
-    "body > #site-header, body > #toast, body > #site-footer",
+    "body > #site-header, body > main, body > #toast, body > #site-footer",
   ).forEach((element) => {
     if (isInert) {
       if (!element.inert) {
@@ -453,7 +451,6 @@ function setAccountModalBackgroundInert(isInert) {
       delete element.dataset.accountModalInert;
     }
   });
-
 }
 
 function openAccountModal(initialFocus = null) {
@@ -462,9 +459,9 @@ function openAccountModal(initialFocus = null) {
   elements.accountDialog.hidden = false;
   elements.accountDialog.setAttribute("aria-hidden", "false");
   document.body.classList.add("account-modal-open");
-  const focusTarget = initialFocus || elements.closeAccountDialog;
-  focusTarget?.focus();
   setAccountModalBackgroundInert(true);
+  const focusTarget = initialFocus || elements.closeAccountDialog;
+  requestAnimationFrame(() => focusTarget?.focus());
 }
 
 function closeAccountModal({ restoreFocus = true } = {}) {
