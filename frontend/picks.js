@@ -961,13 +961,16 @@ function renderNbaSeeds(conference, container) {
       option.dataset.team = team;
       const unavailable = team !== selected && state.seeds[conference].includes(team);
       if (unavailable) option.setAttribute("aria-disabled", "true");
+      const logo = createTeamLogo(team, "seed-option-logo");
+      logo.alt = "";
+      logo.setAttribute("aria-hidden", "true");
       const teamName = document.createElement("span");
       teamName.className = "seed-option-name";
       teamName.textContent = team;
       const winTotal = document.createElement("span");
       winTotal.className = "seed-option-wins";
       winTotal.textContent = wins;
-      option.append(teamName, winTotal);
+      option.append(logo, teamName, winTotal);
       listbox.append(option);
       option.addEventListener("pointermove", (event) => {
         if (event.pointerType === "mouse" && openNbaCombobox?.button === button && !unavailable) {
@@ -979,23 +982,6 @@ function renderNbaSeeds(conference, container) {
       });
       return option;
     });
-    if (selected) {
-      const clearOption = document.createElement("div");
-      clearOption.className = "seed-option seed-option-clear";
-      clearOption.id = `${listbox.id}-clear`;
-      clearOption.dataset.team = "";
-      clearOption.setAttribute("role", "option");
-      clearOption.setAttribute("aria-selected", "false");
-      clearOption.textContent = `Clear seed ${index + 1}`;
-      clearOption.addEventListener("pointermove", (event) => {
-        if (event.pointerType === "mouse" && openNbaCombobox?.button === button) {
-          setActiveOption(options.length - 1);
-        }
-      });
-      clearOption.addEventListener("click", () => chooseTeam(""));
-      options.push(clearOption);
-      listbox.append(clearOption);
-    }
     let activeIndex = -1;
 
     function setActiveOption(nextIndex) {
@@ -1036,7 +1022,7 @@ function renderNbaSeeds(conference, container) {
     }
 
     function chooseTeam(team) {
-      if (team && team !== selected && state.seeds[conference].includes(team)) return;
+      if (team !== selected && state.seeds[conference].includes(team)) return;
       closeNbaCombobox();
       if (team === selected) return;
       handleSeedChange({ target: { dataset: button.dataset, value: team } });

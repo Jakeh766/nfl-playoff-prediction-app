@@ -1833,10 +1833,10 @@ body[data-sport="nba"] .seed-row.is-open {
 }
 
 .seed-option {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   min-height: 44px;
   padding: 9px 12px;
   border-radius: 5px;
@@ -1846,12 +1846,26 @@ body[data-sport="nba"] .seed-row.is-open {
   cursor: pointer;
 }
 
+.seed-option-logo {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
 .seed-option-name {
   min-width: 0;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .seed-option-wins {
-  flex: none;
+  font-family: var(--body);
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -1881,13 +1895,6 @@ body[data-sport="nba"] .seed-row.is-open {
 .seed-option[aria-disabled="true"]:hover {
   background: transparent;
   outline: none;
-}
-
-.seed-option-clear {
-  margin-top: 4px;
-  border-top: 1px solid var(--nba-seed-border);
-  border-radius: 0 0 5px 5px;
-  font-weight: 700;
 }
 
 .seed-number {
