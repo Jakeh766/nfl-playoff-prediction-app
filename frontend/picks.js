@@ -428,7 +428,7 @@ function renderConferenceBracket(conference, container, games) {
   const rounds = [
     { key: "wildCard", label: IS_NBA ? "First Round" : "Wild Card" },
     { key: "divisional", label: IS_NBA ? "Conference Semifinals" : "Divisional" },
-    { key: "championship", label: IS_NBA ? "Conference Finals" : `Pick ${conference} Champion` },
+    { key: "championship", label: `Pick ${conference} Champion` },
   ];
 
   rounds.forEach(({ key, label }) => {

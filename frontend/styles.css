@@ -2291,12 +2291,22 @@ body[data-sport="nba"] .bracket-shell {
 
 body[data-sport="nba"] .rounds {
   padding: 18px 12px 22px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 body[data-sport="nba"] .round {
   gap: 16px;
+}
+
+body[data-sport="nba"] .round.wild-card {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+body[data-sport="nba"] .round.divisional {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 body[data-sport="nba"] .round-label {
@@ -2306,15 +2316,53 @@ body[data-sport="nba"] .round-label {
 }
 
 body[data-sport="nba"] .round.championship {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 260px;
+  margin-top: 0;
   padding: 0;
-  background: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  align-items: center;
+  background: rgba(244, 185, 66, 0.1);
   border: 0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 2px rgba(244, 185, 66, 0.8);
 }
 
 body[data-sport="nba"] .round.championship .round-label {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
+  min-height: 0;
+  margin: 0;
+  padding: 14px;
+  color: var(--warning-text);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+body[data-sport="nba"] .round.championship .game-card {
+  width: 100%;
+  margin: 0;
+}
+
+body[data-sport="nba"] .bracket-conference .team-pick {
+  padding: 8px;
+  grid-template-columns: 29px 28px minmax(0, 1fr) 15px;
+  gap: 6px;
+}
+
+body[data-sport="nba"] .bracket-conference .team-seed {
+  width: 29px;
+  height: 32px;
+}
+
+body[data-sport="nba"] .bracket-conference .bracket-team-logo {
+  width: 28px;
+  height: 28px;
+  max-width: 28px;
+  max-height: 28px;
 }
 
 body[data-sport="nba"] .game-card {
@@ -2436,6 +2484,22 @@ body[data-sport="nba"] .champion-display strong {
   font-size: 18px;
 }
 
+@media (min-width: 1401px) {
+  body[data-sport="nba"] #nfc-bracket .wild-card {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  body[data-sport="nba"] #nfc-bracket .divisional {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  body[data-sport="nba"] #nfc-bracket .championship {
+    grid-column: 1;
+  }
+}
+
 @media (max-width: 1400px) {
   body[data-sport="nba"] .bracket-shell {
     grid-template-columns: minmax(0, 1fr);
@@ -2479,8 +2543,15 @@ body[data-sport="nba"] .champion-display strong {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  body[data-sport="nba"] .round.wild-card,
+  body[data-sport="nba"] .round.divisional,
   body[data-sport="nba"] .round.championship {
-    margin-top: 8px;
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  body[data-sport="nba"] .round.championship {
+    min-height: 220px;
   }
 }
 
