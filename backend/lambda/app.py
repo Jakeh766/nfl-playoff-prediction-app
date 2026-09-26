@@ -1066,6 +1066,7 @@ def public_group(
 
 def prediction_window(now_seconds: float | None = None) -> dict:
     lock_at = NBA["lockAt"] if SPORT.get() == "nba" else PREDICTION_LOCK_AT
+    dev_nfl_unlocked = os.environ.get("ENVIRONMENT") == "dev" and SPORT.get() == "nfl"
     try:
         lock_seconds = calendar.timegm(
             time.strptime(lock_at, "%Y-%m-%dT%H:%M:%SZ")
@@ -1076,7 +1077,8 @@ def prediction_window(now_seconds: float | None = None) -> dict:
     server_seconds = time.time() if now_seconds is None else now_seconds
     return {
         "lockAt": lock_at,
-        "locked": server_seconds >= lock_seconds,
+        "locked": server_seconds >= lock_seconds and not dev_nfl_unlocked,
+        "devNflUnlocked": dev_nfl_unlocked,
         "serverTime": int(server_seconds * 1000),
         "season": NBA["season"] if SPORT.get() == "nba" else int(PREDICTION_LOCK_AT[:4]),
     }

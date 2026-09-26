@@ -8,6 +8,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(resource=lambda _name: None))
@@ -269,7 +270,8 @@ class PredictionAuthorizationTests(unittest.TestCase):
         }
 
         try:
-            result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "prod"}):
+                result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
         finally:
             lambda_app.PREDICTION_LOCK_AT = original_lock_at
             lambda_app.time.time = original_time
@@ -278,8 +280,43 @@ class PredictionAuthorizationTests(unittest.TestCase):
         self.assertEqual(self.table.items["user-123"]["savedAt"], 123)
         self.assertTrue(json.loads(result["body"])["locked"])
 
+    def test_dev_nfl_prediction_can_be_saved_after_kickoff(self):
+        original_time = lambda_app.time.time
+        lambda_app.time.time = lambda: 1_789_000_000
+        try:
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "dev"}), patch.object(
+                lambda_app, "PREDICTION_LOCK_AT", "2026-09-10T00:20:00Z"
+            ):
+                result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
+        finally:
+            lambda_app.time.time = original_time
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertIn("user-123", self.table.items)
+
 
 class PredictionWindowTests(unittest.TestCase):
+    def test_only_dev_nfl_ignores_elapsed_lock_date(self):
+        after_kickoff = 1_789_000_000
+        with patch.object(lambda_app, "PREDICTION_LOCK_AT", "2026-09-10T00:20:00Z"):
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "dev"}):
+                dev_window = lambda_app.prediction_window(after_kickoff)
+                nba_token = lambda_app.SPORT.set("nba")
+                try:
+                    nba_window = lambda_app.prediction_window(2_000_000_000)
+                finally:
+                    lambda_app.SPORT.reset(nba_token)
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "prod"}):
+                prod_window = lambda_app.prediction_window(after_kickoff)
+
+        self.assertTrue(dev_window["devNflUnlocked"])
+        self.assertFalse(dev_window["locked"])
+        self.assertEqual(dev_window["season"], 2026)
+        self.assertFalse(prod_window["devNflUnlocked"])
+        self.assertTrue(prod_window["locked"])
+        self.assertFalse(nba_window["devNflUnlocked"])
+        self.assertTrue(nba_window["locked"])
+
     def test_window_endpoint_is_public_and_reports_server_time(self):
         original_lock_at = lambda_app.PREDICTION_LOCK_AT
         original_time = lambda_app.time.time

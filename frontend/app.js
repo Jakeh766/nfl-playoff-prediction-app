@@ -411,6 +411,8 @@ const elements = {
   closePublicBracket: document.querySelector("#close-public-bracket"),
   toast: document.querySelector("#toast"),
   kickoffCountdown: document.querySelector("#kickoff-countdown"),
+  kickoffCountdownLabel: document.querySelector("#kickoff-countdown-label"),
+  devUnlockHeadline: document.querySelector("#dev-unlock-headline"),
   countdownDays: document.querySelector("#countdown-days"),
   countdownHours: document.querySelector("#countdown-hours"),
   countdownMinutes: document.querySelector("#countdown-minutes"),
@@ -1301,6 +1303,16 @@ function setPredictionEditingLocked(locked, message = "") {
 function renderPredictionCountdown() {
   if (!state.predictionWindow || !elements.kickoffCountdown) return;
 
+  if (state.predictionWindow.devNflUnlocked) {
+    elements.kickoffCountdown.classList.add("dev-unlocked");
+    elements.kickoffCountdownLabel.textContent = "DEV BRACKETS OPEN";
+    elements.devUnlockHeadline.classList.remove("hidden");
+    elements.kickoffLockTime.dateTime = state.predictionWindow.lockAt;
+    elements.kickoffLockTime.textContent = `Original deadline: ${predictionLockDateLabel(state.predictionWindow.lockAt)}`;
+    elements.countdownStatus.textContent = "NFL picks are open for testing on dev. Production remains locked.";
+    return;
+  }
+
   const lockTime = new Date(state.predictionWindow.lockAt).getTime();
   const now = Date.now() + state.predictionClockOffset;
   const remaining = Math.max(0, lockTime - now);
@@ -1338,19 +1350,23 @@ async function initializePredictionWindow() {
     state.predictionWindow = windowState;
     state.predictionClockOffset = windowState.serverTime - Date.now();
     const label = predictionLockDateLabel(windowState.lockAt);
-    if (elements.kickoffLockTime) {
+    if (elements.kickoffLockTime && !windowState.devNflUnlocked) {
       elements.kickoffLockTime.dateTime = windowState.lockAt;
       elements.kickoffLockTime.textContent = `Deadline: ${label}`;
     }
     setPredictionEditingLocked(
       Boolean(windowState.locked),
-      windowState.locked
+      windowState.devNflUnlocked
+        ? "NFL brackets are open for testing on dev. Production remains locked."
+        : windowState.locked
         ? `The ${SPORT.toUpperCase()} regular season has started. Saved brackets are read-only.`
         : `Create or change your bracket until ${label}.`,
     );
     renderPredictionCountdown();
     clearInterval(predictionCountdownTimer);
-    predictionCountdownTimer = setInterval(renderPredictionCountdown, 1000);
+    if (!windowState.devNflUnlocked) {
+      predictionCountdownTimer = setInterval(renderPredictionCountdown, 1000);
+    }
   } catch (error) {
     if (elements.countdownStatus) {
       elements.countdownStatus.textContent = "The season countdown is temporarily unavailable.";

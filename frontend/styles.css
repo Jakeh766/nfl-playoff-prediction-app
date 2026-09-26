@@ -1144,6 +1144,20 @@ body.account-modal-open {
   background: #162235;
 }
 
+.kickoff-countdown.dev-unlocked .countdown-grid {
+  display: none;
+}
+
+.dev-unlock-headline {
+  display: block;
+  margin: 36px 0 22px;
+  font-family: var(--display);
+  font-size: clamp(36px, 3.4vw, 48px);
+  font-weight: 600;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
 .prediction-lock-notice {
   display: flex;
   justify-content: space-between;
@@ -1586,50 +1600,75 @@ body[data-sport="nba"] .conference-logo-fallback {
   text-transform: uppercase;
 }
 
-.division-winner-field select {
-  min-height: 46px;
-}
-
 .logo-select-control {
-  display: grid;
-  grid-template-columns: 27px minmax(0, 1fr);
-  align-items: center;
+  position: relative;
   min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--field-border);
-  border-radius: 5px;
+  background: var(--nba-seed-start);
+  border: 1px solid var(--nba-seed-border);
+  border-radius: 8px;
 }
 
-.logo-select-control select {
-  min-width: 0;
+.division-combobox {
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 10px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 9px;
+  color: var(--nba-seed-ink);
+  background: transparent;
   border: 0;
-  border-left: 1px solid var(--divider);
-  border-radius: 0 5px 5px 0;
+  border-radius: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.division-combobox:hover:not(:disabled) {
+  background: var(--nba-seed-hover-end);
+}
+
+.division-combobox:focus-visible {
+  outline: 3px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+.division-combobox:disabled {
+  cursor: not-allowed;
+}
+
+.division-combobox-name {
+  min-width: 0;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.division-combobox-name.is-placeholder {
+  color: var(--nba-seed-placeholder);
+  font-family: var(--body);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
 }
 
 .select-team-logo,
 .select-logo-placeholder {
-  width: 27px;
-  height: 44px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  background: var(--surface);
-  border-radius: 5px 0 0 5px;
 }
 
 .select-team-logo {
-  width: 18px !important;
-  height: 18px !important;
-  max-width: 18px !important;
-  max-height: 18px !important;
-  margin: auto;
-  padding: 0;
   object-fit: contain;
 }
 
 .select-logo-placeholder {
-  font-size: 10px;
-  color: var(--muted);
+  font-size: 14px;
+  color: var(--nba-seed-placeholder);
 }
 
 .seed-row {
@@ -1644,9 +1683,9 @@ body[data-sport="nba"] .conference-logo-fallback {
   grid-template-columns: 50px 68px minmax(0, 1fr) 18px;
   gap: 10px;
   align-items: center;
-  color: white;
-  background: linear-gradient(110deg, #171e28, #273544);
-  border: 1px solid #435469;
+  color: var(--nba-seed-ink);
+  background: linear-gradient(110deg, var(--nba-seed-start), var(--nba-seed-end));
+  border: 1px solid var(--nba-seed-border);
   border-radius: 8px;
   box-shadow: 0 3px 8px rgba(16, 34, 58, 0.12);
   transition: background 160ms ease, box-shadow 160ms ease;
@@ -1661,25 +1700,11 @@ body[data-sport="nba"] .conference-logo-fallback {
 }
 
 .seed-row:not(.locked):hover {
-  background: linear-gradient(110deg, #202a36, #304154);
+  background: linear-gradient(110deg, var(--nba-seed-hover-start), var(--nba-seed-hover-end));
   box-shadow: 0 4px 12px rgba(16, 34, 58, 0.17);
 }
 
 .seed-row.locked:not(.has-team) {
-  background: #26313d;
-}
-
-body[data-sport="nba"] .seed-row {
-  color: var(--nba-seed-ink);
-  background: linear-gradient(110deg, var(--nba-seed-start), var(--nba-seed-end));
-  border-color: var(--nba-seed-border);
-}
-
-body[data-sport="nba"] .seed-row:not(.locked):hover {
-  background: linear-gradient(110deg, var(--nba-seed-hover-start), var(--nba-seed-hover-end));
-}
-
-body[data-sport="nba"] .seed-row.locked:not(.has-team) {
   background: var(--nba-seed-empty);
 }
 
@@ -1701,19 +1726,6 @@ body[data-sport="nba"] .seed-row.locked:not(.has-team) {
   pointer-events: none;
 }
 
-.seed-row select {
-  position: absolute;
-  z-index: 3;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
 .seed-team-name {
   min-width: 0;
   font-family: var(--display);
@@ -1726,15 +1738,11 @@ body[data-sport="nba"] .seed-row.locked:not(.has-team) {
 }
 
 .seed-row:not(.has-team) .seed-team-name {
-  color: #cad4df;
+  color: var(--nba-seed-placeholder);
   font-family: var(--body);
   font-size: 14px;
   font-weight: 500;
   text-transform: none;
-}
-
-body[data-sport="nba"] .seed-row:not(.has-team) .seed-team-name {
-  color: var(--nba-seed-placeholder);
 }
 
 .seed-logo-slot {
@@ -1761,26 +1769,26 @@ body[data-sport="nba"] .seed-row:not(.has-team) .seed-team-name {
   opacity: 0.8;
 }
 
-.seed-row.locked select {
-  cursor: not-allowed;
-}
-
-body[data-sport="nba"] .conference-card {
+.conference-card {
   overflow: visible;
 }
 
-body[data-sport="nba"] .conference-title {
+.conference-title {
   border-radius: 7px 7px 0 0;
 }
 
-body[data-sport="nba"] .conference-card.has-open-seed {
+.conference-card.has-open-seed {
   position: relative;
   z-index: 5;
 }
 
-body[data-sport="nba"] .seed-row.is-open {
+.seed-row.is-open {
   z-index: 4;
   overflow: visible;
+}
+
+.logo-select-control.is-open {
+  z-index: 4;
 }
 
 .seed-combobox {
@@ -1830,6 +1838,25 @@ body[data-sport="nba"] .seed-row.is-open {
 .seed-row.opens-up .seed-listbox {
   top: auto;
   bottom: calc(100% + 6px);
+}
+
+.logo-select-control.opens-up .seed-listbox {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.seed-option-group + .seed-option-group {
+  margin-top: 4px;
+  border-top: 1px solid var(--nba-seed-border);
+}
+
+.seed-option-group-label {
+  padding: 10px 12px 4px;
+  color: var(--nba-seed-placeholder);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .seed-option {
@@ -1902,17 +1929,12 @@ body[data-sport="nba"] .seed-row.is-open {
   height: 50px;
   display: grid;
   place-items: center;
-  background: rgba(196, 211, 230, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--nba-seed-badge);
+  border: 1px solid var(--nba-seed-badge-border);
   border-radius: 11px;
   font-family: var(--display);
   font-size: 25px;
   font-weight: 600;
-}
-
-body[data-sport="nba"] .seed-number {
-  background: var(--nba-seed-badge);
-  border-color: var(--nba-seed-badge-border);
 }
 
 .field-actions {
