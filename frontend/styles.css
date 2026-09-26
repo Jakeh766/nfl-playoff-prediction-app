@@ -2306,11 +2306,13 @@ body[data-sport="nba"] .round-label {
 }
 
 body[data-sport="nba"] .round.championship {
+  position: relative;
+  isolation: isolate;
   padding: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0;
+  gap: 24px;
   align-items: stretch;
   background: none;
   border: 0;
@@ -2318,18 +2320,28 @@ body[data-sport="nba"] .round.championship {
   box-shadow: none;
 }
 
+/* Draw the full-height champion panel without taking width from its matchup. */
+body[data-sport="nba"] .round.championship::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: rgba(244, 185, 66, 0.1);
+  border: 2px solid rgba(244, 185, 66, 0.8);
+  border-radius: 8px;
+}
+
 body[data-sport="nba"] .round.championship .round-label {
-  min-height: 112px;
+  min-height: 76px;
   margin: 0;
   padding: 14px;
   display: grid;
   place-items: center;
   color: var(--warning-text);
-  background: rgba(244, 185, 66, 0.1);
-  border: 2px solid rgba(244, 185, 66, 0.8);
-  border-bottom: 0;
-  border-radius: 8px 8px 0 0;
-  font-size: 16px;
+  background: none;
+  border: 0;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1.25;
 }
@@ -2337,7 +2349,7 @@ body[data-sport="nba"] .round.championship .round-label {
 body[data-sport="nba"] .round.championship .game-card {
   width: 100%;
   margin: 0;
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
 }
 
 body[data-sport="nba"] .game-card {
@@ -2386,6 +2398,10 @@ body[data-sport="nba"] .super-bowl-card .team-pick.selected {
   background: var(--ink);
 }
 
+body[data-sport="nba"] .super-bowl-card .team-pick.selected {
+  background: var(--red);
+}
+
 body[data-sport="nba"] .team-pick:disabled:not(.selected) {
   color: var(--nba-seed-placeholder);
   background: var(--nba-seed-empty);
@@ -2425,7 +2441,7 @@ body[data-sport="nba"] .pick-check {
 }
 
 body[data-sport="nba"] .super-bowl-card {
-  align-self: center;
+  align-self: stretch;
   padding: 24px 14px;
   box-shadow: 0 10px 28px rgba(16, 34, 58, 0.15);
 }
@@ -2504,6 +2520,8 @@ body[data-sport="nba"] .champion-display strong {
 
   body[data-sport="nba"] .round.championship {
     margin-top: 8px;
+    padding-block: 20px;
+    gap: 12px;
   }
 
   body[data-sport="nba"] .round.championship .round-label {
