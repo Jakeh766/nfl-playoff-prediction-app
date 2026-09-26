@@ -609,6 +609,7 @@ function renderGroups() {
     activeGroup?.isCommissioner ?? activeGroup?.isCreator,
   );
   elements.leaveGroup?.classList.toggle("hidden", !activeGroup);
+  elements.editGroupSports?.classList.toggle("hidden", !isCommissioner);
   elements.deleteGroup?.classList.toggle("hidden", !isCommissioner);
   if (activeGroup) {
     elements.leaveGroup?.setAttribute(
@@ -923,6 +924,9 @@ function openGroupDialog(mode) {
   const creating = mode === "create";
   elements.groupForm.reset();
   document.querySelector("#group-scoring-field").classList.toggle("hidden", !creating);
+  elements.groupSportsField.classList.toggle("hidden", !creating);
+  elements.groupSportNfl.checked = !IS_NBA;
+  elements.groupSportNba.checked = IS_NBA;
   elements.groupDialogKicker.textContent = creating ? "NEW PRIVATE GROUP" : "JOIN PRIVATE GROUP";
   elements.groupDialogTitle.textContent = creating ? "Create a group." : "Join a group.";
   elements.groupDialogDescription.textContent = creating
@@ -937,6 +941,14 @@ function openGroupDialog(mode) {
 async function submitGroup(event) {
   event.preventDefault();
   const creating = groupDialogMode === "create";
+  const sports = [
+    ...(elements.groupSportNfl.checked ? ["nfl"] : []),
+    ...(elements.groupSportNba.checked ? ["nba"] : []),
+  ];
+  if (creating && !sports.length) {
+    elements.groupDialogMessage.textContent = "Choose at least one sport.";
+    return;
+  }
   elements.submitGroup.disabled = true;
   elements.submitGroup.setAttribute("aria-busy", "true");
   elements.submitGroup.textContent = creating ? "Creating…" : "Joining…";
@@ -950,7 +962,7 @@ async function submitGroup(event) {
       body: JSON.stringify({
         groupName: elements.groupName.value,
         password: elements.groupPassword.value,
-        ...(creating ? { scoringOption: document.querySelector("#group-scoring").value } : {}),
+        ...(creating ? { scoringOption: document.querySelector("#group-scoring").value, sports } : {}),
       }),
     });
     elements.groupDialog.close();
@@ -975,6 +987,46 @@ async function submitGroup(event) {
     elements.submitGroup.disabled = false;
     elements.submitGroup.removeAttribute("aria-busy");
     elements.submitGroup.textContent = creating ? "Create group" : "Join group";
+  }
+}
+
+function openEditGroupSportsDialog() {
+  const group = state.groups.find((candidate) => candidate.groupId === state.activeGroupId);
+  if (!(group?.isCommissioner ?? group?.isCreator)) return;
+  elements.editGroupSportNfl.checked = (group.sports || ["nfl"]).includes("nfl");
+  elements.editGroupSportNba.checked = (group.sports || ["nfl"]).includes("nba");
+  elements.editGroupSportsMessage.textContent = "";
+  elements.editGroupSportsDialog.showModal();
+  elements.editGroupSportNfl.focus();
+}
+
+async function submitEditGroupSports(event) {
+  event.preventDefault();
+  const group = state.groups.find((candidate) => candidate.groupId === state.activeGroupId);
+  if (!(group?.isCommissioner ?? group?.isCreator)) return;
+  const sports = [
+    ...(elements.editGroupSportNfl.checked ? ["nfl"] : []),
+    ...(elements.editGroupSportNba.checked ? ["nba"] : []),
+  ];
+  if (!sports.length) {
+    elements.editGroupSportsMessage.textContent = "Choose at least one sport.";
+    return;
+  }
+  elements.saveGroupSports.disabled = true;
+  elements.saveGroupSports.textContent = "Saving…";
+  try {
+    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ sports }),
+    });
+    elements.editGroupSportsDialog.close();
+    await refreshGroups(group.groupId);
+    showToast(`Updated sports for ${group.groupName}.`);
+  } catch (error) {
+    elements.editGroupSportsMessage.textContent = error.message;
+  } finally {
+    elements.saveGroupSports.disabled = false;
+    elements.saveGroupSports.textContent = "Save sports";
   }
 }
 

@@ -181,6 +181,7 @@ def build_seed_data(now_ms: int | None = None) -> dict[str, list[dict]]:
                     "recordType": "group",
                     "groupId": group_id,
                     "groupName": group_name,
+                    "sports": ["nfl"],
                     "normalizedName": normalized_name,
                     "createdBy": f"demo-user-{group_config['members'][0] + 1:02d}",
                     "createdAt": seeded_at,

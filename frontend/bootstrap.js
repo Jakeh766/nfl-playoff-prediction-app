@@ -88,6 +88,9 @@ elements.groupDialog?.addEventListener("close", () => {
   elements.groupDialogMessage.textContent = "";
 });
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+elements.editGroupSports?.addEventListener("click", openEditGroupSportsDialog);
+elements.editGroupSportsForm?.addEventListener("submit", submitEditGroupSports);
+elements.cancelEditGroupSports?.addEventListener("click", () => elements.editGroupSportsDialog.close());
 elements.leaveGroup?.addEventListener("click", () => {
   const group = state.groups.find(
     (candidate) => candidate.groupId === state.activeGroupId,

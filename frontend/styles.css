@@ -855,6 +855,38 @@ select:focus {
   margin-top: 18px;
 }
 
+.group-sports-field {
+  display: flex;
+  gap: 18px;
+  margin: 18px 0;
+  padding: 0;
+  border: 0;
+}
+
+.group-sports-field legend {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-dialog .group-sports-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.group-sports-field input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--blue);
+}
+
 .dialog-message {
   min-height: 18px;
   margin: 12px 0 0;

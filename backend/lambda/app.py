@@ -974,6 +974,20 @@ def delete_prediction(user_id: str) -> None:
 GROUP_PASSWORD_ITERATIONS = 310_000
 GROUP_INVITE_CODE_PATTERN = re.compile(r"[A-Za-z0-9_-]{32}")
 GROUP_ID_PATTERN = re.compile(r"[0-9a-f-]{36}")
+GROUP_SPORTS = ("nfl", "nba")
+
+
+def group_sports(group: dict) -> list[str]:
+    """Groups created before sport selection remain NFL groups."""
+    return group.get("sports", ["nfl"])
+
+
+def validate_group_sports(value) -> list[str]:
+    if not isinstance(value, list) or not value or any(
+        sport not in GROUP_SPORTS for sport in value
+    ) or len(set(value)) != len(value):
+        raise ValueError("Choose NFL, NBA, or both for the group")
+    return [sport for sport in GROUP_SPORTS if sport in value]
 
 
 def normalize_group_name(value) -> tuple[str, str]:
@@ -1058,6 +1072,7 @@ def public_group(
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
         "scoringOption": group.get("scoringOption", "classic"),
+        "sports": group_sports(group),
         "isCommissioner": bool(user_id and commissioner_id == user_id),
         # Kept for older deployed clients while commissioner terminology rolls out.
         "isCreator": bool(user_id and commissioner_id == user_id),
@@ -1110,7 +1125,7 @@ def list_groups(user_id: str) -> dict:
         group = table.get_item(
             Key={"groupKey": group_item_key(membership["groupId"])}
         ).get("Item")
-        if group and group.get("recordType") == "group":
+        if group and group.get("recordType") == "group" and SPORT.get() in group_sports(group):
             groups.append(
                 public_group(
                     group,
@@ -1127,6 +1142,7 @@ def create_group(user_id: str, event: dict) -> dict:
     group_name, normalized_name = normalize_group_name(body.get("groupName"))
     password = validate_group_password(body.get("password"))
     scoring_option = body.get("scoringOption", "classic")
+    sports = validate_group_sports(body.get("sports", [SPORT.get()]))
     if scoring_option not in ("classic", "vegas"):
         raise ValueError("Choose Classic or Upset Edge scoring")
     group_id = str(uuid.uuid4())
@@ -1160,6 +1176,7 @@ def create_group(user_id: str, event: dict) -> dict:
         "createdBy": user_id,
         "commissionerId": user_id,
         "scoringOption": scoring_option,
+        "sports": sports,
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
@@ -1183,6 +1200,37 @@ def create_group(user_id: str, event: dict) -> dict:
         table.delete_item(Key={"groupKey": name_key})
         raise
     return public_group(group, user_id)
+
+
+def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    table = groups_table()
+    commissioner_id = group_commissioner_id(group, scan_all(table))
+    if commissioner_id != user_id:
+        raise PermissionError("Only the group commissioner can edit its sports")
+    sports = validate_group_sports(parse_body(event).get("sports"))
+    condition = "commissionerId = :commissioner"
+    if not group.get("commissionerId"):
+        condition = (
+            "attribute_not_exists(commissionerId) AND createdBy = :commissioner"
+            if group.get("createdBy") else
+            "attribute_not_exists(commissionerId) AND attribute_not_exists(createdBy)"
+        )
+    try:
+        updated = table.update_item(
+            Key={"groupKey": group_item_key(group_id)},
+            UpdateExpression="SET sports = :sports",
+            ConditionExpression=condition,
+            ExpressionAttributeValues={":sports": sports, ":commissioner": user_id},
+            ReturnValues="ALL_NEW",
+        )["Attributes"]
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise PermissionError("The group commissioner changed. Refresh and try again") from error
+        raise
+    return public_group(updated, user_id)
 
 
 def join_group(user_id: str, event: dict) -> dict:
@@ -1285,7 +1333,7 @@ def join_group_by_invite(user_id: str, event: dict) -> dict:
 
 def get_group_leaderboard(group_id: str, user_id: str) -> dict:
     group = get_group(group_id)
-    if not group or not is_group_member(group_id, user_id):
+    if not group or not is_group_member(group_id, user_id) or SPORT.get() not in group_sports(group):
         raise PermissionError("Group membership required")
     member_ids = {
         item["userId"]
@@ -1573,6 +1621,13 @@ def handle_request(event, context):
         return response(404, {"message": "Not found"})
 
     if group_delete_match:
+        if method == "PATCH":
+            try:
+                return response(200, update_group_sports(group_delete_match.group(1), user_id, event))
+            except ValueError as error:
+                return response(400 if str(error) != "Group not found" else 404, {"message": str(error)})
+            except PermissionError as error:
+                return response(403, {"message": str(error)})
         if method != "DELETE":
             return response(404, {"message": "Not found"})
         try:

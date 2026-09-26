@@ -49,6 +49,7 @@ class DevSeedTests(unittest.TestCase):
         self.assertEqual(len(memberships), 8)
         self.assertEqual(len({item["userId"] for item in memberships}), 7)
         for group in group_records:
+            self.assertEqual(group["sports"], ["nfl"])
             self.assertNotIn("password", group)
             self.assertEqual(len(group["passwordSalt"]), 32)
             self.assertEqual(len(group["passwordHash"]), 64)

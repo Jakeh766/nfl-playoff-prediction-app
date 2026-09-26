@@ -118,6 +118,16 @@ class FakeGroupTable:
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
             item["commissionerId"] = values[":newCommissioner"]
+        elif UpdateExpression == "SET sports = :sports":
+            if ConditionExpression == "commissionerId = :commissioner":
+                if item.get("commissionerId") != values[":commissioner"]:
+                    raise ConditionalCheckFailed()
+            elif "createdBy = :commissioner" in (ConditionExpression or ""):
+                if "commissionerId" in item or item.get("createdBy") != values[":commissioner"]:
+                    raise ConditionalCheckFailed()
+            elif "commissionerId" in item or "createdBy" in item:
+                raise ConditionalCheckFailed()
+            item["sports"] = values[":sports"]
         else:
             raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
         return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
@@ -135,6 +145,7 @@ def event(
     user_id: str | None = "user-123",
     body=None,
     path: str = "/api/prediction",
+    sport: str = "nfl",
 ):
     request_context = {"http": {"method": method}}
     if user_id:
@@ -143,6 +154,7 @@ def event(
         "rawPath": path,
         "requestContext": request_context,
         "body": json.dumps(body) if body is not None else None,
+        "queryStringParameters": {"sport": sport},
     }
 
 
@@ -560,6 +572,53 @@ class PrivateGroupTests(unittest.TestCase):
             body={"groupName": "Vegas Crew", "password": "secret1", "scoringOption": "unknown"}), None)
         self.assertEqual(result["statusCode"], 400)
 
+    def test_group_sports_filter_both_leaderboards_and_legacy_default(self):
+        group_ids = {}
+        for name, sports in (("NFL Crew", ["nfl"]), ("NBA Crew", ["nba"]), ("Both Crew", ["nfl", "nba"])):
+            result = lambda_app.handler(event("POST", path="/api/groups", body={
+                "groupName": name, "password": "secret1", "sports": sports,
+            }), None)
+            self.assertEqual(result["statusCode"], 201)
+            group_ids[name] = json.loads(result["body"])["groupId"]
+        del self.groups.items[f"group#{group_ids['NFL Crew']}"]["sports"]
+        for sport, expected in (("nfl", {"NFL Crew", "Both Crew"}), ("nba", {"NBA Crew", "Both Crew"})):
+            listed = lambda_app.handler(event("GET", path="/api/groups", sport=sport), None)
+            self.assertEqual({group["groupName"] for group in json.loads(listed["body"])["groups"]}, expected)
+        self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['NFL Crew']}/leaderboard", sport="nba"), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['NBA Crew']}/leaderboard", sport="nfl"), None)["statusCode"], 403)
+        with patch.object(lambda_app, "build_leaderboard", return_value={"entries": []}):
+            self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['Both Crew']}/leaderboard", sport="nfl"), None)["statusCode"], 200)
+            self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['Both Crew']}/leaderboard", sport="nba"), None)["statusCode"], 200)
+
+    def test_group_creation_defaults_to_requested_sport_and_rejects_invalid_sports(self):
+        created = lambda_app.handler(event("POST", path="/api/groups", sport="nba", body={
+            "groupName": "NBA Crew", "password": "secret1",
+        }), None)
+        self.assertEqual(json.loads(created["body"])["sports"], ["nba"])
+        for sports in ([], ["nfl", "other"], ["nba", "nba"], "nfl"):
+            rejected = lambda_app.handler(event("POST", path="/api/groups", body={
+                "groupName": "Invalid Crew", "password": "secret1", "sports": sports,
+            }), None)
+            self.assertEqual(rejected["statusCode"], 400)
+
+    def test_only_current_commissioner_can_edit_sports(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        path = f"/api/groups/{group_id}"
+        self.join()
+        rejected = lambda_app.handler(event("PATCH", user_id="user-456", path=path, body={"sports": ["nba"]}), None)
+        self.assertEqual(rejected["statusCode"], 403)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["sports"], ["nfl"])
+        for sports in ([], ["nfl", "other"], ["nfl", "nfl"], "nba"):
+            invalid = lambda_app.handler(event("PATCH", path=path, body={"sports": sports}), None)
+            self.assertEqual(invalid["statusCode"], 400)
+        updated = lambda_app.handler(event("PATCH", path=path, body={"sports": ["nba", "nfl"]}), None)
+        self.assertEqual(json.loads(updated["body"])["sports"], ["nfl", "nba"])
+        self.assertEqual(len([item for item in self.groups.items.values() if item.get("recordType") == "group"]), 1)
+        self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")
+        self.assertEqual(lambda_app.handler(event("PATCH", path=path, body={"sports": ["nfl"]}), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("PATCH", user_id="user-456", path=path, body={"sports": ["nba"]}), None)["statusCode"], 200)
+
     def test_create_hashes_password_and_reserves_unique_name(self):
         created = self.create()
         payload = json.loads(created["body"])
@@ -748,6 +807,10 @@ class PrivateGroupTests(unittest.TestCase):
                 "joinedAt": 200,
             },
         }
+
+        updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body={"sports": ["nfl", "nba"]}), None)
+        self.assertEqual(updated["statusCode"], 200)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["sports"], ["nfl", "nba"])
 
         deleted = self.delete(group_id)
 

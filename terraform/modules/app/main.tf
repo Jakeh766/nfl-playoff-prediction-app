@@ -678,6 +678,14 @@ resource "aws_apigatewayv2_route" "group_delete" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+resource "aws_apigatewayv2_route" "group_sports_update" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "PATCH /api/groups/{groupId}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_route" "group_invite_get" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "GET /api/groups/{groupId}/invite"

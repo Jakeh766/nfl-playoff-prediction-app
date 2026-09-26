@@ -194,6 +194,11 @@ if (dialogs) {
             </select>
             <p class="input-hint" id="group-scoring-hint">Upset Edge multiplies each correct pick by the team’s fixed preseason win-total weight. An 8.5-win team is neutral; each win below or above changes the value by 10%. This choice sets your group’s ranking and cannot be changed.</p>
           </div>
+          <fieldset class="group-sports-field" id="group-sports-field">
+            <legend>Sports</legend>
+            <label><input id="group-sport-nfl" type="checkbox" value="nfl" /> NFL</label>
+            <label><input id="group-sport-nba" type="checkbox" value="nba" /> NBA</label>
+          </fieldset>
           <label for="group-password">Group password</label>
           <div class="password-field">
             <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true" required />
@@ -206,6 +211,24 @@ if (dialogs) {
           <div class="dialog-actions">
             <button class="button button-secondary" id="cancel-group" type="button">Cancel</button>
             <button class="button button-primary" id="submit-group" type="submit">Create group</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog class="account-dialog" id="edit-group-sports-dialog" aria-labelledby="edit-group-sports-title">
+        <form id="edit-group-sports-form" method="post">
+          <p class="card-kicker">GROUP SETTINGS</p>
+          <h2 id="edit-group-sports-title">Edit group sports.</h2>
+          <p>Select where this group appears. Members and scoring stay the same.</p>
+          <fieldset class="group-sports-field">
+            <legend>Sports</legend>
+            <label><input id="edit-group-sport-nfl" type="checkbox" value="nfl" /> NFL</label>
+            <label><input id="edit-group-sport-nba" type="checkbox" value="nba" /> NBA</label>
+          </fieldset>
+          <p class="dialog-message" id="edit-group-sports-message" role="status" aria-live="polite"></p>
+          <div class="dialog-actions">
+            <button class="button button-secondary" id="cancel-edit-group-sports" type="button">Cancel</button>
+            <button class="button button-primary" id="save-group-sports" type="submit">Save sports</button>
           </div>
         </form>
       </dialog>
