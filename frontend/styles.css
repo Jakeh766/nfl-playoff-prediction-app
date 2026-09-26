@@ -2353,7 +2353,7 @@ body[data-sport="nba"] .round.championship .game-card {
 }
 
 body[data-sport="nba"] .game-card {
-  background: var(--nba-seed-start);
+  background: var(--surface);
   border-color: var(--nba-seed-border);
   border-radius: 8px;
   box-shadow: 0 3px 8px rgba(16, 34, 58, 0.12);
@@ -2362,7 +2362,7 @@ body[data-sport="nba"] .game-card {
 body[data-sport="nba"] .game-title {
   padding: 9px 11px;
   color: var(--nba-seed-placeholder);
-  background: var(--nba-seed-start);
+  background: var(--surface-muted);
   border-bottom-color: var(--nba-seed-border);
   font-size: 10px;
   letter-spacing: 0.04em;
@@ -2374,7 +2374,7 @@ body[data-sport="nba"] .team-pick {
   grid-template-columns: 24px 22px minmax(0, 1fr) 12px;
   gap: 3px;
   color: var(--nba-seed-ink);
-  background: linear-gradient(110deg, var(--nba-seed-start), var(--nba-seed-end));
+  background: var(--surface);
 }
 
 body[data-sport="nba"] .team-pick + .team-pick {
@@ -2382,7 +2382,7 @@ body[data-sport="nba"] .team-pick + .team-pick {
 }
 
 body[data-sport="nba"] .team-pick:not(:disabled):not(.selected):hover {
-  background: linear-gradient(110deg, var(--nba-seed-hover-start), var(--nba-seed-hover-end));
+  background: var(--surface-hover);
 }
 
 body[data-sport="nba"] .team-pick:focus-visible {
@@ -2398,13 +2398,9 @@ body[data-sport="nba"] .super-bowl-card .team-pick.selected {
   background: var(--ink);
 }
 
-body[data-sport="nba"] .super-bowl-card .team-pick.selected {
-  background: var(--red);
-}
-
 body[data-sport="nba"] .team-pick:disabled:not(.selected) {
   color: var(--nba-seed-placeholder);
-  background: var(--nba-seed-empty);
+  background: var(--surface-muted);
 }
 
 body[data-sport="nba"] .team-seed {
@@ -2456,7 +2452,7 @@ body[data-sport="nba"] .super-bowl-card .team-pick:not(:disabled) {
 
 body[data-sport="nba"] .super-bowl-card .team-pick:not(:disabled):not(.selected):hover {
   color: var(--nba-seed-ink);
-  background: linear-gradient(110deg, var(--nba-seed-hover-start), var(--nba-seed-hover-end));
+  background: var(--surface-hover);
 }
 
 body[data-sport="nba"] .champion-display {
