@@ -2815,6 +2815,43 @@ body[data-sport="nba"] .champion-display strong {
   gap: 12px;
 }
 
+.group-settings { position: relative; flex-shrink: 0; }
+.group-settings > summary { display: flex; align-items: center; justify-content: center; gap: 10px; list-style: none; cursor: pointer; }
+.group-settings > summary::-webkit-details-marker { display: none; }
+.group-settings[open] > summary svg { transform: rotate(180deg); }
+.group-settings-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  max-width: calc(100vw - 72px);
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.group-settings-menu button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.group-settings-menu button:hover { background: var(--surface-hover); }
+.group-settings > summary:focus-visible,
+.group-settings-menu button:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 2px; }
+.group-settings-menu .group-settings-leave { border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 6px; }
+.group-settings-menu .group-settings-danger { color: var(--danger-text); }
+.group-settings-menu button.hidden { display: none; }
+
 .empty-groups {
   padding: 30px;
   color: var(--muted);

@@ -14,14 +14,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=51" />
+    <link rel="stylesheet" href="/styles.css?v=52" />
     <script src="/sports.js?v=4" defer></script>
     <script src="/shell.js?v=19" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/monitoring.js?v=1" defer></script>
     <script src="/app.js?v=35" defer></script>
-    <script src="/leaderboard.js?v=21" defer></script>
-    <script src="/bootstrap.js?v=10" defer></script>
+    <script src="/leaderboard.js?v=22" defer></script>
+    <script src="/bootstrap.js?v=11" defer></script>
   </head>
   <body data-page="leaderboard">
     <header id="site-header"></header>
@@ -77,10 +77,15 @@
               <div><p class="card-kicker">GROUP LEADERBOARD</p><h3 id="active-group-name"></h3></div>
               <div class="group-leaderboard-heading-actions">
                 <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
-                <button class="button button-secondary" id="share-group-invite" type="button">Invite others</button>
-                <button class="button button-secondary hidden" id="edit-group-sports" type="button">Edit sports</button>
-                <button class="button button-secondary" id="leave-group" type="button">Leave group</button>
-                <button class="button button-danger hidden" id="delete-group" type="button">Delete group</button>
+                <details class="group-settings" id="group-settings">
+                  <summary class="button button-secondary">Group settings <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
+                  <div class="group-settings-menu" role="group" aria-label="Group settings">
+                    <button id="share-group-invite" type="button">Invite others</button>
+                    <button class="hidden" id="edit-group-sports" type="button">Edit sports</button>
+                    <button class="group-settings-leave" id="leave-group" type="button">Leave group</button>
+                    <button class="group-settings-danger hidden" id="delete-group" type="button">Delete group</button>
+                  </div>
+                </details>
               </div>
             </div>
             <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Rankings and scores use this group’s scoring option. Select a player to view their bracket.</p>

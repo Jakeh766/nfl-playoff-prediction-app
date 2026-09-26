@@ -87,6 +87,7 @@ elements.groupDialog?.addEventListener("close", () => {
   resetPasswordVisibility(elements.groupForm);
   elements.groupDialogMessage.textContent = "";
 });
+if (typeof initializeGroupSettings === "function") initializeGroupSettings();
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
 elements.editGroupSports?.addEventListener("click", openEditGroupSportsDialog);
 elements.editGroupSportsForm?.addEventListener("submit", submitEditGroupSports);

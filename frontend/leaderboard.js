@@ -609,6 +609,8 @@ async function loadLeaderboard() {
 
 function renderGroups() {
   if (!elements.groupTabs) return;
+  const settings = document.querySelector("#group-settings");
+  if (settings) settings.open = false;
   const history = document.querySelector("#group-history");
   if (history) history.open = false;
   renderGroupHistory();
@@ -662,6 +664,53 @@ function renderGroups() {
   });
 
   if (activeGroup) elements.activeGroupName.textContent = activeGroup.groupName;
+}
+
+function initializeGroupSettings() {
+  const settings = document.querySelector("#group-settings");
+  if (!settings) return;
+  const trigger = settings.querySelector("summary");
+  const actionDialogs = {
+    "share-group-invite": elements.groupInviteDialog,
+    "edit-group-sports": elements.editGroupSportsDialog,
+    "leave-group": elements.leaveGroupDialog,
+    "delete-group": elements.deleteGroupDialog,
+  };
+  let activeDialog = null;
+  Object.values(actionDialogs).forEach((dialog) => {
+    dialog?.addEventListener("close", () => {
+      if (activeDialog !== dialog) return;
+      activeDialog = null;
+      if (trigger.getClientRects().length) trigger.focus();
+      else elements.groupsLeaderboardTab?.focus();
+    });
+  });
+  const close = (restoreFocus = false) => {
+    settings.open = false;
+    if (restoreFocus) trigger.focus();
+  };
+  document.addEventListener("click", (event) => {
+    if (settings.open && !settings.contains(event.target)) close();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (settings.open && !settings.contains(event.target)) close();
+  });
+  settings.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && settings.open) {
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    }
+  });
+  // Close before existing action handlers open dialogs so focus returns to
+  // the visible settings trigger when those dialogs are dismissed.
+  settings.addEventListener("click", (event) => {
+    const action = event.target.closest("button");
+    if (action) {
+      activeDialog = actionDialogs[action.id] || null;
+      close(true);
+    }
+  }, true);
 }
 
 function renderGroupLeaderboard() {
