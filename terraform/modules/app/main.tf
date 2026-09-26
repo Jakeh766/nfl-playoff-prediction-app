@@ -1056,6 +1056,27 @@ resource "aws_cloudwatch_event_rule" "results_update" {
   schedule_expression = var.results_update_schedule
 }
 
+# Archive with the API's existing table permissions; ingestion remains read/write
+# only on season results. Snapshots are conditional and safe to retry.
+resource "aws_cloudwatch_event_rule" "group_history" {
+  name                = "${local.resource_prefix}-group-history"
+  description         = "Preserve completed group seasons for career standings"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "group_history" {
+  rule = aws_cloudwatch_event_rule.group_history.name
+  arn  = aws_lambda_function.backend.arn
+}
+
+resource "aws_lambda_permission" "eventbridge_group_history" {
+  statement_id  = "AllowEventBridgeGroupHistory"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.backend.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.group_history.arn
+}
+
 resource "aws_cloudwatch_event_target" "results_updater" {
   rule = aws_cloudwatch_event_rule.results_update.name
   arn  = aws_lambda_function.results_updater.arn

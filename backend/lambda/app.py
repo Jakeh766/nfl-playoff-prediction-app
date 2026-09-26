@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+from datetime import datetime
 from contextvars import ContextVar
 import hashlib
 import hmac
@@ -327,8 +328,8 @@ def scan_all(table) -> list[dict]:
         scan_arguments["ExclusiveStartKey"] = last_key
 
 
-def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic") -> dict:
-    results = load_season_results()
+def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic", *, history=False, results=None) -> dict:
+    results = results if results is not None else load_season_results()
     profiles = {
         item["profileKey"].removeprefix("user#"): item
         for item in scan_all(profiles_table())
@@ -355,6 +356,7 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
+                **({"memberId": prediction["profileKey"]} if history else {}),
                 "superBowl": predicted_picks.get("superBowl", ""),
                 "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total")}
                            for mode, value in scores.items()},
@@ -1345,7 +1347,107 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
         **build_leaderboard(member_ids, group.get("scoringOption", "classic")),
         "groupId": group_id,
         "groupName": group["groupName"],
+        "history": get_group_history(group_id),
     }
+
+
+def get_group_history(group_id: str) -> dict:
+    """Only called after the caller's group membership has been verified."""
+    seasons = sorted((item for item in scan_all(groups_table())
+                      if item.get("recordType") == "groupSeason"
+                      and item.get("groupId") == group_id
+                      and item.get("sport") == SPORT.get()),
+                     key=lambda item: item["season"], reverse=True)
+    totals = {}
+    public_seasons = []
+    for season in seasons:
+        champions = []
+        for entry in season["entries"]:
+            # Stable identity keeps name changes from splitting career records.
+            member = totals.setdefault(entry["memberId"], {
+                "leaderboardName": entry["leaderboardName"],
+                "seasons": 0, "titles": 0, "total": 0,
+            })
+            member["seasons"] += 1
+            member["total"] += entry["total"]
+            if entry["champion"]:
+                member["titles"] += 1
+                champions.append(entry["leaderboardName"])
+        public_seasons.append({"season": season["season"], "champions": champions,
+                               "scoringOption": season["scoringOption"]})
+    standings = sorted(totals.values(), key=lambda row: (
+        -row["titles"], -row["total"], row["leaderboardName"].casefold()))
+    previous = None
+    for index, row in enumerate(standings, 1):
+        score = (row["titles"], row["total"])
+        row["rank"] = index if score != previous else standings[index - 2]["rank"]
+        previous = score
+    return {"seasons": public_seasons, "standings": standings}
+
+
+def archive_completed_group_seasons() -> dict:
+    """Scheduled, idempotent snapshots; never infer history from live standings."""
+    table = groups_table()
+    items = scan_all(table)
+    existing = {item["groupKey"] for item in items if item.get("recordType") == "groupSeason"}
+    saved = 0
+    for sport in ("nfl", "nba"):
+        token = SPORT.set(sport)
+        try:
+            results = load_season_results()
+            if not results.get("roundWinners", {}).get("superBowlChampion"):
+                continue
+            # Exclude groups/members created after the final result was recorded.
+            if not results.get("updatedAt"):
+                continue
+            cutoff = int(datetime.fromisoformat(results["updatedAt"].replace("Z", "+00:00")).timestamp() * 1000)
+            # NBA ingestion continues updating updatedAt after the Finals. Pin
+            # the first final cutoff so later groups cannot inherit that season.
+            cutoff_key = f"historyFinal#{sport}#{results['season']}"
+            try:
+                table.put_item(Item={"groupKey": cutoff_key, "recordType": "historyFinal",
+                                     "cutoff": cutoff}, ConditionExpression="attribute_not_exists(groupKey)")
+            except Exception as error:
+                if not is_conditional_failure(error):
+                    raise
+            cutoff = table.get_item(Key={"groupKey": cutoff_key}, ConsistentRead=True)["Item"]["cutoff"]
+            boards = {}
+            for group in items:
+                if group.get("recordType") != "group" or sport not in group_sports(group):
+                    continue
+                key = f"history#{group['groupId']}#{sport}#{results['season']}"
+                if key in existing or group.get("createdAt", cutoff + 1) > cutoff:
+                    continue
+                members = {item["userId"] for item in items
+                           if item.get("recordType") == "membership"
+                           and item.get("groupId") == group["groupId"]
+                           and item.get("joinedAt", cutoff + 1) <= cutoff}
+                mode = group.get("scoringOption", "classic")
+                if mode not in boards:
+                    all_members = {item["userId"] for item in items if item.get("recordType") == "membership"}
+                    boards[mode] = build_leaderboard(all_members, mode, history=True, results=results)["entries"]
+                entries = [entry for entry in boards[mode] if entry["memberId"] in members]
+                if not entries:
+                    continue
+                best = max((entry["total"], entry["regularSeason"], entry["playoffs"]) for entry in entries)
+                snapshot = {
+                    "groupKey": key, "recordType": "groupSeason", "groupId": group["groupId"],
+                    "sport": sport, "season": results["season"], "scoringOption": mode,
+                    "entries": [{"memberId": entry["memberId"], "leaderboardName": entry["leaderboardName"],
+                                 "total": entry["total"], "champion": best[0] > 0 and
+                                 (entry["total"], entry["regularSeason"], entry["playoffs"]) == best}
+                                for entry in entries],
+                }
+                try:
+                    table.put_item(Item=json.loads(json.dumps(snapshot), parse_float=Decimal),
+                                   ConditionExpression="attribute_not_exists(groupKey)")
+                    saved += 1
+                except Exception as error:
+                    if not is_conditional_failure(error):
+                        raise
+        finally:
+            SPORT.reset(token)
+    return {"archived": saved}
 
 
 def list_group_members(group_id: str, user_id: str) -> dict:
@@ -1458,7 +1560,7 @@ def delete_group(group_id: str, user_id: str) -> None:
         raise PermissionError("Only the group commissioner can delete this group")
 
     for item in items:
-        if item.get("recordType") == "membership" and item.get("groupId") == group_id:
+        if item.get("recordType") in ("membership", "groupSeason") and item.get("groupId") == group_id:
             table.delete_item(Key={"groupKey": item["groupKey"]})
 
     try:
@@ -1516,6 +1618,8 @@ def authenticated_user_id(event: dict) -> str | None:
 
 
 def handler(event, context):
+    if event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event":
+        return archive_completed_group_seasons()
     sport = (event.get("queryStringParameters") or {}).get("sport", "nfl")
     if sport not in ("nfl", "nba"):
         return response(400, {"message": "Unknown sport"})

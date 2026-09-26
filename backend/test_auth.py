@@ -63,7 +63,7 @@ class FakeGroupTable:
     def __init__(self, items=None):
         self.items = dict(items or {})
 
-    def get_item(self, *, Key):
+    def get_item(self, *, Key, ConsistentRead=False):
         item = self.items.get(Key["groupKey"])
         return {"Item": item} if item else {}
 

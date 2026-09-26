@@ -609,6 +609,9 @@ async function loadLeaderboard() {
 
 function renderGroups() {
   if (!elements.groupTabs) return;
+  const history = document.querySelector("#group-history");
+  if (history) history.open = false;
+  renderGroupHistory();
   const activeGroup = state.groups.find(
     (group) => group.groupId === state.activeGroupId,
   );
@@ -662,6 +665,7 @@ function renderGroups() {
 }
 
 function renderGroupLeaderboard() {
+  renderGroupHistory();
   const leaderboard = state.groupLeaderboard;
   const mode = leaderboard?.scoringOption || "classic";
   const entries = rankLeaderboardEntries(leaderboard?.entries || [], mode);
@@ -678,6 +682,7 @@ function renderGroupLeaderboard() {
 
 async function loadGroupLeaderboard(groupId = state.activeGroupId) {
   if (!groupId) return;
+  renderGroupHistory();
   elements.groupLeaderboardStatus.textContent = "Loading group leaderboard…";
   try {
     const leaderboard = await apiRequest(
@@ -695,6 +700,72 @@ async function loadGroupLeaderboard(groupId = state.activeGroupId) {
     elements.groupLeaderboardStatus.textContent =
       "The group leaderboard could not be loaded.";
     elements.groupLeaderboardStatus.title = error.message;
+    renderGroupHistory(true);
+  }
+}
+
+function renderGroupHistory(failed = false) {
+  const container = document.querySelector("#group-history-content");
+  if (!container) return;
+  container.replaceChildren();
+  const add = (tag, text, parent = container, className = "") => {
+    const node = document.createElement(tag);
+    node.textContent = text;
+    node.className = className;
+    parent.appendChild(node);
+    return node;
+  };
+  if (!state.groupLeaderboard || failed) {
+    add("p", failed ? "Group history could not be loaded. Refresh to try again." : "Loading group history…");
+    return;
+  }
+  const history = state.groupLeaderboard.history;
+  if (!history) {
+    add("p", "Group history is unavailable. Refresh to try again.");
+    return;
+  }
+  const sport = IS_NBA ? "NBA" : "NFL";
+  add("p", `${sport} · Completed seasons only. Current-season scores stay in the leaderboard above.`, container, "input-hint");
+  if (!history.seasons.length) {
+    const empty = add("div", "", container, "group-history-empty");
+    add("h4", "Your group’s story starts here.", empty);
+    add("p", "No completed seasons yet. After your first season ends, your champions and all-time standings will appear here.", empty);
+  }
+  add("h4", "Group champions");
+  if (!history.seasons.length) {
+    add("p", "The first title is still up for grabs.", container, "input-hint");
+  } else {
+    const list = add("ol", "", container, "group-history-champions");
+    for (const season of history.seasons) {
+      const item = add("li", "", list);
+      add("span", String(season.season), item, "group-history-year");
+      add("strong", season.champions.length ? season.champions.join(" & ") : "No champion", item);
+      add("span", `${season.champions.length > 1 ? "Shared title · " : ""}${season.scoringOption === "vegas" ? "Upset Edge" : "Classic"}`, item, "input-hint");
+    }
+  }
+  add("h4", "All-time standings");
+  if (!history.standings.length) {
+    add("p", "Titles, seasons played, and total points will build up here with each completed season.", container, "input-hint");
+    return;
+  }
+  add("p", "Ranked by titles, then total points. Tied records share a rank.", container, "input-hint");
+  const shell = add("div", "", container, "leaderboard-table-shell");
+  shell.tabIndex = 0;
+  shell.setAttribute("role", "region");
+  shell.setAttribute("aria-label", "All-time group standings");
+  const table = add("table", "", shell, "leaderboard-table group-history-table");
+  const head = add("tr", "", add("thead", "", table));
+  for (const label of ["Rank", "Player", "Titles", "Seasons", "Total points"]) {
+    add("th", label, head).scope = "col";
+  }
+  const body = add("tbody", "", table);
+  for (const entry of history.standings) {
+    const row = add("tr", "", body);
+    add("td", String(entry.rank), row);
+    add("th", entry.leaderboardName, row).scope = "row";
+    add("td", String(entry.titles), row);
+    add("td", String(entry.seasons), row);
+    add("td", formatLeaderboardScore(entry.total, state.groupLeaderboard.scoringOption === "vegas" ? 2 : 0), row);
   }
 }
 
