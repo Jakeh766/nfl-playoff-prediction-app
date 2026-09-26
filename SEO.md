@@ -6,13 +6,17 @@ build step. The production canonical origin is https://predictplayoffs.com.
 ## Public pages
 
 - `/`: challenge introduction, instructions, and links are in the initial HTML.
+- `/nba`: 2026–27 NBA challenge introduction and links are in the initial HTML.
 - `/scoring`: standalone scoring rules are in the initial HTML.
 - `/leaderboard`: public standings, with rows loaded from the public API. Private
   groups still require authentication and are not separate sitemap URLs.
 
-These three canonical URLs are in `frontend/sitemap.xml`. `/picks` has a static
+These four canonical URLs are in `frontend/sitemap.xml`. `/picks` has a static
 `noindex,follow` directive and is excluded from the sitemap. Account dialogs,
 invitation query strings, and API/auth endpoints are not sitemap entries.
+The NBA scoring and leaderboard views still use `?sport=nba`; their shared
+static HTML is not listed as a separate NBA URL. Older `/?sport=nba` links still
+work and set their canonical to `/nba` after JavaScript loads.
 
 The initial audit found no homepage authentication gate, no production noindex,
 and no SPA custom-error fallback. Canonical/social metadata, crawl files, and dev
@@ -38,12 +42,15 @@ CloudFront distribution update to finish before checking response headers.
 
 The favicon, 180px Apple touch icon, and 1200x630 social preview all reuse the
 existing trophy SVG and site palette. The editable social-card source is
-`frontend/assets/predict-playoffs-social.svg`; its PNG export is the file used by
-Open Graph and Twitter metadata. Raster derivatives can be regenerated with Sharp,
+`frontend/assets/predict-playoffs-social.svg`; its current PNG export is
+`frontend/assets/predict-playoffs-social-v2.png`, the file used by Open Graph and
+Twitter metadata. The earlier PNG URL remains published for existing shares.
+Raster derivatives can be regenerated with Sharp,
 and the multi-size ICO can be regenerated from the mark with Pillow.
 JSON-LD describes a WebApplication; pricing, reviews, and ratings are omitted.
-Update the homepage title, descriptions, visible year, schema, and corresponding
-tests together for future seasons.
+The social card names both leagues. Update both homepage titles, descriptions,
+visible years, schema, social card, and corresponding tests together for future
+seasons.
 
 ## Google Search Console (manual, after production deployment)
 
@@ -56,7 +63,7 @@ tests together for future seasons.
 3. Alternatively, for a URL-prefix property, put Google's actual verification meta
    tag in the static `<head>` of `frontend/index.html` and deploy it. Do not use a
    placeholder token. DNS verification avoids changing application files.
-4. Submit `https://predictplayoffs.com/sitemap.xml`. Inspect the homepage, scoring,
+4. Submit `https://predictplayoffs.com/sitemap.xml`. Inspect both homepages, scoring,
    and leaderboard URLs with URL Inspection and request indexing as appropriate.
    Confirm Google's selected canonical and monitor indexing reports. These changes
    make pages eligible for indexing; Google decides whether and when to index them.
@@ -64,8 +71,9 @@ tests together for future seasons.
 Check these production URLs after the changes are explicitly promoted to `prod`:
 
 - https://predictplayoffs.com/ — HTTP 200, HTML metadata, no noindex response header.
+- https://predictplayoffs.com/nba — HTTP 200, NBA HTML metadata, self-canonical.
 - https://predictplayoffs.com/robots.txt — HTTP 200, text/plain, actual robots rules.
-- https://predictplayoffs.com/sitemap.xml — HTTP 200, application/xml, three URLs.
+- https://predictplayoffs.com/sitemap.xml — HTTP 200, application/xml, four URLs.
 - https://predictplayoffs.com/scoring — HTTP 200, self-canonical.
 - https://predictplayoffs.com/leaderboard — HTTP 200, self-canonical, public data.
 

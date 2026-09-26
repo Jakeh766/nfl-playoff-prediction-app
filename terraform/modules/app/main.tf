@@ -18,6 +18,10 @@ locals {
       source       = "${var.frontend_dir}/index.html"
       content_type = "text/html; charset=utf-8"
     }
+    "nba" = {
+      source       = "${var.frontend_dir}/nba.html"
+      content_type = "text/html; charset=utf-8"
+    }
     "favicon.ico" = {
       source       = "${var.frontend_dir}/favicon.ico"
       content_type = "image/x-icon"
@@ -84,6 +88,10 @@ locals {
     }
     "assets/predict-playoffs-social.png" = {
       source       = "${var.frontend_dir}/assets/predict-playoffs-social.png"
+      content_type = "image/png"
+    }
+    "assets/predict-playoffs-social-v2.png" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-social-v2.png"
       content_type = "image/png"
     }
     "assets/nba-western-conference.png" = {

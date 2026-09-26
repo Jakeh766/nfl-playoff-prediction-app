@@ -3,34 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Make your 2026 NFL playoff predictions, build your playoff bracket, compete with friends, and see how your picks rank on the leaderboard." />
-    <title>Predict Playoffs | 2026 NFL Playoff Prediction Challenge</title>
+    <meta name="description" content="Predict the 2026–27 NBA playoffs: seed 16 teams, build your bracket through the NBA Finals, and compete with friends." />
+    <title>Predict Playoffs | 2026–27 NBA Playoff Predictor</title>
     <meta name="robots" content="index,follow" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Predict Playoffs" />
-    <meta property="og:title" content="Predict Playoffs | 2026 NFL Playoff Prediction Challenge" />
-    <meta property="og:description" content="Make your 2026 NFL playoff predictions, build your playoff bracket, compete with friends, and see how your picks rank on the leaderboard." />
-    <meta property="og:url" content="https://predictplayoffs.com/" />
+    <meta property="og:title" content="Predict Playoffs | 2026–27 NBA Playoff Predictor" />
+    <meta property="og:description" content="Predict the 2026–27 NBA playoffs: seed 16 teams, build your bracket through the NBA Finals, and compete with friends." />
+    <meta property="og:url" content="https://predictplayoffs.com/nba" />
     <meta property="og:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Predict Playoffs | 2026 NFL Playoff Prediction Challenge" />
-    <meta name="twitter:description" content="Make your 2026 NFL playoff predictions, build your playoff bracket, compete with friends, and see how your picks rank on the leaderboard." />
+    <meta name="twitter:title" content="Predict Playoffs | 2026–27 NBA Playoff Predictor" />
+    <meta name="twitter:description" content="Predict the 2026–27 NBA playoffs: seed 16 teams, build your bracket through the NBA Finals, and compete with friends." />
     <meta name="twitter:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
     <meta name="twitter:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
-    <link rel="canonical" href="https://predictplayoffs.com/" />
+    <link rel="canonical" href="https://predictplayoffs.com/nba" />
     <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "Predict Playoffs",
-  "url": "https://predictplayoffs.com/",
+  "url": "https://predictplayoffs.com/nba",
   "applicationCategory": "SportsApplication",
   "operatingSystem": "Web browser",
-  "description": "Make your 2026 NFL playoff predictions, build your playoff bracket, compete with friends, and see how your picks rank on the leaderboard."
+  "description": "Predict the 2026–27 NBA playoffs: seed 16 teams, build your bracket through the NBA Finals, and compete with friends."
 }
     </script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -68,13 +68,13 @@
 
       <section class="home-hero">
         <div class="home-hero-copy">
-          <p class="eyebrow">CALL IT BEFORE KICKOFF</p>
-          <h1>Predict the 2026<br />NFL Playoffs.</h1>
-          <p class="hero-description">Choose the 14 NFL playoff teams, seed the AFC and NFC, and predict every playoff winner through the Super Bowl. Compete with friends on the leaderboard.</p>
+          <p class="eyebrow">CALL IT BEFORE TIP-OFF</p>
+          <h1>Predict the 2026–27<br />NBA Playoffs.</h1>
+          <p class="hero-description">Rank the 16 NBA playoff teams in the East and West, then pick every series winner through the NBA Finals. Compete with friends on the leaderboard.</p>
           <div class="hero-actions">
             <a class="button button-primary button-large button-hero" href="/picks" data-clean-route="/picks">Make My Picks</a>
             <a class="text-link" href="/scoring" data-clean-route="/scoring">See how scoring works</a>
-            <a class="text-link" href="/nba" data-no-sport-copy>Looking for NBA playoff predictions?</a>
+            <a class="text-link" href="/" data-no-sport-copy>Looking for NFL playoff predictions?</a>
           </div>
         </div>
         <div class="kickoff-countdown" id="kickoff-countdown" aria-labelledby="kickoff-countdown-label">
@@ -86,9 +86,9 @@
             <span><strong id="countdown-seconds">--</strong><small>Seconds</small></span>
           </div>
           <strong class="dev-unlock-headline hidden" id="dev-unlock-headline">Picks are open.</strong>
-          <time id="kickoff-lock-time">Loading the NFL kickoff deadline…</time>
+          <time id="kickoff-lock-time">Loading the NBA tip-off deadline…</time>
           <p class="countdown-status" id="countdown-status" role="status"></p>
-          <div class="countdown-stats" aria-hidden="true"><span>14 <small>TEAMS</small></span><span>300 <small>CLASSIC POINTS</small></span></div>
+          <div class="countdown-stats" aria-hidden="true"><span>16 <small>TEAMS</small></span><span>300 <small>CLASSIC POINTS</small></span></div>
         </div>
       </section>
 
@@ -100,7 +100,7 @@
           </div>
         </div>
         <ol class="steps-list">
-          <li><span>01</span><div><strong>Pick playoff teams</strong><p>Choose every division winner and wild card.</p></div></li>
+          <li><span>01</span><div><strong>Pick playoff teams</strong><p>Rank eight playoff teams from each conference.</p></div></li>
           <li><span>02</span><div><strong>Build your bracket</strong><p>Advance a winner through every playoff round.</p></div></li>
           <li><span>03</span><div><strong>Compete all season</strong><p>Climb the public standings or challenge a private group.</p></div></li>
         </ol>
@@ -151,7 +151,7 @@
               <thead><tr>
                 <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                 <th scope="col" class="leaderboard-player-heading">Player</th>
-                <th scope="col" class="leaderboard-champion-heading" aria-label="Super Bowl pick"></th>
+                <th scope="col" class="leaderboard-champion-heading" aria-label="NBA Finals pick"></th>
                 <th scope="col" data-sort-key="field" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="field" data-sort-label="Field and seeding" aria-label="Sort by field and seeding, descending"><span>Field + seeding</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                 <th scope="col" data-sort-key="playoffs" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="playoffs" data-sort-label="Playoffs" aria-label="Sort by playoffs, descending"><span>Playoffs</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                 <th scope="col" data-sort-key="total" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="total" data-sort-label="Classic total" aria-label="Sort by Classic total, descending"><span data-score-label>Classic total</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>

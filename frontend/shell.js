@@ -306,10 +306,20 @@ document.querySelectorAll(".sport-selector button").forEach(button => button.add
     return;
   }
   const url = new URL(window.location.href);
-  url.searchParams.set("sport", sport);
+  if (["/", "/nba"].includes(url.pathname) && !localPreview) {
+    url.pathname = sport === "nba" ? "/nba" : "/";
+    url.searchParams.delete("sport");
+  } else if (sport === "nba") {
+    url.searchParams.set("sport", sport);
+  } else {
+    url.searchParams.delete("sport");
+  }
   url.searchParams.delete("invite");
   window.location.assign(url.href);
 }));
+if (IS_NBA && pageName === "home") {
+  document.querySelector('link[rel="canonical"]')?.setAttribute("href", "https://predictplayoffs.com/nba");
+}
 if (IS_NBA) applyNbaPresentation();
 
 function applyNbaPresentation() {
@@ -328,10 +338,11 @@ function applyNbaPresentation() {
     ["Pick each North, South, East, and West winner first. Rank those four teams as seeds 1–4, then choose three wild cards. The No. 1 seeds earn a first-round bye.", "Rank the final eight playoff teams in each conference, after the Play-In. Pick each best-of-seven series winner through the NBA Finals. No byes or reseeding."],
     ["pick every game", "pick every series"], ["PICK EVERY GAME", "PICK EVERY SERIES"],
   ]);
+  if (window.location.pathname === "/nba") copy.delete("Predict the 2026");
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (node.parentElement.closest("script, style, select, .sport-selector")) continue;
+    if (node.parentElement.closest("script, style, select, .sport-selector, [data-no-sport-copy]")) continue;
     let value = node.nodeValue;
     for (const [from, to] of copy) value = value.split(from).join(to);
     node.nodeValue = value;

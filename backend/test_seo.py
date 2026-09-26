@@ -34,7 +34,7 @@ class Page(HTMLParser):
 
 class SeoTests(unittest.TestCase):
     def test_public_pages(self):
-        for filename, route in [("index.html", "/"), ("scoring.html", "/scoring"), ("leaderboard.html", "/leaderboard")]:
+        for filename, route in [("index.html", "/"), ("nba.html", "/nba"), ("scoring.html", "/scoring"), ("leaderboard.html", "/leaderboard")]:
             with self.subTest(page=filename):
                 page = Page(filename)
                 self.assertEqual(len(page.select("title")), 1)
@@ -51,26 +51,38 @@ class SeoTests(unittest.TestCase):
         page = Page("index.html")
         self.assertIn("<title>Predict Playoffs | 2026 NFL Playoff Prediction Challenge</title>", page.html)
         self.assertIn("Predict the 2026<br />NFL Playoffs.", page.html)
+        self.assertIn('href="/nba" data-no-sport-copy', page.html)
         for text in ["14 NFL playoff teams", "AFC and NFC", "Super Bowl", "Compete with friends"]:
             self.assertIn(text, page.html)
-        for prop in ["og:title", "og:site_name", "og:description", "og:url", "og:image"]:
-            self.assertEqual(len(page.select("meta", property=prop)), 1)
-        self.assertEqual(page.select("meta", property="og:url")[0]["content"], BASE + "/")
-        for attr, key in [("property", "og:image"), ("name", "twitter:image")]:
-            url = page.select("meta", **{attr: key})[0]["content"]
-            self.assertTrue(url.startswith(BASE + "/assets/"))
-            asset = ROOT / "frontend" / url.removeprefix(BASE + "/")
-            self.assertEqual(png_size(asset), (1200, 630))
-            self.assertIn('"assets/' + asset.name + '"', (ROOT / "terraform/modules/app/main.tf").read_text())
-        self.assertEqual(page.select("meta", property="og:image:width")[0]["content"], "1200")
-        self.assertEqual(page.select("meta", property="og:image:height")[0]["content"], "630")
-        self.assertEqual(page.select("meta", name="twitter:card")[0]["content"], "summary_large_image")
-        schema = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', page.html, re.S)[1])
-        self.assertEqual(schema["name"], "Predict Playoffs")
-        self.assertEqual(schema["url"], BASE + "/")
-        self.assertEqual(schema["@type"], "WebApplication")
-        self.assertNotIn("aggregateRating", schema)
-        self.assertNotIn("review", schema)
+
+        nba = Page("nba.html")
+        self.assertIn("<title>Predict Playoffs | 2026–27 NBA Playoff Predictor</title>", nba.html)
+        self.assertIn("Predict the 2026–27<br />NBA Playoffs.", nba.html)
+        self.assertIn('href="/" data-no-sport-copy', nba.html)
+        for text in ["16 NBA playoff teams", "East and West", "NBA Finals", "Compete with friends"]:
+            self.assertIn(text, nba.html)
+
+        for filename, route in [("index.html", "/"), ("nba.html", "/nba")]:
+            with self.subTest(page=filename):
+                page = Page(filename)
+                for prop in ["og:title", "og:site_name", "og:description", "og:url", "og:image"]:
+                    self.assertEqual(len(page.select("meta", property=prop)), 1)
+                self.assertEqual(page.select("meta", property="og:url")[0]["content"], BASE + route)
+                for attr, key in [("property", "og:image"), ("name", "twitter:image")]:
+                    url = page.select("meta", **{attr: key})[0]["content"]
+                    self.assertTrue(url.startswith(BASE + "/assets/"))
+                    asset = ROOT / "frontend" / url.removeprefix(BASE + "/")
+                    self.assertEqual(png_size(asset), (1200, 630))
+                    self.assertIn('"assets/' + asset.name + '"', (ROOT / "terraform/modules/app/main.tf").read_text())
+                self.assertEqual(page.select("meta", property="og:image:width")[0]["content"], "1200")
+                self.assertEqual(page.select("meta", property="og:image:height")[0]["content"], "630")
+                self.assertEqual(page.select("meta", name="twitter:card")[0]["content"], "summary_large_image")
+                schema = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', page.html, re.S)[1])
+                self.assertEqual(schema["name"], "Predict Playoffs")
+                self.assertEqual(schema["url"], BASE + route)
+                self.assertEqual(schema["@type"], "WebApplication")
+                self.assertNotIn("aggregateRating", schema)
+                self.assertNotIn("review", schema)
 
     def test_icons_exist_at_declared_sizes_and_are_published(self):
         expected_links = [
@@ -79,7 +91,7 @@ class SeoTests(unittest.TestCase):
             ("icon", "/assets/favicon-32x32.png"),
             ("apple-touch-icon", "/apple-touch-icon.png"),
         ]
-        for filename in ["index.html", "picks.html", "leaderboard.html", "scoring.html"]:
+        for filename in ["index.html", "nba.html", "picks.html", "leaderboard.html", "scoring.html"]:
             page = Page(filename)
             with self.subTest(page=filename):
                 for rel, href in expected_links:
@@ -106,11 +118,12 @@ class SeoTests(unittest.TestCase):
         sitemap = ET.parse(ROOT / "frontend/sitemap.xml")
         self.assertEqual(sitemap.getroot().tag, "{http://www.sitemaps.org/schemas/sitemap/0.9}urlset")
         urls = [node.text for node in sitemap.findall("{*}url/{*}loc")]
-        self.assertEqual(urls, [BASE + "/", BASE + "/scoring", BASE + "/leaderboard"])
+        self.assertEqual(urls, [BASE + "/", BASE + "/nba", BASE + "/scoring", BASE + "/leaderboard"])
         self.assertEqual(Page("picks.html").select("meta", name="robots")[0]["content"], "noindex,follow")
 
     def test_environment_and_publication_guards(self):
         config = (ROOT / "terraform/modules/app/main.tf").read_text()
+        self.assertRegex(config, r'"nba"\s*=\s*\{\s*source\s*=\s*"\$\{var.frontend_dir\}/nba.html"\s*content_type\s*=\s*"text/html; charset=utf-8"')
         for filename, mime in [("robots.txt", "text/plain"), ("sitemap.xml", "application/xml")]:
             self.assertRegex(config, '"' + re.escape(filename) + r'"\s*=\s*\{\s*source\s*=\s*"\$\{var.frontend_dir\}/' + re.escape(filename) + r'"\s*content_type\s*=\s*"' + mime)
         self.assertRegex(config, r'count\s*= var.environment == "prod" \? 0 : 1')

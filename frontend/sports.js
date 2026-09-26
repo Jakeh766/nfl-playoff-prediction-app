@@ -1,5 +1,5 @@
-// League is explicit in shareable URLs; NFL remains the legacy default.
-const SPORT = new URLSearchParams(window.location.search).get("sport") === "nba" ? "nba" : "nfl";
+// The NBA homepage has a crawlable route; query strings remain valid for other pages and old links.
+const SPORT = window.location.pathname === "/nba" || new URLSearchParams(window.location.search).get("sport") === "nba" ? "nba" : "nfl";
 const IS_NBA = SPORT === "nba";
 const CONFERENCES = IS_NBA ? ["West", "East"] : ["AFC", "NFC"];
 const NBA_CONFERENCE_LOGOS = {
@@ -119,6 +119,7 @@ const NBA_LOGOS = {
 };
 function sportUrl(path) {
   if (!IS_NBA) return path;
+  if (path === "/" && !["localhost", "127.0.0.1"].includes(window.location.hostname)) return "/nba";
   const url = new URL(path, window.location.origin);
   url.searchParams.set("sport", SPORT);
   return url.pathname + url.search + url.hash;
