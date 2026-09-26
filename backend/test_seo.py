@@ -207,10 +207,16 @@ class SeoTests(unittest.TestCase):
         rendering = re.search(r'locals \{\n  # One content-derived release version.*?\n\}', config, re.S)[0]
         fixture = 'variable "frontend_dir" { default = ' + json.dumps((ROOT / "frontend").as_posix()) + ' }\n'
         fixture += 'locals {\n' + assets + '\n}\n' + rendering
+        terraform = Path(shutil.which("terraform"))
+        # setup-terraform's output wrapper does not forward console stdin.
+        # Its sibling binary works in both dev and prod CI without workflow changes.
+        binary = terraform.with_name("terraform-bin" + terraform.suffix)
+        if binary.is_file():
+            terraform = binary
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "main.tf").write_text(fixture, encoding="utf-8")
             result = subprocess.run(
-                ["terraform", "console", "-no-color"], cwd=directory,
+                [str(terraform), "console", "-no-color"], cwd=directory,
                 input='jsonencode({ version = local.frontend_version, pages = local.frontend_pages })\n',
                 capture_output=True, text=True, encoding="utf-8", timeout=30,
             )
