@@ -117,6 +117,9 @@ function createPublicConferenceBracket(conference, bracket) {
     ? NBA_CONFERENCE_LOGOS[conference]
     : `https://a.espncdn.com/i/teamlogos/nfl/500/${conference.toLowerCase()}.png`;
   logo.alt = `${conference} logo`;
+  logo.width = 64;
+  logo.height = 64;
+  logo.decoding = "async";
   const label = document.createElement("span");
   label.textContent = conference;
   heading.append(logo, label);

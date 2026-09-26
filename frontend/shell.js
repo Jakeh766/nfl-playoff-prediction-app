@@ -7,7 +7,7 @@ if (header) {
   header.className = "site-header";
   header.innerHTML = `
     <a class="brand" href="${sportUrl("/")}" aria-label="Predict Playoffs home">
-      <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
+      <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
       <span class="brand-name">PREDICT PLAYOFFS</span>
     </a>
     <div class="sport-selector" role="group" aria-label="Sport">
@@ -301,19 +301,7 @@ if (dialogs) {
   `;
 }
 
-const footer = document.querySelector("#site-footer");
-if (footer) {
-  footer.innerHTML = `
-    <div class="footer-brand">
-      <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
-      <div class="footer-wordmark">
-        <span>PREDICT PLAYOFFS</span>
-        <small>CALL IT BEFORE KICKOFF</small>
-      </div>
-    </div>
-    <p>Your account details stay private. Not affiliated with the NFL or NBA.</p>
-  `;
-}
+// Footer content and navigation are in the initial HTML for every visitor.
 
 {
   document.querySelectorAll("a[data-clean-route]").forEach((link) => {
@@ -347,7 +335,7 @@ if (IS_NBA) applyNbaPresentation();
 
 function applyNbaPresentation() {
   document.body.dataset.sport = "nba";
-  document.title = document.title.replace("NFL", "NBA");
+  if (pageName === "home") document.title = document.title.replace("NFL", "NBA");
   const copy = new Map([
     ["Predict the 2026", "Predict the 2026–27"], ["NFL", "NBA"],
     ["Super Bowl", "NBA Finals"], ["SUPER BOWL", "NBA FINALS"],
@@ -381,8 +369,6 @@ function applyNbaPresentation() {
   document.querySelectorAll(".conference-logo-fallback").forEach((node, index) => node.textContent = index ? "E" : "W");
   const stats = document.querySelector(".countdown-stats");
   if (stats) stats.innerHTML = "<span>16 <small>TEAMS</small></span><span>300 <small>CLASSIC POINTS</small></span>";
-  const disclaimer = document.querySelector("#site-footer > p");
-  if (disclaimer) disclaimer.textContent = "Your account details stay private. Not affiliated with the NFL or NBA.";
   const trophy = document.querySelector(".trophy");
   if (trophy) trophy.innerHTML = '<circle cx="32" cy="21" r="18"/><path d="M28 40h8v25H28zM17 65h30v9H17zM11 74h42v11H11z"/><path class="trophy-detail" d="M14 21h36M32 3v36M20 8q24 13 0 26M44 8q-24 13 0 26"/>';
 }

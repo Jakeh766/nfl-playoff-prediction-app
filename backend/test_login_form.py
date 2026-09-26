@@ -446,14 +446,15 @@ class LoginFormTests(unittest.TestCase):
             self.assertIn(f'"{route}" = {{', terraform)
             self.assertIn(f'${{var.frontend_dir}}/{source}', terraform)
 
-    def test_deployed_frontend_files_are_not_browser_cached(self):
+    def test_auth_configuration_remains_uncached(self):
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
         ).read_text(encoding="utf-8")
         cache_directive = (
             'cache_control = "no-store, no-cache, must-revalidate, max-age=0"'
         )
-        self.assertEqual(terraform.count(cache_directive), 2)
+        auth_config = terraform.split('resource "aws_s3_object" "auth_config" {', 1)[1].split('\n}', 1)[0]
+        self.assertIn(cache_directive, auth_config)
 
 
 if __name__ == "__main__":

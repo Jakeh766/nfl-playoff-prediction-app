@@ -43,6 +43,7 @@ jobs:
 
       - name: Check frontend JavaScript syntax
         run: |
+          node --check frontend/sports.js
           node --check frontend/app.js
           node --check frontend/bootstrap.js
           node --check frontend/leaderboard.js
@@ -54,6 +55,9 @@ jobs:
 
       - name: Test account modal autofill compatibility
         run: node --test backend/test_account_modal.cjs
+
+      - name: Test NFL and NBA leaderboard behavior
+        run: node --test backend/test_leaderboard.cjs
 
       - name: Check backend Python syntax
         run: python -m py_compile backend/lambda/app.py backend/lambda/results_updater.py

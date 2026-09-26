@@ -1,4 +1,17 @@
 User-agent: *
 Allow: /
+Allow: /api/leaderboard
+Allow: /api/prediction-window
+Allow: /api/win-totals
+Disallow: /api/
+
+# Search discovery is separate from GPTBot's model-training purpose.
+# This group grants no access to authenticated data; API authorization still applies.
+User-agent: OAI-SearchBot
+Allow: /
+Allow: /api/leaderboard
+Allow: /api/prediction-window
+Allow: /api/win-totals
+Disallow: /api/
 
 Sitemap: https://predictplayoffs.com/sitemap.xml

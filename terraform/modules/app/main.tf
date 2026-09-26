@@ -914,15 +914,61 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
+locals {
+  # One content-derived release version keeps every page on the same JS/CSS set.
+  frontend_version = substr(sha256(join("", [
+    for key in sort(keys(local.frontend_files)) : filemd5(local.frontend_files[key].source)
+    if endswith(key, ".js") || endswith(key, ".css")
+  ])), 0, 16)
+  frontend_pages = {
+    for key, asset in local.frontend_files : key => replace(
+      file(asset.source), "/\\?v=[0-9]+/", "?v=${local.frontend_version}"
+    ) if startswith(asset.content_type, "text/html")
+  }
+}
+
 resource "aws_s3_object" "frontend" {
-  for_each = local.frontend_files
+  for_each = { for key, asset in local.frontend_files : key => asset if !startswith(asset.content_type, "text/html") }
 
   bucket        = aws_s3_bucket.frontend.id
   key           = each.key
   source        = each.value.source
   etag          = filemd5(each.value.source)
   content_type  = each.value.content_type
-  cache_control = "no-store, no-cache, must-revalidate, max-age=0"
+  cache_control = contains(["robots.txt", "sitemap.xml"], each.key) ? "public, max-age=300, must-revalidate" : "public, max-age=86400, must-revalidate"
+}
+
+# Publish HTML only after assets, so a new version cannot cache the previous release.
+resource "aws_s3_object" "frontend_pages" {
+  for_each      = local.frontend_pages
+  bucket        = aws_s3_bucket.frontend.id
+  key           = each.key
+  content       = each.value
+  etag          = md5(each.value)
+  content_type  = "text/html; charset=utf-8"
+  cache_control = "public, max-age=0, s-maxage=60, must-revalidate"
+  depends_on    = [aws_s3_object.frontend]
+}
+
+moved {
+  from = aws_s3_object.frontend["index.html"]
+  to   = aws_s3_object.frontend_pages["index.html"]
+}
+moved {
+  from = aws_s3_object.frontend["nba"]
+  to   = aws_s3_object.frontend_pages["nba"]
+}
+moved {
+  from = aws_s3_object.frontend["scoring"]
+  to   = aws_s3_object.frontend_pages["scoring"]
+}
+moved {
+  from = aws_s3_object.frontend["leaderboard"]
+  to   = aws_s3_object.frontend_pages["leaderboard"]
+}
+moved {
+  from = aws_s3_object.frontend["picks"]
+  to   = aws_s3_object.frontend_pages["picks"]
 }
 
 locals {
@@ -948,6 +994,30 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_cache_policy" "frontend" {
+  name        = "${local.resource_prefix}-frontend-cache"
+  min_ttl     = 0
+  default_ttl = 60
+  max_ttl     = 86400
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+    cookies_config {
+      cookie_behavior = "none"
+    }
+    headers_config {
+      header_behavior = "none"
+    }
+    query_strings_config {
+      query_string_behavior = "whitelist"
+      query_strings {
+        items = ["v"]
+      }
+    }
+  }
 }
 
 resource "aws_cloudfront_cache_policy" "disabled" {
@@ -1117,7 +1187,7 @@ resource "aws_cloudfront_distribution" "app" {
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["GET", "HEAD", "OPTIONS"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
     compress                   = true
   }
 

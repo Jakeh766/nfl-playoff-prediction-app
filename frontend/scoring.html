@@ -3,9 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Learn how Classic and Upset Edge score playoff teams, seeding, and postseason winners." />
-    <title>Scoring — Predict Playoffs</title>
+    <meta name="description" content="Understand playoff team, seeding, and round points for NFL and NBA brackets, plus how fixed preseason win totals weight Upset Edge scores." />
+    <title>NFL &amp; NBA Playoff Scoring Rules | Predict Playoffs</title>
     <meta name="robots" content="index,follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Predict Playoffs" />
+    <meta property="og:title" content="NFL &amp; NBA Playoff Scoring Rules | Predict Playoffs" />
+    <meta property="og:description" content="Understand playoff team, seeding, and round points for NFL and NBA brackets, plus how fixed preseason win totals weight Upset Edge scores." />
+    <meta property="og:url" content="https://predictplayoffs.com/scoring" />
+    <meta property="og:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NFL &amp; NBA Playoff Scoring Rules | Predict Playoffs" />
+    <meta name="twitter:description" content="Understand playoff team, seeding, and round points for NFL and NBA brackets, plus how fixed preseason win totals weight Upset Edge scores." />
+    <meta name="twitter:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
+    <meta name="twitter:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
     <link rel="canonical" href="https://predictplayoffs.com/scoring" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/assets/predict-playoffs-mark.svg" />
@@ -28,7 +43,7 @@
     <main>
       <section class="page-intro compact-page-intro">
         <p class="eyebrow">FOLLOW THE SEASON</p>
-        <h1>Accuracy.<br />With an edge.</h1>
+        <h1>Playoff scoring rules.</h1>
         <p>Build the right playoff field, nail the seeds, and predict which teams keep advancing.</p>
       </section>
       <section class="scoring-section page-section" id="scoring-section">
@@ -104,9 +119,30 @@
         </div>
         <div class="scoring-cta"><div><p class="eyebrow">READY TO CALL IT?</p><h2>Make every pick count.</h2></div><a class="button button-primary button-large" href="/picks" data-clean-route="/picks">Make My Picks</a></div>
       </section>
+      <section class="prediction-guide" aria-labelledby="scoring-reference" data-no-sport-copy>
+        <h2 id="scoring-reference">NFL and NBA scoring at a glance</h2>
+        <p>Both sports have a 300-point perfect Classic bracket. Points follow the team advancing, even if you predicted a different opponent. Incorrect or missing picks earn zero.</p>
+        <h3>NFL Classic points</h3>
+        <p>Each correct playoff team earns 5 points, plus 5 for a correct division winner. Exact seeds add 5 points for a No. 1 seed, 3 for seeds 2–4, and 2 for seeds 5–7. Wild Card winners earn 5, Divisional winners 10, conference champions 20, and the Super Bowl champion 40.</p>
+        <h3>NBA Classic points</h3>
+        <p>Each correct playoff team earns 5 points. Exact seeds add 6 points for a No. 1 seed, 4 for seeds 2–4, and 3 for seeds 5–8. First-round series winners earn 5, conference semifinal winners 10, conference champions 20, and the NBA Finals champion 40. Division winners, Play-In games, and series lengths are not scored.</p>
+        <h3>How Upset Edge weights a pick</h3>
+        <p>Multiply each Classic award by the predicted team’s fixed preseason weight. NFL uses 1 + 0.10 × (8.5 − win total); NBA uses 1 + 0.02 × (41 − win total). Each weighted award is rounded to hundredths before adding. Live projections never change these scoring weights.</p>
+        <p>NFL weights use the fixed 2026 FanDuel/DraftKings snapshot from <a href="https://www.vegasinsider.com/nfl/odds/win-totals/">VegasInsider</a>. NBA weights use the 2026–27 <a href="https://sports.betmgm.com/en/blog/nba/nba-odds-predictions-season-win-totals-bm23/">BetMGM win-total snapshot</a> captured September 22, 2026. These are scoring inputs, not claims that a prediction is accurate.</p>
+        <p>Use the sport selector for the detailed table, <a href="/nba">start an NBA bracket</a>, or compare the <a href="/leaderboard">leaderboard</a>.</p>
+      </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div id="site-dialogs"></div>
-    <footer id="site-footer"></footer>
+    <footer id="site-footer" data-no-sport-copy>
+      <div class="footer-brand">
+        <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
+        <div class="footer-wordmark"><span>PREDICT PLAYOFFS</span><small>Call the season.</small></div>
+      </div>
+      <nav class="footer-links" aria-label="Explore Predict Playoffs">
+        <a href="/">NFL predictor</a><a href="/nba">NBA predictor</a><a href="/scoring">Scoring rules</a><a href="/leaderboard">Leaderboard</a><a href="/picks">Make picks</a>
+      </nav>
+      <p>Predict Playoffs is an independent playoff prediction and bracket competition app. Not affiliated with the NFL or NBA.</p>
+    </footer>
   </body>
 </html>

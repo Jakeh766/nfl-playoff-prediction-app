@@ -1405,6 +1405,9 @@ function createTeamLogo(teamName, className = "team-logo") {
   logo.className = className;
   logo.src = teamLogoUrl(teamName);
   logo.alt = `${teamName} logo`;
+  logo.width = 32;
+  logo.height = 32;
+  logo.decoding = "async";
   logo.loading = "lazy";
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
   return logo;

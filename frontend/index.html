@@ -25,12 +25,58 @@
     <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebApplication",
-  "name": "Predict Playoffs",
-  "url": "https://predictplayoffs.com/",
-  "applicationCategory": "SportsApplication",
-  "operatingSystem": "Web browser",
-  "description": "Make your 2026 NFL playoff predictions, build your playoff bracket, compete with friends, and see how your picks rank on the leaderboard."
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://predictplayoffs.com/#website",
+      "name": "Predict Playoffs",
+      "url": "https://predictplayoffs.com/",
+      "description": "An independent NFL and NBA playoff prediction and bracket competition website.",
+      "about": {
+        "@id": "https://predictplayoffs.com/#application"
+      }
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://predictplayoffs.com/#application",
+      "name": "Predict Playoffs",
+      "url": "https://predictplayoffs.com/",
+      "applicationCategory": "SportsApplication",
+      "operatingSystem": "Web browser",
+      "description": "Create NFL and NBA playoff predictions, seed teams, pick postseason winners, and compare scores on public or private leaderboards.",
+      "isPartOf": {
+        "@id": "https://predictplayoffs.com/#website"
+      },
+      "image": {
+        "@type": "ImageObject",
+        "contentUrl": "https://predictplayoffs.com/assets/predict-playoffs-mark.png",
+        "name": "Predict Playoffs trophy logo"
+      },
+      "about": [
+        {
+          "@type": "Thing",
+          "name": "NFL football"
+        },
+        {
+          "@type": "Thing",
+          "name": "NBA basketball"
+        }
+      ]
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://predictplayoffs.com/#webpage",
+      "url": "https://predictplayoffs.com/",
+      "name": "Predict Playoffs | 2026 NFL Playoff Prediction Challenge",
+      "description": "Make your 2026 NFL playoff predictions, build your playoff bracket, compete with friends, and see how your picks rank on the leaderboard.",
+      "isPartOf": {
+        "@id": "https://predictplayoffs.com/#website"
+      },
+      "mainEntity": {
+        "@id": "https://predictplayoffs.com/#application"
+      }
+    }
+  ]
 }
     </script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -162,9 +208,30 @@
           <p class="empty-leaderboard hidden" id="empty-leaderboard">No scored predictions yet. The first saved prediction will take the top spot.</p>
         </div>
       </section>
+
+      <section class="prediction-guide" aria-labelledby="about-predict-playoffs" data-no-sport-copy>
+        <h2 id="about-predict-playoffs">About Predict Playoffs</h2>
+        <div class="guide-answers">
+        <div><h3>What is Predict Playoffs?</h3><p>Predict Playoffs is an independent web app for NFL and NBA playoff predictions. Build a preseason bracket, save one prediction per sport with your account, and compare your picks with other players.</p></div>
+        <div><h3>How does the NFL predictor work?</h3><p>Choose 14 NFL playoff teams: four division winners and three wild cards in each conference. Seed the AFC and NFC, then pick every round through the Super Bowl. The No. 1 seeds receive a first-round bye.</p></div>
+        <div><h3>When do predictions lock?</h3><p>The season deadline is <time datetime="2026-09-10T00:20:00Z">September 10, 2026 at 00:20 UTC</time>. Save your bracket before that deadline. Once predictions lock, you cannot create or change a saved bracket.</p></div>
+        <div><h3>How are Classic and Upset Edge different?</h3><p>Classic awards points for correct playoff teams, exact seeds, and teams advancing, with a perfect score of 300. Upset Edge multiplies those awards by each team’s fixed preseason win-total weight, giving more weight to lower projected win totals. NFL division winners also earn points. <a href="/scoring">Read the scoring rules</a>.</p></div>
+        <div><h3>Can I compete with friends?</h3><p>Yes. Create or join a private group and compare saved predictions. A group uses its chosen scoring mode, while the public leaderboard lets you compare Classic and Upset Edge. <a href="/leaderboard">View the leaderboard</a> or <a href="/picks">make your picks</a>.</p></div>
+        <div><h3>Which sports are supported?</h3><p>Predict Playoffs supports both football and basketball, with separate brackets and scores. <a href="/nba">Try the NBA playoff predictor</a>. Predict Playoffs is not affiliated with the NFL or NBA.</p></div>
+        </div>
+      </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div id="site-dialogs"></div>
-    <footer id="site-footer"></footer>
+    <footer id="site-footer" data-no-sport-copy>
+      <div class="footer-brand">
+        <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
+        <div class="footer-wordmark"><span>PREDICT PLAYOFFS</span><small>Call the season.</small></div>
+      </div>
+      <nav class="footer-links" aria-label="Explore Predict Playoffs">
+        <a href="/">NFL predictor</a><a href="/nba">NBA predictor</a><a href="/scoring">Scoring rules</a><a href="/leaderboard">Leaderboard</a><a href="/picks">Make picks</a>
+      </nav>
+      <p>Predict Playoffs is an independent playoff prediction and bracket competition app. Not affiliated with the NFL or NBA.</p>
+    </footer>
   </body>
 </html>

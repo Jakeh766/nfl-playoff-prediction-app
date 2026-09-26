@@ -3,9 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Compare Predict Playoffs predictions on the public leaderboard or in a private group." />
-    <title>Leaderboard — Predict Playoffs</title>
+    <meta name="description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. View public brackets or compete with friends in a private group." />
+    <title>NFL &amp; NBA Playoff Prediction Leaderboard | Predict Playoffs</title>
     <meta name="robots" content="index,follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Predict Playoffs" />
+    <meta property="og:title" content="NFL &amp; NBA Playoff Prediction Leaderboard | Predict Playoffs" />
+    <meta property="og:description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. View public brackets or compete with friends in a private group." />
+    <meta property="og:url" content="https://predictplayoffs.com/leaderboard" />
+    <meta property="og:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NFL &amp; NBA Playoff Prediction Leaderboard | Predict Playoffs" />
+    <meta name="twitter:description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. View public brackets or compete with friends in a private group." />
+    <meta name="twitter:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
+    <meta name="twitter:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
     <link rel="canonical" href="https://predictplayoffs.com/leaderboard" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/assets/predict-playoffs-mark.svg" />
@@ -28,7 +43,7 @@
     <main>
       <section class="page-intro compact-page-intro">
         <p class="eyebrow">THE STANDINGS</p>
-        <h1>Leaderboard.</h1>
+        <h1>Playoff prediction leaderboard.</h1>
         <p>Compare public predictions or switch to a private group. Select any player to view their bracket; account details stay private.</p>
       </section>
 
@@ -110,9 +125,24 @@
           </div>
         </div>
       </section>
+      <section class="prediction-guide" aria-labelledby="standings-guide" data-no-sport-copy>
+        <h2 id="standings-guide">Understanding the standings</h2>
+        <p>The public leaderboard compares saved playoff predictions. NFL standings are the default; <a href="/leaderboard?sport=nba">view NBA standings</a> to compare basketball brackets. Scores update as season results become available.</p>
+        <p>Classic totals use fixed point awards. Upset Edge uses each team’s frozen preseason win-total weight. Select a player to view their public bracket, or sign in to view your private groups. Account details stay private.</p>
+        <p>Read the <a href="/scoring">scoring rules for both sports</a> or <a href="/picks">build your prediction</a>. Standings load with JavaScript; they are not editorial rankings or forecasts of which teams will win.</p>
+      </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div id="site-dialogs"></div>
-    <footer id="site-footer"></footer>
+    <footer id="site-footer" data-no-sport-copy>
+      <div class="footer-brand">
+        <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
+        <div class="footer-wordmark"><span>PREDICT PLAYOFFS</span><small>Call the season.</small></div>
+      </div>
+      <nav class="footer-links" aria-label="Explore Predict Playoffs">
+        <a href="/">NFL predictor</a><a href="/nba">NBA predictor</a><a href="/scoring">Scoring rules</a><a href="/leaderboard">Leaderboard</a><a href="/picks">Make picks</a>
+      </nav>
+      <p>Predict Playoffs is an independent playoff prediction and bracket competition app. Not affiliated with the NFL or NBA.</p>
+    </footer>
   </body>
 </html>
