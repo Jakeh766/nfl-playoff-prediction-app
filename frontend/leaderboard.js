@@ -59,6 +59,13 @@ function buildConferenceGames(seeds, picksByConference, conference) {
   return { wildCard, divisional, championship };
 }
 
+function teamsInBracketDisplayOrder(teams) {
+  if (typeof IS_NBA === "undefined" || !IS_NBA) return teams;
+  return [...teams].sort((first, second) =>
+    (first?.seed ?? Infinity) - (second?.seed ?? Infinity),
+  );
+}
+
 function createPublicTeamPick(team, selected) {
   const row = document.createElement("div");
   row.className = "public-team-pick";
@@ -92,7 +99,7 @@ function createPublicGameCard(conference, game, bracket) {
   title.textContent = game.title;
   card.appendChild(title);
   const selected = bracket.picks?.[conference]?.[game.id] || "";
-  game.teams.forEach((team) => {
+  teamsInBracketDisplayOrder(game.teams).forEach((team) => {
     card.appendChild(createPublicTeamPick(team, selected));
   });
   return card;

@@ -460,7 +460,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
     ? state.picks.superBowl
     : state.picks[conference][game.id];
 
-  game.teams.forEach((team, index) => {
+  teamsInBracketDisplayOrder(game.teams).forEach((team, index) => {
     const button = document.createElement("button");
     button.className = "team-pick";
     button.type = "button";
