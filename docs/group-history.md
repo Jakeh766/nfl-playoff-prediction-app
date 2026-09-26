@@ -4,8 +4,12 @@ Expand **Group history** beneath a private group's season leaderboard. History
 is visible only to current group members and is scoped to the selected sport.
 New groups show an empty state until a season has ended and been archived.
 
-An EventBridge schedule invokes the existing API Lambda every 15 minutes using
-its existing DynamoDB permissions. A confirmed championship winner triggers a
+The existing results-update EventBridge schedule also invokes the API Lambda
+using its existing DynamoDB permissions. The deployment role already manages
+this rule, so archiving requires no additional schedule-management permissions.
+Ingestion and archiving run independently; if archiving runs before the final
+results are saved, it captures them on the next scheduled invocation.
+A confirmed championship winner triggers a
 conditional `groupSeason` snapshot in the groups table, keyed by group, sport,
 and season. Retries cannot replace an existing snapshot. Groups and memberships
 created after the first observed final result's `updatedAt` are excluded. A
