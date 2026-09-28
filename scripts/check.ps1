@@ -43,6 +43,7 @@ try {
       "frontend/bootstrap.js",
       "frontend/leaderboard.js",
       "frontend/monitoring.js",
+      "frontend/analytics.js",
       "frontend/picks.js",
       "frontend/scoring.js",
       "frontend/shell.js",
@@ -52,6 +53,7 @@ try {
     }
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_leaderboard.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_account_modal.cjs")
+    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_product_analytics.cjs")
   }
 
   if (Test-Scope "Backend") {

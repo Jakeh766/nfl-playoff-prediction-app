@@ -120,6 +120,38 @@ For the other pages, use `/picks.html`, `/leaderboard.html`, or
 `/scoring.html` when using the basic static server. To inspect the leaderboard
 name dialog, open `http://localhost:8000/?preview=leaderboard-name`.
 
+## Product analytics
+
+The dev Terraform configuration supplies the public GA4 measurement ID and
+Microsoft Clarity project ID through `AUTH_CONFIG.analytics`. The shared module
+defaults both IDs to empty, so production and local static previews do not load
+either provider until explicitly configured. These IDs are public, not secrets.
+
+Every page loads `analytics.js` from its head. Visitors must choose **Allow
+analytics** before optional scripts or first-party analytics requests begin;
+**Analytics settings** in the footer allows withdrawal. GPC and Do Not Track
+disable analytics. The privacy disclosure is available at `/privacy`.
+
+GA4 receives fixed event names only: `sign_up`, `login`, `bracket_started`
+(first valid bracket build), `bracket_completed` (all game winners picked),
+`bracket_saved` (successful save), `group_created`, `group_joined`, and
+`leaderboard_viewed`. Event labels are limited to page, sport, and environment.
+No account IDs, email addresses, group/invite identifiers, or picks are sent.
+Page locations omit query strings/fragments and referrers contain origins only.
+The existing CloudWatch event names are preserved.
+
+Keep GA4 automatic form interactions, site search, and outbound clicks disabled
+to avoid collecting form/link metadata. Keep Clarity strict masking enabled.
+The HTML also masks the body before Clarity loads, and recording is skipped
+when the URL or referrer has any fragment or query other than a valid sport.
+No CSP is defined by the checked-in frontend/CloudFront configuration; this
+integration adds no inline executable scripts or relaxed security policies.
+
+After deploying dev, allow analytics in a browser without a privacy signal and
+check GA4 Realtime for the dev hostname and `environment=dev`. Check Clarity for
+a masked recording. Set `bracket_completed` as a GA4 key event. Production
+promotion and production ID configuration require a separate explicit request.
+
 ## Deployment
 
 - Pushing to `dev` runs the checks, applies the dev Terraform environment, and

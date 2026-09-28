@@ -58,6 +58,14 @@ class AnalyticsTests(unittest.TestCase):
 
         self.assertEqual(result["statusCode"], 400)
 
+    def test_public_nba_and_privacy_pages_are_accepted(self):
+        for page in ("/nba", "/privacy"):
+            with self.subTest(page=page), patch.dict(os.environ, {"ENVIRONMENT": "dev"}), redirect_stdout(StringIO()):
+                result = lambda_app.handler(
+                    analytics_event({**self.valid_body, "page": page}), None
+                )
+            self.assertEqual(result["statusCode"], 202)
+
     def test_analytics_route_is_disabled_for_unknown_environment(self):
         with patch.dict(os.environ, {"ENVIRONMENT": "preview"}):
             result = lambda_app.handler(analytics_event(self.valid_body), None)

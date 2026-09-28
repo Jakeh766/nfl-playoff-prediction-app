@@ -44,7 +44,7 @@ ANALYTICS_EVENTS = {
     "prediction_saved",
     "sign_in",
 }
-ANALYTICS_PAGES = {"/", "/leaderboard", "/picks", "/scoring"}
+ANALYTICS_PAGES = {"/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"}
 
 EXACT_SEED_POINTS = (5, 3, 3, 3, 2, 2, 2)
 NBA_EXACT_SEED_POINTS = (6, 4, 4, 4, 3, 3, 3, 3)

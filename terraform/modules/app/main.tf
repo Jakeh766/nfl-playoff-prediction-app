@@ -6,6 +6,14 @@ locals {
   analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
 
   frontend_files = {
+    "analytics.js" = {
+      source       = "${var.frontend_dir}/analytics.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "privacy" = {
+      source       = "${var.frontend_dir}/privacy.html"
+      content_type = "text/html; charset=utf-8"
+    }
     "robots.txt" = {
       source       = "${var.frontend_dir}/robots.txt"
       content_type = "text/plain; charset=utf-8"
@@ -976,6 +984,10 @@ locals {
     environment = var.environment
     clientId    = aws_cognito_user_pool_client.browser.id
     region      = var.aws_region
+    analytics = {
+      ga4MeasurementId = var.ga4_measurement_id
+      clarityProjectId = var.clarity_project_id
+    }
   })};\n"
 }
 

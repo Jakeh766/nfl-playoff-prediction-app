@@ -32,3 +32,14 @@ variable "cloudfront_price_class" {
   description = "CloudFront edge-location price class."
   type        = string
 }
+variable "ga4_measurement_id" {
+  description = "GA4 Measurement ID for dev verification."
+  type        = string
+  default     = ""
+}
+
+variable "clarity_project_id" {
+  description = "Microsoft Clarity project ID for dev verification."
+  type        = string
+  default     = ""
+}

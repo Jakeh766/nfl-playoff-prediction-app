@@ -307,6 +307,7 @@ function buildBracket() {
 
   if (!state.bracketBuilt) {
     state.picks = createEmptyPicks();
+    window.siteAnalytics?.track("bracket_started");
   }
   state.bracketBuilt = true;
   state.savedAt = null;
@@ -518,6 +519,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
 
 function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   if (state.predictionsLocked) return;
+  const wasComplete = allGamesPicked();
   const hadBothFinalists = Boolean(
     getConferenceWinner(CONFERENCES[0]) && getConferenceWinner(CONFERENCES[1]),
   );
@@ -530,6 +532,10 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   state.savedAt = null;
   updateSaveState(false);
   renderBracket();
+
+  if (!wasComplete && allGamesPicked()) {
+    window.siteAnalytics?.track("bracket_completed");
+  }
 
   const hasBothFinalists = Boolean(
     getConferenceWinner(CONFERENCES[0]) && getConferenceWinner(CONFERENCES[1]),

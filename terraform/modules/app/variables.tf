@@ -190,3 +190,24 @@ variable "results_update_schedule" {
   type        = string
   default     = "cron(0 16 ? * TUE *)"
 }
+variable "ga4_measurement_id" {
+  description = "Public GA4 web measurement ID; empty disables Google Analytics."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ga4_measurement_id == "" || can(regex("^G-[A-Z0-9]+$", var.ga4_measurement_id))
+    error_message = "ga4_measurement_id must be empty or a valid G- measurement ID."
+  }
+}
+
+variable "clarity_project_id" {
+  description = "Public Microsoft Clarity project ID; empty disables recordings."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.clarity_project_id == "" || can(regex("^[a-z0-9]+$", var.clarity_project_id))
+    error_message = "clarity_project_id must be empty or a lowercase alphanumeric project ID."
+  }
+}
