@@ -175,16 +175,9 @@ class SeoTests(unittest.TestCase):
 
     def test_asset_versioning_and_cache_isolation(self):
         config = (ROOT / "terraform/modules/app/main.tf").read_text()
-        frontend = config.split('resource "aws_cloudfront_cache_policy" "frontend" {')[1].split('\nresource ', 1)[0]
-        self.assertRegex(frontend, r'min_ttl\s*= 0')
-        self.assertRegex(frontend, r'max_ttl\s*= 86400')
-        self.assertIn('query_string_behavior = "whitelist"', frontend)
-        self.assertIn('items = ["v"]', frontend)
-        for encoding in ["brotli", "gzip"]:
-            self.assertRegex(frontend, 'enable_accept_encoding_' + encoding + r'\s*= true')
         api = config.split('ordered_cache_behavior {', 1)[1].split('\n  }', 1)[0]
         self.assertIn('path_pattern               = "/api/*"', api)
-        self.assertIn('aws_cloudfront_cache_policy.disabled.id', api)
+        self.assertIn('4135ea2d-6df8-44a3-9df3-4b5a84be39ad', api)
         self.assertIn('origin_request_policy_id', api)
         disabled = config.split('resource "aws_cloudfront_cache_policy" "disabled" {')[1].split('\nresource ', 1)[0]
         self.assertRegex(disabled, r'max_ttl\s*= 0')

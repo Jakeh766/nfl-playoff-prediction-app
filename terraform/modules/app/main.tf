@@ -996,30 +996,6 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_cache_policy" "frontend" {
-  name        = "${local.resource_prefix}-frontend-cache"
-  min_ttl     = 0
-  default_ttl = 60
-  max_ttl     = 86400
-
-  parameters_in_cache_key_and_forwarded_to_origin {
-    enable_accept_encoding_brotli = true
-    enable_accept_encoding_gzip   = true
-    cookies_config {
-      cookie_behavior = "none"
-    }
-    headers_config {
-      header_behavior = "none"
-    }
-    query_strings_config {
-      query_string_behavior = "whitelist"
-      query_strings {
-        items = ["v"]
-      }
-    }
-  }
-}
-
 resource "aws_cloudfront_cache_policy" "disabled" {
   name        = "${local.resource_prefix}-caching-disabled"
   min_ttl     = 0
@@ -1187,7 +1163,7 @@ resource "aws_cloudfront_distribution" "app" {
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["GET", "HEAD", "OPTIONS"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
+    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
     compress                   = true
   }
 
@@ -1198,7 +1174,7 @@ resource "aws_cloudfront_distribution" "app" {
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
     origin_request_policy_id   = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
     compress                   = true
   }
