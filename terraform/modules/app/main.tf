@@ -996,26 +996,33 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_cache_policy" "disabled" {
-  name        = "${local.resource_prefix}-caching-disabled"
+# Reuse the policy ID permitted by the deployment role. The API must first
+# finish migrating to managed CachingDisabled before this policy enables caching.
+moved {
+  from = aws_cloudfront_cache_policy.disabled
+  to   = aws_cloudfront_cache_policy.frontend
+}
+
+resource "aws_cloudfront_cache_policy" "frontend" {
+  name        = "${local.resource_prefix}-frontend-cache"
   min_ttl     = 0
-  default_ttl = 0
-  max_ttl     = 0
+  default_ttl = 60
+  max_ttl     = 86400
 
   parameters_in_cache_key_and_forwarded_to_origin {
-    enable_accept_encoding_brotli = false
-    enable_accept_encoding_gzip   = false
-
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
     cookies_config {
       cookie_behavior = "none"
     }
-
     headers_config {
       header_behavior = "none"
     }
-
     query_strings_config {
-      query_string_behavior = "none"
+      query_string_behavior = "whitelist"
+      query_strings {
+        items = ["v"]
+      }
     }
   }
 }
@@ -1163,7 +1170,7 @@ resource "aws_cloudfront_distribution" "app" {
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["GET", "HEAD", "OPTIONS"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
     compress                   = true
   }
 

@@ -51,11 +51,20 @@ dev testing overrides still apply to the app's countdown and lock enforcement.
 - CSS, JS and images/icons: public, max-age=86400, must-revalidate.
 - robots.txt and sitemap.xml: public, max-age=300, must-revalidate.
 - auth-config.js: no-store, no-cache, must-revalidate, max-age=0.
-- API: the existing zero-TTL cache policy and origin request policy are retained,
-  including forwarding authentication and sport query parameters.
+- API: AWS managed CachingDisabled (all TTLs zero) keeps responses uncached.
+  The existing origin request policy still forwards authentication and sport
+  query parameters.
 - Frontend CloudFront caching varies on v and negotiated Brotli/Gzip, has minimum
   TTL zero, and honors the origin's no-store on auth-config.js. Tracking, sport
   and invite query parameters do not fragment the static S3 object cache.
+
+The deployment role can update its existing custom cache policy but cannot
+create another one. Dev therefore uses two deployments: first move the API to
+managed CachingDisabled and wait for CloudFront deployment to finish, then move
+the existing Terraform policy address to frontend and update that same policy.
+No IAM permissions are expanded. Before any future authorized production
+promotion, complete that same API-only migration (commit b97769c) in production
+and wait for it to finish before enabling caching on its former shared policy.
 
 During Terraform evaluation, one release hash is derived from every published
 JS/CSS file. Numeric ?v= tokens in each HTML page are replaced with that hash.
