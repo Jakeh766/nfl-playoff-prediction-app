@@ -106,8 +106,8 @@
     panel.setAttribute("aria-labelledby", "analytics-consent-title");
     panel.setAttribute("data-no-sport-copy", "");
     panel.innerHTML = `<div><h2 id="analytics-consent-title" tabindex="-1">Help improve Predict Playoffs</h2>
-      <p>Allow Google Analytics and Microsoft Clarity to measure visits and record masked interactions? Your account and bracket work either way. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy policy</a></p></div>
-      <div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline analytics</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow analytics</button></div>`;
+      <p>We use optional analytics to understand how people use Predict Playoffs and improve the site. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a></p></div>
+      <div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow analytics</button></div>`;
     panel.hidden = privacySignal || ["granted", "denied"].includes(choice);
     const header = document.getElementById("site-header");
     if (header) header.after(panel);

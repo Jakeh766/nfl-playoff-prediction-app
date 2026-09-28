@@ -22,7 +22,9 @@ function boot(options = {}) {
     dataset: { analyticsChoice: choice },
     addEventListener: (_name, callback) => { choices.find(button => button.dataset.analyticsChoice === choice).click = callback; },
   }));
-  const heading = { focus() {} };
+  let headingFocused = false;
+  let settingsButton;
+  const heading = { focus() { headingFocused = true; } };
   const panel = {
     setAttribute() {}, scrollIntoView() {},
     querySelectorAll: () => choices, querySelector: () => heading,
@@ -41,9 +43,11 @@ function boot(options = {}) {
       body, cookie: "_ga=old; _clck=old; auth=keep",
       referrer: options.referrer || "https://example.org/article?email=private@example.org",
       head: { appendChild: script => scripts.push(script) },
-      createElement: tag => tag === "section" ? panel : { addEventListener() {} },
+      createElement: tag => tag === "section" ? panel : {
+        addEventListener(name, callback) { this[name] = callback; },
+      },
       getElementById: () => ({ after() {} }),
-      querySelector: () => ({ appendChild() {} }),
+      querySelector: () => ({ appendChild(button) { settingsButton = button; } }),
     },
     location: { origin: url.origin, pathname: url.pathname, hostname: url.hostname,
       href: url.href, reload: () => reloads++ },
@@ -57,7 +61,8 @@ function boot(options = {}) {
   vm.createContext(context);
   vm.runInContext(script, context);
   vm.runInContext(monitoring, context);
-  return { context, scripts, requests, panel, store, choices, reloads: () => reloads,
+  return { context, scripts, requests, panel, store, choices, settingsButton,
+    headingFocused: () => headingFocused, reloads: () => reloads,
     events: () => (context.dataLayer || []).map(args => Array.from(args)).filter(args => args[0] === "event") };
 }
 
@@ -70,6 +75,29 @@ test("optional scripts, requests, and tracking IDs wait for consent", () => {
   assert.equal(app.scripts.length, 1); // Sensitive referrer blocks Clarity.
   assert.equal(app.requests.length, 1);
   assert.equal(app.events().filter(args => args[1] === "page_view").length, 1);
+});
+
+test("simple consent copy supports declining and reopening Analytics settings", () => {
+  const app = boot();
+  assert.equal(app.panel.hidden, false);
+  assert.match(app.panel.innerHTML, /Help improve Predict Playoffs/);
+  assert.match(app.panel.innerHTML, /We use optional analytics to understand how people use Predict Playoffs and improve the site\./);
+  assert.match(app.panel.innerHTML, /href="\/privacy">Privacy Policy<\/a>/);
+  assert.match(app.panel.innerHTML, /data-analytics-choice="denied">Decline<\/button>/);
+  assert.match(app.panel.innerHTML, /data-analytics-choice="granted">Allow analytics<\/button>/);
+  assert.doesNotMatch(app.panel.innerHTML, /Google|Microsoft|Clarity/);
+  app.choices[0].click();
+  assert.equal(app.panel.hidden, true);
+  assert.equal(app.scripts.length, 0);
+  assert.equal(app.requests.length, 0);
+  assert.equal(app.store.get("pp_analytics_consent_v1"), "denied");
+  assert.equal(app.reloads(), 0);
+  assert.equal(app.settingsButton.textContent, "Analytics settings");
+  app.settingsButton.click();
+  assert.equal(app.panel.hidden, false);
+  assert.equal(app.headingFocused(), true);
+  assert.equal(app.scripts.length, 0);
+  assert.equal(app.requests.length, 0);
 });
 
 test("GA events remove tokens and ignore arbitrary user data", () => {
