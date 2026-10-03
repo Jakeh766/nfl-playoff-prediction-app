@@ -68,7 +68,7 @@ class SeoTests(unittest.TestCase):
                 self.assertEqual(page.select("meta", property="og:url")[0]["content"], BASE + route)
                 self.assertEqual(page.select("meta", name="twitter:card")[0]["content"], "summary_large_image")
                 links = {a.get("href") for a in page.select("a")}
-                self.assertTrue({"/", "/nba", "/scoring", "/leaderboard", "/picks"}.issubset(links))
+                self.assertTrue({"/picks", "/privacy"}.issubset(links))
                 for script in re.findall(r'<script type="application/ld\+json">(.*?)</script>', page.html, re.S):
                     json.loads(script)
 
@@ -158,20 +158,28 @@ class SeoTests(unittest.TestCase):
         self.assertEqual(urls, [BASE + "/", BASE + "/nba", BASE + "/scoring", BASE + "/leaderboard"])
         self.assertEqual(Page("picks.html").select("meta", name="robots")[0]["content"], "noindex,follow")
 
-    def test_public_facts_are_visible_and_deadlines_match_configuration(self):
-        for filename in ["index.html", "nba.html"]:
-            page = Page(filename)
-            section = re.search(r'<section class="prediction-guide".*?</section>', page.html, re.S)[0]
-            self.assertNotIn('class="hidden"', section)
-            self.assertNotIn('<details', section)
-            self.assertIn("Classic", section)
-            self.assertIn("Upset Edge", section)
-            self.assertIn("not affiliated with the NFL or NBA", section)
-            self.assertGreaterEqual(section.count("<h3>"), 5)
-        nba_deadline = re.search(r'"lockAt": "([^"]+)"', (ROOT / "frontend/sports.js").read_text())[1]
-        nfl_deadline = re.search(r'prediction_lock_at\s*=\s*"([^"]+)"', (ROOT / "terraform/envs/prod/terraform.tfvars").read_text())[1]
-        self.assertTrue(Page("nba.html").select("time", datetime=nba_deadline))
-        self.assertTrue(Page("index.html").select("time", datetime=nfl_deadline))
+    def test_compact_footer_and_removed_about_section(self):
+        for filename in ["index.html", "nba.html", "scoring.html", "leaderboard.html", "picks.html", "privacy.html"]:
+            with self.subTest(page=filename):
+                page = Page(filename)
+                footer = re.search(r'<footer id="site-footer".*?</footer>', page.html, re.S)[0]
+                parser = HTMLParser()
+                controls = []
+                parser.handle_starttag = lambda tag, attrs: controls.append((tag, dict(attrs)))
+                parser.feed(footer)
+                self.assertEqual(
+                    [attrs["href"] for tag, attrs in controls if tag == "a"],
+                    ["/privacy", "mailto:contact@predictplayoffs.com"],
+                )
+                self.assertEqual(
+                    [attrs for tag, attrs in controls if tag == "button"],
+                    [{"class": "cookie-preferences", "type": "button"}],
+                )
+                self.assertEqual(unescape(re.sub(r"<[^>]+>", " ", footer)).split(),
+                                 ["Privacy", "policy", "Contact", "Cookie", "preferences"])
+                self.assertNotIn("about-predict-playoffs", page.html)
+        self.assertTrue(Page("scoring.html").select("h2", id="scoring-reference"))
+        self.assertTrue(Page("leaderboard.html").select("h2", id="standings-guide"))
 
     def test_asset_versioning_and_cache_isolation(self):
         config = (ROOT / "terraform/modules/app/main.tf").read_text()
