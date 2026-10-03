@@ -752,7 +752,7 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         width  = 24
         height = 2
         properties = {
-          markdown = "# Predict Playoffs — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
+          markdown = "# Predict Playoffs — ${title(var.environment)} Analytics\nAggregate event totals include cookieless traffic. Visitor and session metrics include only events with consented IDs. GPC/DNT visits are excluded. Adjust the dashboard time range to explore a different window. Managed by Terraform."
         }
       },
       {
@@ -763,9 +763,9 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         height = 4
         properties = {
           region = var.aws_region
-          title  = "Unique visitors"
+          title  = "Unique visitors with IDs"
           view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count_distinct(visitorId) as uniqueVisitors"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(visitorId)\n| stats count_distinct(visitorId) as uniqueVisitors"
         }
       },
       {
@@ -776,9 +776,9 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         height = 4
         properties = {
           region = var.aws_region
-          title  = "Sessions"
+          title  = "Sessions with IDs"
           view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count_distinct(sessionId) as sessions"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(sessionId)\n| stats count_distinct(sessionId) as sessions"
         }
       },
       {
@@ -817,7 +817,7 @@ resource "aws_cloudwatch_dashboard" "analytics" {
           region = var.aws_region
           title  = "Traffic over time"
           view   = "timeSeries"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews, count_distinct(sessionId) as sessions by bin(1h)"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews by bin(1h)"
         }
       },
       {
@@ -841,9 +841,9 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         height = 7
         properties = {
           region = var.aws_region
-          title  = "Visitor conversion"
+          title  = "Visitor conversion with IDs"
           view   = "bar"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"account_created\", \"prediction_saved\"]\n| stats count_distinct(visitorId) as visitors by event\n| sort visitors desc"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"account_created\", \"prediction_saved\"] and ispresent(visitorId)\n| stats count_distinct(visitorId) as visitors by event\n| sort visitors desc"
         }
       },
       {
@@ -867,9 +867,35 @@ resource "aws_cloudwatch_dashboard" "analytics" {
         height = 7
         properties = {
           region = var.aws_region
-          title  = "Recent sessions"
+          title  = "Recent sessions with IDs"
           view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews, count_distinct(page) as pages, min(@timestamp) as started, max(@timestamp) as lastSeen by sessionId\n| sort lastSeen desc\n| limit 20"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(sessionId)\n| stats count(*) as pageViews, count_distinct(page) as pages, min(@timestamp) as started, max(@timestamp) as lastSeen by sessionId\n| sort lastSeen desc\n| limit 20"
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 27
+        width  = 12
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Sessions with IDs over time"
+          view   = "timeSeries"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(sessionId)\n| stats count_distinct(sessionId) as sessions by bin(1h)"
+        }
+      },
+      {
+        type   = "log"
+        x      = 12
+        y      = 27
+        width  = 12
+        height = 7
+        properties = {
+          region = var.aws_region
+          title  = "Aggregate funnel events"
+          view   = "bar"
+          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"bracket_started\", \"bracket_completed\", \"account_created\", \"prediction_saved\"]\n| stats count(*) as events by event\n| sort events desc"
         }
       },
       {

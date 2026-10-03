@@ -21,32 +21,36 @@
       }
     }
 
-    if (!crypto.randomUUID) return;
-
     let visitorId;
     let sessionId;
     const firstPartyEvents = new Set([
       "page_view", "account_created", "sign_in", "prediction_saved",
       "group_created", "group_joined", "group_invite_joined",
+      "bracket_started", "bracket_completed", "leaderboard_viewed",
     ]);
+    const page = window.location.pathname === "/index.html" ? "/" :
+      window.location.pathname.replace(/\.html$/, "");
+    if (!["/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"].includes(page)) return;
 
     function track(event) {
       try {
         window.productAnalytics?.track(event);
-        if (window.productAnalytics && !window.productAnalytics.allowed()) return;
+        if (window.productAnalytics && !window.productAnalytics.aggregateAllowed()) return;
         if (!firstPartyEvents.has(event)) return;
-        visitorId ||= getOrCreateId(localStorage, "rtb_visitor_id");
-        sessionId ||= getOrCreateId(sessionStorage, "rtb_session_id");
+        const payload = { event, page };
+        if (window.productAnalytics?.allowed() && window.crypto?.randomUUID) {
+          visitorId ||= getOrCreateId(localStorage, "rtb_visitor_id");
+          sessionId ||= getOrCreateId(sessionStorage, "rtb_session_id");
+          Object.assign(payload, { sessionId, visitorId });
+        } else {
+          visitorId = sessionId = undefined;
+        }
         fetch("/api/analytics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event,
-            page: window.location.pathname,
-            sessionId,
-            visitorId,
-          }),
+          body: JSON.stringify(payload),
           credentials: "omit",
+          referrerPolicy: "no-referrer",
           keepalive: true,
         }).catch(() => {
           // Monitoring must never interrupt the application experience.
@@ -58,7 +62,13 @@
 
     window.siteAnalytics = { track };
     track("page_view");
-    window.addEventListener("analytics-consent-granted", () => track("page_view"));
+    if (document.body.dataset.page === "leaderboard") track("leaderboard_viewed");
+    window.addEventListener("analytics-consent-declined", () => { visitorId = sessionId = undefined; });
+    window.addEventListener("analytics-consent-granted", () => {
+      // This visit was already counted by first-party analytics before consent.
+      window.productAnalytics?.track("page_view");
+      if (document.body.dataset.page === "leaderboard") window.productAnalytics?.track("leaderboard_viewed");
+    });
   } catch (_error) {
     // Storage and privacy restrictions should disable analytics silently.
   }

@@ -37,6 +37,9 @@ ANALYTICS_ID_PATTERN = re.compile(
 )
 ANALYTICS_EVENTS = {
     "account_created",
+    "bracket_started",
+    "bracket_completed",
+    "leaderboard_viewed",
     "group_created",
     "group_invite_joined",
     "group_joined",
@@ -898,12 +901,12 @@ def record_analytics_event(event: dict) -> None:
         raise ValueError("Unknown analytics event")
     if not isinstance(page, str) or page not in ANALYTICS_PAGES:
         raise ValueError("Unknown analytics page")
-    if not isinstance(session_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(
-        session_id
+    if "sessionId" in payload and (
+        not isinstance(session_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(session_id)
     ):
         raise ValueError("Invalid analytics session")
-    if not isinstance(visitor_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(
-        visitor_id
+    if "visitorId" in payload and (
+        not isinstance(visitor_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(visitor_id)
     ):
         raise ValueError("Invalid analytics visitor")
 
@@ -914,8 +917,8 @@ def record_analytics_event(event: dict) -> None:
                 "environment": os.environ.get("ENVIRONMENT"),
                 "event": event_name,
                 "page": page,
-                "sessionId": session_id,
-                "visitorId": visitor_id,
+                **({"sessionId": session_id} if session_id is not None else {}),
+                **({"visitorId": visitor_id} if visitor_id is not None else {}),
             },
             separators=(",", ":"),
         )

@@ -5,18 +5,18 @@
     const settings = config.analytics || {};
     const ga = /^G-[A-Z0-9]+$/.test(settings.ga4MeasurementId || "") ? settings.ga4MeasurementId : "";
     const clarity = /^[a-z0-9]+$/.test(settings.clarityProjectId || "") ? settings.clarityProjectId : "";
-    if (!ga && !clarity) return;
     // Initialization errors must fail closed for first-party tracking as well.
-    window.productAnalytics = { track() {}, allowed: () => false };
+    window.productAnalytics = { track() {}, allowed: () => false, aggregateAllowed: () => false };
     const pages = new Set(["/", "/index.html", "/nba", "/nba.html", "/picks", "/picks.html",
       "/leaderboard", "/leaderboard.html", "/scoring", "/scoring.html", "/privacy", "/privacy.html"]);
     const page = window.location.pathname;
-    const privacySignal = navigator.doNotTrack === "1" || navigator.globalPrivacyControl === true;
+    const privacySignal = navigator.doNotTrack === "1" || !!navigator.globalPrivacyControl;
     const consentKey = "pp_analytics_consent_v1";
     let choice = "";
     try { choice = localStorage.getItem(consentKey) || ""; } catch (_error) { /* Default off. */ }
     let started = false;
-    const allowed = () => !privacySignal && choice === "granted" && pages.has(page);
+    const aggregateAllowed = () => !privacySignal && pages.has(page);
+    const allowed = () => aggregateAllowed() && choice === "granted";
     const events = {
       page_view: "page_view", account_created: "sign_up", sign_in: "login",
       prediction_saved: "bracket_saved", bracket_started: "bracket_started",
@@ -48,7 +48,7 @@
         environment: config.environment,
       });
     }
-    window.productAnalytics = { track, allowed };
+    window.productAnalytics = { track, allowed, aggregateAllowed };
     function loadScript(src) {
       const script = document.createElement("script");
       script.async = true;
@@ -60,6 +60,7 @@
       if (started || !allowed()) return;
       started = true;
       if (ga) {
+        window[`ga-disable-${ga}`] = false;
         window.dataLayer = window.dataLayer || [];
         window.gtag = function () { window.dataLayer.push(arguments); };
         window.gtag("consent", "default", {
@@ -83,30 +84,54 @@
         window.clarity("consentv2", { analytics_Storage: "granted", ad_Storage: "denied" });
         loadScript(`https://www.clarity.ms/tag/${clarity}`);
       }
-      if (document.body.dataset.page === "leaderboard") track("leaderboard_viewed");
     }
     function clearAnalyticsStorage() {
-      try {
-        localStorage.removeItem("rtb_visitor_id");
-        sessionStorage.removeItem("rtb_session_id");
-      } catch (_error) { /* Storage may be blocked. */ }
+      const providerKey = /^(_ga(?:_|$)|_gid$|_gat(?:_|$)|_clck$|_clsk$|_cltk$)/;
+      for (const storageName of ["localStorage", "sessionStorage"]) {
+        try {
+          const storage = window[storageName];
+          const keys = ["rtb_visitor_id", "rtb_session_id"];
+          for (let index = 0; index < storage.length; index++) {
+            const key = storage.key(index);
+            if (providerKey.test(key)) keys.push(key);
+          }
+          keys.forEach(key => storage.removeItem(key));
+        } catch (_error) { /* Clear each store independently when available. */ }
+      }
       const host = window.location.hostname;
       const domains = ["", host, ...host.split(".").map((_, index, parts) =>
         "." + parts.slice(index).join(".")).filter(domain => domain.split(".").length > 2)];
       for (const cookie of document.cookie.split(";")) {
         const name = cookie.trim().split("=")[0];
-        if (!/^(_ga(?:_|$)|_gid$|_gat(?:_|$)|_clck$|_clsk$)/.test(name)) continue;
+        if (!providerKey.test(name)) continue;
         for (const domain of domains) {
           document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${domain ? `; Domain=${domain}` : ""}`;
         }
       }
     }
+    function changeConsent(nextChoice) {
+      choice = nextChoice;
+      panel.hidden = true;
+      if (choice === "granted" && !privacySignal) {
+        const wasStarted = started;
+        start();
+        if (!wasStarted) window.dispatchEvent(new Event("analytics-consent-granted"));
+      } else {
+        if (ga) window[`ga-disable-${ga}`] = true;
+        try { window.clarity?.("stop"); } catch (_error) { /* Still clear our storage. */ }
+        clearAnalyticsStorage();
+        window.dispatchEvent(new Event("analytics-consent-declined"));
+        // Unload already running providers; the next page keeps aggregate tracking.
+        if (started) window.location.reload();
+      }
+    }
+    if (!allowed()) clearAnalyticsStorage();
     const panel = document.createElement("section");
     panel.className = "analytics-consent";
     panel.setAttribute("aria-labelledby", "analytics-consent-title");
     panel.setAttribute("data-no-sport-copy", "");
     panel.innerHTML = `<div><h2 id="analytics-consent-title" tabindex="-1">Help improve Predict Playoffs</h2>
-      <p>We use optional analytics to understand how people use Predict Playoffs and improve the site. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a></p></div>
+      <p>Limited aggregate first-party analytics operate without cookies or visitor identifiers, even if you decline. Allow optional analytics to enable Google Analytics 4, Microsoft Clarity, and visitor/session tracking. We honor Global Privacy Control and Do Not Track by disabling all analytics. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a></p></div>
       <div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow analytics</button></div>`;
     panel.hidden = privacySignal || ["granted", "denied"].includes(choice);
     const header = document.getElementById("site-header");
@@ -114,19 +139,9 @@
     else document.body.appendChild(panel);
     panel.querySelectorAll("[data-analytics-choice]").forEach(button => {
       button.addEventListener("click", () => {
-        choice = button.dataset.analyticsChoice;
-        try { localStorage.setItem(consentKey, choice); } catch (_error) { /* This page only. */ }
-        panel.hidden = true;
-        if (choice === "granted") {
-          const wasStarted = started;
-          start();
-          if (!wasStarted) window.dispatchEvent(new Event("analytics-consent-granted"));
-        } else {
-          if (ga) window[`ga-disable-${ga}`] = true;
-          window.clarity?.("stop");
-          clearAnalyticsStorage();
-          if (started) window.location.reload();
-        }
+        const nextChoice = button.dataset.analyticsChoice;
+        try { localStorage.setItem(consentKey, nextChoice); } catch (_error) { /* This page only. */ }
+        changeConsent(nextChoice);
       });
     });
     const footer = document.querySelector(".footer-links");
@@ -142,6 +157,10 @@
       });
       footer.appendChild(button);
     }
+    window.addEventListener("storage", event => {
+      if (event.storageArea && event.storageArea !== window.localStorage) return;
+      if (event.key === consentKey || event.key === null) changeConsent(event.newValue || "");
+    });
     start();
   } catch (_error) {
     // Analytics failures must never interrupt account or bracket functionality.

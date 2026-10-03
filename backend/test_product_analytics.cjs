@@ -13,11 +13,19 @@ function boot(options = {}) {
   const requests = [];
   const listeners = new Map();
   const store = new Map(options.consent ? [["pp_analytics_consent_v1", options.consent]] : []);
-  const storage = {
-    getItem: key => { if (options.storageBlocked) throw new Error("blocked"); return store.get(key) || null; },
-    setItem: (key, value) => { if (options.storageBlocked) throw new Error("blocked"); store.set(key, value); },
-    removeItem: key => store.delete(key),
-  };
+  const sessionStore = new Map();
+  for (const [key, value] of Object.entries(options.local || {})) store.set(key, value);
+  for (const [key, value] of Object.entries(options.session || {})) sessionStore.set(key, value);
+  const storage = values => ({
+    get length() { return values.size; },
+    key: index => [...values.keys()][index],
+    getItem: key => { if (options.storageBlocked) throw new Error("blocked"); return values.get(key) || null; },
+    setItem: (key, value) => { if (options.storageBlocked) throw new Error("blocked"); values.set(key, value); },
+    removeItem: key => { if (options.cleanupBlocked) throw new Error("blocked"); values.delete(key); },
+  });
+  const cookies = new Map([["_ga", "old"], ["_clck", "old"], ["auth", "keep"]]);
+  const cookieWrites = [];
+  let idsCreated = 0;
   const choices = ["denied", "granted"].map(choice => ({
     dataset: { analyticsChoice: choice },
     addEventListener: (_name, callback) => { choices.find(button => button.dataset.analyticsChoice === choice).click = callback; },
@@ -36,11 +44,13 @@ function boot(options = {}) {
     URL, Event, Set,
     SPORT: "nba",
     navigator: { doNotTrack: options.dnt, globalPrivacyControl: options.gpc },
-    localStorage: storage, sessionStorage: storage,
-    crypto: { randomUUID: () => "random-first-party-id" },
+    localStorage: storage(store), sessionStorage: storage(sessionStore),
+    crypto: options.noCrypto ? {} : { randomUUID: () => `random-first-party-id-${++idsCreated}` },
     fetch: (url, request) => { requests.push({ url, request }); return Promise.resolve(); },
     document: {
-      body, cookie: "_ga=old; _clck=old; auth=keep",
+      body,
+      get cookie() { return [...cookies].map(([key, value]) => `${key}=${value}`).join("; "); },
+      set cookie(value) { cookieWrites.push(value); cookies.delete(value.split("=")[0]); },
       referrer: options.referrer || "https://example.org/article?email=private@example.org",
       head: { appendChild: script => scripts.push(script) },
       createElement: tag => tag === "section" ? panel : {
@@ -55,41 +65,50 @@ function boot(options = {}) {
       ga4MeasurementId: "G-TEST123", clarityProjectId: "test123",
     } },
     addEventListener: (name, callback) => listeners.set(name, callback),
-    dispatchEvent: event => listeners.get(event.type)?.(),
+    dispatchEvent: event => listeners.get(event.type)?.(event),
   };
   context.window = context;
   vm.createContext(context);
   vm.runInContext(script, context);
   vm.runInContext(monitoring, context);
-  return { context, scripts, requests, panel, store, choices, settingsButton,
+  return { context, scripts, requests, panel, store, sessionStore, choices, settingsButton, cookieWrites,
+    idsCreated: () => idsCreated,
+    payloads: () => requests.map(({ request }) => JSON.parse(request.body)),
     headingFocused: () => headingFocused, reloads: () => reloads,
     events: () => (context.dataLayer || []).map(args => Array.from(args)).filter(args => args[0] === "event") };
 }
 
-test("optional scripts, requests, and tracking IDs wait for consent", () => {
+test("aggregate events start without consent; optional scripts and IDs wait for acceptance", () => {
   const app = boot();
   assert.equal(app.scripts.length, 0);
-  assert.equal(app.requests.length, 0);
+  assert.deepEqual(app.payloads(), [{ event: "page_view", page: "/picks" }]);
+  assert.equal(app.idsCreated(), 0);
   assert.equal(app.store.has("rtb_visitor_id"), false);
   app.choices[1].click();
   assert.equal(app.scripts.length, 1); // Sensitive referrer blocks Clarity.
   assert.equal(app.requests.length, 1);
   assert.equal(app.events().filter(args => args[1] === "page_view").length, 1);
+  app.context.siteAnalytics.track("sign_in");
+  assert.equal(app.payloads()[1].visitorId, app.store.get("rtb_visitor_id"));
+  assert.equal(app.payloads()[1].sessionId, app.sessionStore.get("rtb_session_id"));
+  assert.equal(app.idsCreated(), 2);
 });
 
 test("simple consent copy supports declining and reopening Analytics settings", () => {
   const app = boot();
   assert.equal(app.panel.hidden, false);
   assert.match(app.panel.innerHTML, /Help improve Predict Playoffs/);
-  assert.match(app.panel.innerHTML, /We use optional analytics to understand how people use Predict Playoffs and improve the site\./);
+  assert.match(app.panel.innerHTML, /Limited aggregate first-party analytics operate without cookies or visitor identifiers, even if you decline/);
+  assert.match(app.panel.innerHTML, /Google Analytics 4, Microsoft Clarity, and visitor\/session tracking/);
   assert.match(app.panel.innerHTML, /href="\/privacy">Privacy Policy<\/a>/);
   assert.match(app.panel.innerHTML, /data-analytics-choice="denied">Decline<\/button>/);
   assert.match(app.panel.innerHTML, /data-analytics-choice="granted">Allow analytics<\/button>/);
-  assert.doesNotMatch(app.panel.innerHTML, /Google|Microsoft|Clarity/);
   app.choices[0].click();
   assert.equal(app.panel.hidden, true);
   assert.equal(app.scripts.length, 0);
-  assert.equal(app.requests.length, 0);
+  assert.equal(app.requests.length, 1);
+  app.context.siteAnalytics.track("prediction_saved");
+  assert.deepEqual(app.payloads()[1], { event: "prediction_saved", page: "/picks" });
   assert.equal(app.store.get("pp_analytics_consent_v1"), "denied");
   assert.equal(app.reloads(), 0);
   assert.equal(app.settingsButton.textContent, "Analytics settings");
@@ -97,7 +116,8 @@ test("simple consent copy supports declining and reopening Analytics settings", 
   assert.equal(app.panel.hidden, false);
   assert.equal(app.headingFocused(), true);
   assert.equal(app.scripts.length, 0);
-  assert.equal(app.requests.length, 0);
+  assert.equal(app.requests.length, 2);
+  assert.equal(app.idsCreated(), 0);
 });
 
 test("GA events remove tokens and ignore arbitrary user data", () => {
@@ -123,31 +143,112 @@ test("safe consented visits load both providers in head and pass Clarity consent
   assert.equal(app.context.clarity.q[0][1].analytics_Storage, "granted");
 });
 
-test("GPC, Do Not Track, denied consent, blocked storage, and unknown pages stay off", () => {
-  for (const options of [{ gpc: true }, { dnt: "1" }, { consent: "denied" },
-    { storageBlocked: true }, { url: "https://dev.example.com/private/person" }]) {
-    const app = boot({ consent: "granted", ...options });
+test("GPC, Do Not Track, and unknown pages suppress all analytics even after acceptance", () => {
+  for (const options of [{ gpc: true }, { dnt: "1" },
+    { url: "https://dev.example.com/private/person" }]) {
+    const app = boot({ consent: "granted", local: { rtb_visitor_id: "old" },
+      session: { rtb_session_id: "old" }, ...options });
     assert.equal(app.scripts.length, 0);
     assert.equal(app.requests.length, 0);
+    app.choices[1].click();
+    app.context.siteAnalytics?.track("sign_in");
+    assert.equal(app.requests.length, 0);
+    assert.equal(app.scripts.length, 0);
+    assert.equal(app.idsCreated(), 0);
+    assert.equal(app.store.has("rtb_visitor_id"), false);
+    assert.equal(app.sessionStore.has("rtb_session_id"), false);
   }
 });
 
-test("declining after consent stops tracking, clears IDs, and reloads", () => {
-  const app = boot({ consent: "granted", referrer: "" });
+test("declining after consent stops providers, clears analytics storage, and continues cookieless", () => {
+  const app = boot({ consent: "granted", referrer: "https://dev.example.com/", local: {
+    _ga_TEST: "provider-id", unrelated: "keep",
+  }, session: { _cltk: "provider-id", auth: "keep" } });
+  assert.equal(app.store.has("rtb_visitor_id"), true);
   app.choices[0].click();
   assert.equal(app.context["ga-disable-G-TEST123"], true);
   assert.equal(app.store.get("pp_analytics_consent_v1"), "denied");
   assert.equal(app.store.has("rtb_visitor_id"), false);
+  assert.equal(app.sessionStore.has("rtb_session_id"), false);
+  assert.equal(app.store.has("_ga_TEST"), false);
+  assert.equal(app.sessionStore.has("_cltk"), false);
+  assert.equal(app.store.get("unrelated"), "keep");
+  assert.equal(app.sessionStore.get("auth"), "keep");
+  assert.equal(app.context.document.cookie, "auth=keep");
+  assert.ok(app.cookieWrites.some(value => value.includes("Domain=.example.com")));
+  assert.equal(app.context.clarity.q.at(-1)[0], "stop");
   assert.equal(app.reloads(), 1);
   const count = app.requests.length;
   app.context.siteAnalytics.track("sign_in");
-  assert.equal(app.requests.length, count);
+  assert.equal(app.requests.length, count + 1);
+  assert.deepEqual(app.payloads().at(-1), { event: "sign_in", page: "/picks" });
+  assert.equal(app.events().filter(args => args[1] === "login").length, 0);
+  const reloaded = boot({ consent: "denied" });
+  assert.equal(reloaded.scripts.length, 0);
+  assert.deepEqual(reloaded.payloads(), [{ event: "page_view", page: "/picks" }]);
 });
 
-test("unconfigured production preserves existing first-party analytics", () => {
-  const app = boot({ environment: "prod", disabled: true });
-  assert.equal(app.scripts.length, 0);
-  assert.equal(app.requests.length, 1);
+test("all required events are cookieless without consent, including disabled vendors or crypto", () => {
+  for (const options of [{}, { consent: "denied" }, { storageBlocked: true }, { noCrypto: true },
+    { environment: "prod", disabled: true }]) {
+    const app = boot({ local: { rtb_visitor_id: "old" }, session: { rtb_session_id: "old" }, ...options });
+    const events = ["bracket_started", "bracket_completed", "prediction_saved", "account_created",
+      "sign_in", "leaderboard_viewed", "group_created", "group_joined", "group_invite_joined"];
+    for (const event of events) app.context.siteAnalytics.track(event, { cognitoId: "private", email: "private" });
+    app.context.siteAnalytics.track("unknown");
+    assert.deepEqual(app.payloads(), ["page_view", ...events].map(event => ({ event, page: "/picks" })));
+    assert.equal(app.idsCreated(), 0);
+    assert.equal(app.scripts.length, 0);
+    assert.equal(app.store.has("rtb_visitor_id"), false);
+    assert.equal(app.sessionStore.has("rtb_session_id"), false);
+    assert.ok(app.requests.every(({ request }) => request.credentials === "omit" && request.referrerPolicy === "no-referrer"));
+  }
+});
+
+test("leaderboard view is counted once for aggregate and consented provider analytics", () => {
+  for (const consent of [undefined, "denied", "granted"]) {
+    const app = boot({ page: "leaderboard", url: "https://dev.example.com/leaderboard.html", consent });
+    assert.deepEqual(app.payloads().map(value => value.event), ["page_view", "leaderboard_viewed"]);
+    assert.ok(app.payloads().every(value => value.page === "/leaderboard"));
+    if (consent !== "granted") app.choices[1].click();
+    assert.equal(app.requests.length, 2);
+    assert.equal(app.events().filter(args => args[1] === "leaderboard_viewed").length, 1);
+  }
+});
+
+test("consented event mappings and visitor/session reuse are preserved", () => {
+  const app = boot({ consent: "granted", disabled: false });
+  const mappings = { account_created: "sign_up", sign_in: "login", prediction_saved: "bracket_saved",
+    bracket_started: "bracket_started", bracket_completed: "bracket_completed", leaderboard_viewed: "leaderboard_viewed",
+    group_created: "group_created", group_joined: "group_joined", group_invite_joined: "group_joined" };
+  for (const [event, gaEvent] of Object.entries(mappings)) {
+    app.context.siteAnalytics.track(event);
+    assert.equal(app.events().at(-1)[1], gaEvent);
+    assert.equal(app.payloads().at(-1).visitorId, app.payloads()[0].visitorId);
+    assert.equal(app.payloads().at(-1).sessionId, app.payloads()[0].sessionId);
+  }
+  assert.equal(app.idsCreated(), 2);
+});
+
+test("consent revoked in another tab clears cached IDs before more events", () => {
+  const app = boot({ consent: "granted" });
+  app.context.dispatchEvent({ type: "storage", key: "pp_analytics_consent_v1", newValue: "denied" });
+  app.context.siteAnalytics.track("prediction_saved");
+  assert.deepEqual(app.payloads().at(-1), { event: "prediction_saved", page: "/picks" });
+  assert.equal(app.store.has("rtb_visitor_id"), false);
+  assert.equal(app.reloads(), 1);
+});
+
+test("dashboard totals include cookieless events and identity metrics explicitly require IDs", () => {
+  const terraform = fs.readFileSync(path.join(root, "terraform/modules/app/main.tf"), "utf8");
+  const queries = [...terraform.matchAll(/query\s*= ("SOURCE .*?")\r?\n/g)].map(match => JSON.parse(match[1]));
+  assert.ok(queries.length >= 10);
+  for (const query of queries) {
+    if (query.includes("count_distinct(visitorId)")) assert.match(query, /filter[^\n]*ispresent\(visitorId\)/);
+    else if (query.includes("sessionId")) assert.match(query, /filter[^\n]*ispresent\(sessionId\)/);
+    else assert.doesNotMatch(query, /ispresent/);
+  }
+  assert.ok(queries.some(query => query.includes("bracket_completed") && query.includes("count(*)")));
 });
 
 test("every public HTML page includes ordered head scripts and masking", () => {
