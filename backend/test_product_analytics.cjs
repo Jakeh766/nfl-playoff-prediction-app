@@ -31,11 +31,12 @@ function boot(options = {}) {
     addEventListener: (_name, callback) => { choices.find(button => button.dataset.analyticsChoice === choice).click = callback; },
   }));
   let headingFocused = false;
-  let settingsButton;
+  const settingsButton = { addEventListener(name, callback) { this[name] = callback; } };
+  const privacyMessage = { prepend(value) { this.text = value; } };
   const heading = { focus() { headingFocused = true; } };
   const panel = {
     setAttribute() {}, scrollIntoView() {},
-    querySelectorAll: () => choices, querySelector: () => heading,
+    querySelectorAll: () => choices, querySelector: selector => selector === "p" ? privacyMessage : heading,
   };
   const body = { dataset: { page: options.page || "picks" }, setAttribute() {}, appendChild() {} };
   let reloads = 0;
@@ -57,7 +58,7 @@ function boot(options = {}) {
         addEventListener(name, callback) { this[name] = callback; },
       },
       getElementById: () => ({ after() {} }),
-      querySelector: () => ({ appendChild(button) { settingsButton = button; } }),
+      querySelector: () => settingsButton,
     },
     location: { origin: url.origin, pathname: url.pathname, hostname: url.hostname,
       href: url.href, reload: () => reloads++ },
@@ -71,7 +72,7 @@ function boot(options = {}) {
   vm.createContext(context);
   vm.runInContext(script, context);
   vm.runInContext(monitoring, context);
-  return { context, scripts, requests, panel, store, sessionStore, choices, settingsButton, cookieWrites,
+  return { context, scripts, requests, panel, store, sessionStore, choices, settingsButton, privacyMessage, cookieWrites,
     idsCreated: () => idsCreated,
     payloads: () => requests.map(({ request }) => JSON.parse(request.body)),
     headingFocused: () => headingFocused, reloads: () => reloads,
@@ -94,15 +95,15 @@ test("aggregate events start without consent; optional scripts and IDs wait for 
   assert.equal(app.idsCreated(), 2);
 });
 
-test("simple consent copy supports declining and reopening Analytics settings", () => {
+test("cookie preferences support declining and reopening the consent panel", () => {
   const app = boot();
   assert.equal(app.panel.hidden, false);
-  assert.match(app.panel.innerHTML, /Help improve Predict Playoffs/);
-  assert.match(app.panel.innerHTML, /Limited aggregate first-party analytics operate without cookies or visitor identifiers, even if you decline/);
+  assert.match(app.panel.innerHTML, /Cookie preferences/);
+  assert.match(app.panel.innerHTML, /If you decline, we only count site activity without cookies or visitor identifiers/);
   assert.match(app.panel.innerHTML, /Google Analytics 4, Microsoft Clarity, and visitor\/session tracking/);
   assert.match(app.panel.innerHTML, /href="\/privacy">Privacy Policy<\/a>/);
-  assert.match(app.panel.innerHTML, /data-analytics-choice="denied">Decline<\/button>/);
-  assert.match(app.panel.innerHTML, /data-analytics-choice="granted">Allow analytics<\/button>/);
+  assert.match(app.panel.innerHTML, /data-analytics-choice="denied">Decline optional cookies<\/button>/);
+  assert.match(app.panel.innerHTML, /data-analytics-choice="granted">Allow optional cookies<\/button>/);
   app.choices[0].click();
   assert.equal(app.panel.hidden, true);
   assert.equal(app.scripts.length, 0);
@@ -111,7 +112,6 @@ test("simple consent copy supports declining and reopening Analytics settings", 
   assert.deepEqual(app.payloads()[1], { event: "prediction_saved", page: "/picks" });
   assert.equal(app.store.get("pp_analytics_consent_v1"), "denied");
   assert.equal(app.reloads(), 0);
-  assert.equal(app.settingsButton.textContent, "Analytics settings");
   app.settingsButton.click();
   assert.equal(app.panel.hidden, false);
   assert.equal(app.headingFocused(), true);
@@ -157,6 +157,20 @@ test("GPC, Do Not Track, and unknown pages suppress all analytics even after acc
     assert.equal(app.idsCreated(), 0);
     assert.equal(app.store.has("rtb_visitor_id"), false);
     assert.equal(app.sessionStore.has("rtb_session_id"), false);
+  }
+});
+
+test("cookie preferences explain browser privacy signals while keeping optional cookies disabled", () => {
+  for (const options of [{ gpc: true }, { dnt: "1" }]) {
+    const app = boot(options);
+    assert.equal(app.panel.hidden, true);
+    app.settingsButton.click();
+    assert.equal(app.panel.hidden, false);
+    assert.equal(app.headingFocused(), true);
+    assert.match(app.privacyMessage.text, /privacy signal is enabled/);
+    assert.ok(app.choices.every(button => button.disabled));
+    assert.equal(app.requests.length, 0);
+    assert.equal(app.scripts.length, 0);
   }
 });
 
