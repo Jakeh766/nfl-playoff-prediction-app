@@ -158,7 +158,7 @@ class SeoTests(unittest.TestCase):
         self.assertEqual(urls, [BASE + "/", BASE + "/nba", BASE + "/scoring", BASE + "/leaderboard"])
         self.assertEqual(Page("picks.html").select("meta", name="robots")[0]["content"], "noindex,follow")
 
-    def test_compact_footer_and_removed_about_section(self):
+    def test_footer_branding_three_links_and_removed_about_section(self):
         for filename in ["index.html", "nba.html", "scoring.html", "leaderboard.html", "picks.html", "privacy.html"]:
             with self.subTest(page=filename):
                 page = Page(filename)
@@ -175,7 +175,13 @@ class SeoTests(unittest.TestCase):
                     [attrs for tag, attrs in controls if tag == "button"],
                     [{"class": "cookie-preferences", "type": "button"}],
                 )
-                self.assertEqual(unescape(re.sub(r"<[^>]+>", " ", footer)).split(),
+                navigation = re.search(r'<nav class="footer-links".*?</nav>', footer, re.S)[0]
+                self.assertIn('class="footer-brand"', footer)
+                self.assertIn('src="/assets/predict-playoffs-mark.svg"', footer)
+                self.assertIn("PREDICT PLAYOFFS", footer)
+                self.assertIn("Call the season.", footer)
+                self.assertIn("Not affiliated with the NFL or NBA.", footer)
+                self.assertEqual(unescape(re.sub(r"<[^>]+>", " ", navigation)).split(),
                                  ["Privacy", "policy", "Contact", "Cookie", "preferences"])
                 self.assertNotIn("about-predict-playoffs", page.html)
         self.assertTrue(Page("scoring.html").select("h2", id="scoring-reference"))
