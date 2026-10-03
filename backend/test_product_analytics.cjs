@@ -43,6 +43,7 @@ function boot(options = {}) {
   };
   const privacyMessage = { prepend(value) { this.text = value; } };
   const dialogPrivacyMessage = { prepend(value) { this.text = value; } };
+  const preferenceStatus = {};
   const closeButton = { addEventListener(name, callback) { this[name] = callback; } };
   const heading = { focus() { headingFocused = true; } };
   const panel = {
@@ -53,7 +54,8 @@ function boot(options = {}) {
   const dialog = {
     open: false, setAttribute() {},
     querySelectorAll: () => dialogChoices,
-    querySelector: selector => selector === "p" ? dialogPrivacyMessage : selector === "h2" ? heading : closeButton,
+    querySelector: selector => selector === "p" ? dialogPrivacyMessage : selector === "h2" ? heading :
+      selector === "[data-cookie-status]" ? preferenceStatus : closeButton,
     addEventListener(name, callback) { dialogListeners.set(name, callback); },
     showModal() { this.open = true; },
     close() { this.open = false; dialogListeners.get("close")?.(); },
@@ -94,7 +96,7 @@ function boot(options = {}) {
   vm.createContext(context);
   vm.runInContext(script, context);
   vm.runInContext(monitoring, context);
-  return { context, scripts, requests, panel, dialog, dialogChoices, closeButton, dialogListeners, bodyClasses, attributes, store, sessionStore, choices, settingsButton, privacyMessage, dialogPrivacyMessage, cookieWrites,
+  return { context, scripts, requests, panel, dialog, dialogChoices, closeButton, dialogListeners, bodyClasses, attributes, store, sessionStore, choices, settingsButton, privacyMessage, dialogPrivacyMessage, preferenceStatus, cookieWrites,
     footerFocused: () => footerFocused, scrolls: () => scrolls,
     idsCreated: () => idsCreated,
     payloads: () => requests.map(({ request }) => JSON.parse(request.body)),
@@ -176,7 +178,42 @@ test("dialog choices persist consent and close both consent surfaces", () => {
     assert.equal(app.bodyClasses.has("cookie-preferences-open"), false);
     assert.equal(app.context.productAnalytics.allowed(), choice === "granted");
     assert.equal(app.footerFocused(), true);
+    app.settingsButton.click();
+    assert.equal(app.preferenceStatus.textContent, choice === "granted" ?
+      "Optional analytics: Allowed" : "Optional analytics: Declined");
   }
+});
+
+test("cookie preferences show the effective current choice and an accessible X close button", () => {
+  for (const [options, expected] of [
+    [{}, "Optional analytics: Off — no preference chosen"],
+    [{ consent: "invalid" }, "Optional analytics: Off — no preference chosen"],
+    [{ consent: "denied" }, "Optional analytics: Declined"],
+    [{ consent: "granted" }, "Optional analytics: Allowed"],
+    [{ consent: "granted", gpc: true }, "Optional analytics: Off — browser privacy signal"],
+    [{ consent: "granted", dnt: "1" }, "Optional analytics: Off — browser privacy signal"],
+  ]) {
+    const app = boot(options);
+    app.settingsButton.click();
+    assert.equal(app.preferenceStatus.textContent, expected);
+    assert.match(app.dialog.innerHTML, /aria-label="Close cookie preferences"><svg aria-hidden="true"/);
+    assert.match(app.dialog.innerHTML, /role="status"><strong>Current preference<\/strong>/);
+    app.closeButton.click();
+    assert.equal(app.preferenceStatus.textContent, expected);
+  }
+});
+
+test("current preference follows consent changes from another tab", () => {
+  const app = boot();
+  app.context.dispatchEvent({ type: "storage", key: "pp_analytics_consent_v1", newValue: "granted" });
+  app.settingsButton.click();
+  assert.equal(app.preferenceStatus.textContent, "Optional analytics: Allowed");
+  app.context.dispatchEvent({ type: "storage", key: "pp_analytics_consent_v1", newValue: "denied" });
+  app.settingsButton.click();
+  assert.equal(app.preferenceStatus.textContent, "Optional analytics: Declined");
+  app.context.dispatchEvent({ type: "storage", key: null, newValue: null });
+  app.settingsButton.click();
+  assert.equal(app.preferenceStatus.textContent, "Optional analytics: Off — no preference chosen");
 });
 
 test("GA events remove tokens and ignore arbitrary user data", () => {

@@ -111,6 +111,7 @@
     }
     function changeConsent(nextChoice) {
       choice = nextChoice;
+      updatePreferenceStatus();
       panel.hidden = true;
       if (dialog.open) dialog.close();
       if (choice === "granted" && !privacySignal) {
@@ -144,7 +145,16 @@
     dialog.className = "account-dialog cookie-preferences-dialog";
     dialog.setAttribute("aria-labelledby", "cookie-preferences-title");
     dialog.setAttribute("data-no-sport-copy", "");
-    dialog.innerHTML = `<div class="cookie-preferences-content"><div class="dialog-heading"><h2 id="cookie-preferences-title" tabindex="-1">Cookie preferences</h2><button class="button button-ghost" type="button" data-cookie-close aria-label="Close cookie preferences">Close</button></div><p>${cookieMessage}</p>${consentActions}</div>`;
+    dialog.innerHTML = `<div class="cookie-preferences-content"><div class="dialog-heading"><h2 id="cookie-preferences-title" tabindex="-1">Cookie preferences</h2><button class="dialog-close cookie-preferences-close" type="button" data-cookie-close aria-label="Close cookie preferences"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><p>${cookieMessage}</p><p class="cookie-preferences-status" role="status"><strong>Current preference</strong><span data-cookie-status></span></p>${consentActions}</div>`;
+    function updatePreferenceStatus() {
+      const status = privacySignal ? "Optional analytics: Off — browser privacy signal" :
+        allowed() ? "Optional analytics: Allowed" :
+        choice === "denied" ? "Optional analytics: Declined" :
+        choice === "granted" ? "Optional analytics: Off on this page" :
+        "Optional analytics: Off — no preference chosen";
+      dialog.querySelector("[data-cookie-status]").textContent = status;
+    }
+    updatePreferenceStatus();
     document.body.appendChild(dialog);
     for (const surface of [panel, dialog]) {
       surface.querySelectorAll("[data-analytics-choice]").forEach(button => {
@@ -173,6 +183,7 @@
       preferences.setAttribute("aria-controls", dialog.id);
       preferences.addEventListener("click", () => {
         if (dialog.open) return;
+        updatePreferenceStatus();
         dialog.showModal();
         document.body.classList.add("cookie-preferences-open");
         dialog.querySelector("h2").focus({ preventScroll: true });

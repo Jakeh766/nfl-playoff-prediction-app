@@ -4075,6 +4075,16 @@ footer p {
 .cookie-preferences-dialog p { margin: 20px 0 24px; line-height: 1.6; }
 .cookie-preferences-dialog a { color: var(--link); text-underline-offset: 3px; }
 .cookie-preferences-dialog .button { min-height: 44px; }
+.cookie-preferences-close { flex-shrink: 0; min-width: 44px; min-height: 44px; }
+.cookie-preferences-close svg { width: 20px; height: 20px; }
+.cookie-preferences-dialog .cookie-preferences-status {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  background: var(--surface-soft);
+  border-radius: 8px;
+}
 body.cookie-preferences-open { overflow: hidden; }
 @media (max-width: 480px) {
   .cookie-preferences-content { padding: 20px; }
