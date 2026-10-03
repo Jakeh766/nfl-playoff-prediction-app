@@ -131,8 +131,8 @@
     panel.setAttribute("aria-labelledby", "analytics-consent-title");
     panel.setAttribute("data-no-sport-copy", "");
     panel.innerHTML = `<div><h2 id="analytics-consent-title" tabindex="-1">Cookie preferences</h2>
-      <p>We use browser storage to keep you signed in and remember your cookie preferences. Optional cookies help us understand site usage through Google Analytics 4, Microsoft Clarity, and visitor/session tracking. If you decline, we only count site activity without cookies or visitor identifiers. We honor Global Privacy Control and Do Not Track. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a></p></div>
-      <div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline optional cookies</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow optional cookies</button></div>`;
+      <p>We use essential browser storage to keep you signed in and remember your preferences. With your permission, we also use optional analytics cookies and similar technologies to understand how people use Predict Playoffs and improve the site. If you decline, optional analytics stay off. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a></p></div>
+      <div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline analytics</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow analytics</button></div>`;
     panel.hidden = privacySignal || ["granted", "denied"].includes(choice);
     const header = document.getElementById("site-header");
     if (header) header.after(panel);

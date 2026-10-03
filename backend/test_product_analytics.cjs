@@ -99,11 +99,11 @@ test("cookie preferences support declining and reopening the consent panel", () 
   const app = boot();
   assert.equal(app.panel.hidden, false);
   assert.match(app.panel.innerHTML, /Cookie preferences/);
-  assert.match(app.panel.innerHTML, /If you decline, we only count site activity without cookies or visitor identifiers/);
-  assert.match(app.panel.innerHTML, /Google Analytics 4, Microsoft Clarity, and visitor\/session tracking/);
+  assert.match(app.panel.innerHTML, /If you decline, optional analytics stay off/);
+  assert.match(app.panel.innerHTML, /With your permission, we also use optional analytics cookies and similar technologies/);
   assert.match(app.panel.innerHTML, /href="\/privacy">Privacy Policy<\/a>/);
-  assert.match(app.panel.innerHTML, /data-analytics-choice="denied">Decline optional cookies<\/button>/);
-  assert.match(app.panel.innerHTML, /data-analytics-choice="granted">Allow optional cookies<\/button>/);
+  assert.match(app.panel.innerHTML, /data-analytics-choice="denied">Decline analytics<\/button>/);
+  assert.match(app.panel.innerHTML, /data-analytics-choice="granted">Allow analytics<\/button>/);
   app.choices[0].click();
   assert.equal(app.panel.hidden, true);
   assert.equal(app.scripts.length, 0);
