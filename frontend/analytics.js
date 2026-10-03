@@ -112,6 +112,7 @@
     function changeConsent(nextChoice) {
       choice = nextChoice;
       panel.hidden = true;
+      if (dialog.open) dialog.close();
       if (choice === "granted" && !privacySignal) {
         const wasStarted = started;
         start();
@@ -130,30 +131,51 @@
     panel.className = "analytics-consent";
     panel.setAttribute("aria-labelledby", "analytics-consent-title");
     panel.setAttribute("data-no-sport-copy", "");
-    panel.innerHTML = `<div><h2 id="analytics-consent-title" tabindex="-1">Cookie preferences</h2>
-      <p>We use essential browser storage to keep you signed in and remember your preferences. With your permission, we also use optional analytics cookies and similar technologies to understand how people use Predict Playoffs and improve the site. If you decline, optional analytics stay off. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a></p></div>
-      <div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline analytics</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow analytics</button></div>`;
+    const cookieMessage = `We use essential browser storage to keep you signed in and remember your preferences. With your permission, we also use optional analytics cookies and similar technologies to understand how people use Predict Playoffs and improve the site. If you decline, optional analytics stay off. <a href="${page.endsWith(".html") ? "/privacy.html" : "/privacy"}">Privacy Policy</a>`;
+    const consentActions = `<div class="analytics-consent-actions"><button class="button button-ghost" type="button" data-analytics-choice="denied">Decline analytics</button><button class="button button-ghost" type="button" data-analytics-choice="granted">Allow analytics</button></div>`;
+    panel.innerHTML = `<div><h2 id="analytics-consent-title" tabindex="-1">Cookie preferences</h2><p>${cookieMessage}</p></div>${consentActions}`;
     panel.hidden = privacySignal || ["granted", "denied"].includes(choice);
     const header = document.getElementById("site-header");
     if (header) header.after(panel);
     else document.body.appendChild(panel);
-    panel.querySelectorAll("[data-analytics-choice]").forEach(button => {
-      button.disabled = privacySignal;
-      button.addEventListener("click", () => {
-        const nextChoice = button.dataset.analyticsChoice;
-        try { localStorage.setItem(consentKey, nextChoice); } catch (_error) { /* This page only. */ }
-        changeConsent(nextChoice);
+
+    const dialog = document.createElement("dialog");
+    dialog.id = "cookie-preferences-dialog";
+    dialog.className = "account-dialog cookie-preferences-dialog";
+    dialog.setAttribute("aria-labelledby", "cookie-preferences-title");
+    dialog.setAttribute("data-no-sport-copy", "");
+    dialog.innerHTML = `<div class="cookie-preferences-content"><div class="dialog-heading"><h2 id="cookie-preferences-title" tabindex="-1">Cookie preferences</h2><button class="button button-ghost" type="button" data-cookie-close aria-label="Close cookie preferences">Close</button></div><p>${cookieMessage}</p>${consentActions}</div>`;
+    document.body.appendChild(dialog);
+    for (const surface of [panel, dialog]) {
+      surface.querySelectorAll("[data-analytics-choice]").forEach(button => {
+        button.disabled = privacySignal;
+        button.addEventListener("click", () => {
+          const nextChoice = button.dataset.analyticsChoice;
+          try { localStorage.setItem(consentKey, nextChoice); } catch (_error) { /* This page only. */ }
+          changeConsent(nextChoice);
+        });
       });
-    });
-    if (privacySignal) {
-      panel.querySelector("p").prepend("Your browser’s privacy signal is enabled, so optional cookies and site usage measurements are disabled. ");
+      if (privacySignal) {
+        surface.querySelector("p").prepend("Your browser’s privacy signal is enabled, so optional cookies and site usage measurements are disabled. ");
+      }
     }
     const preferences = document.querySelector(".cookie-preferences");
+    dialog.querySelector("[data-cookie-close]").addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", event => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+      document.body.classList.remove("cookie-preferences-open");
+      preferences?.focus({ preventScroll: true });
+    });
     if (preferences) {
+      preferences.setAttribute("aria-haspopup", "dialog");
+      preferences.setAttribute("aria-controls", dialog.id);
       preferences.addEventListener("click", () => {
-        panel.hidden = false;
-        panel.scrollIntoView({ block: "center" });
-        panel.querySelector("h2").focus({ preventScroll: true });
+        if (dialog.open) return;
+        dialog.showModal();
+        document.body.classList.add("cookie-preferences-open");
+        dialog.querySelector("h2").focus({ preventScroll: true });
       });
     }
     window.addEventListener("storage", event => {

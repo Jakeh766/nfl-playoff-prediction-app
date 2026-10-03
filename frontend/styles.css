@@ -4062,6 +4062,24 @@ footer p {
 .analytics-consent a { color: var(--link); text-underline-offset: 3px; }
 .analytics-consent-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .analytics-consent-actions button { min-height: 44px; }
+.cookie-preferences-dialog.account-dialog {
+  width: min(580px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+}
+.cookie-preferences-content { padding: 28px; }
+.cookie-preferences-dialog h2 { margin: 0; font: 700 24px var(--body); text-transform: none; }
+.cookie-preferences-dialog .dialog-heading { align-items: center; gap: 16px; }
+.cookie-preferences-dialog p { margin: 20px 0 24px; line-height: 1.6; }
+.cookie-preferences-dialog a { color: var(--link); text-underline-offset: 3px; }
+.cookie-preferences-dialog .button { min-height: 44px; }
+body.cookie-preferences-open { overflow: hidden; }
+@media (max-width: 480px) {
+  .cookie-preferences-content { padding: 20px; }
+  .cookie-preferences-dialog .analytics-consent-actions { flex-direction: column; }
+}
 .cookie-preferences {
   min-height: 44px;
   padding: 0;

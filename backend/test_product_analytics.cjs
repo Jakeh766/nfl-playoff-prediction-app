@@ -26,19 +26,41 @@ function boot(options = {}) {
   const cookies = new Map([["_ga", "old"], ["_clck", "old"], ["auth", "keep"]]);
   const cookieWrites = [];
   let idsCreated = 0;
-  const choices = ["denied", "granted"].map(choice => ({
+  const makeChoices = () => ["denied", "granted"].map(choice => ({
     dataset: { analyticsChoice: choice },
-    addEventListener: (_name, callback) => { choices.find(button => button.dataset.analyticsChoice === choice).click = callback; },
+    addEventListener(name, callback) { this[name] = callback; },
   }));
+  const choices = makeChoices();
+  const dialogChoices = makeChoices();
   let headingFocused = false;
-  const settingsButton = { addEventListener(name, callback) { this[name] = callback; } };
+  let footerFocused = false;
+  let scrolls = 0;
+  const attributes = {};
+  const settingsButton = {
+    setAttribute(name, value) { attributes[name] = value; },
+    addEventListener(name, callback) { this[name] = callback; },
+    focus() { footerFocused = true; },
+  };
   const privacyMessage = { prepend(value) { this.text = value; } };
+  const dialogPrivacyMessage = { prepend(value) { this.text = value; } };
+  const closeButton = { addEventListener(name, callback) { this[name] = callback; } };
   const heading = { focus() { headingFocused = true; } };
   const panel = {
-    setAttribute() {}, scrollIntoView() {},
+    setAttribute() {}, scrollIntoView() { scrolls++; },
     querySelectorAll: () => choices, querySelector: selector => selector === "p" ? privacyMessage : heading,
   };
-  const body = { dataset: { page: options.page || "picks" }, setAttribute() {}, appendChild() {} };
+  const dialogListeners = new Map();
+  const dialog = {
+    open: false, setAttribute() {},
+    querySelectorAll: () => dialogChoices,
+    querySelector: selector => selector === "p" ? dialogPrivacyMessage : selector === "h2" ? heading : closeButton,
+    addEventListener(name, callback) { dialogListeners.set(name, callback); },
+    showModal() { this.open = true; },
+    close() { this.open = false; dialogListeners.get("close")?.(); },
+  };
+  const bodyClasses = new Set();
+  const body = { dataset: { page: options.page || "picks" }, setAttribute() {}, appendChild() {},
+    classList: { add: name => bodyClasses.add(name), remove: name => bodyClasses.delete(name) } };
   let reloads = 0;
   const url = new URL(options.url || "https://dev.example.com/picks?sport=nba");
   const context = {
@@ -54,7 +76,7 @@ function boot(options = {}) {
       set cookie(value) { cookieWrites.push(value); cookies.delete(value.split("=")[0]); },
       referrer: options.referrer || "https://example.org/article?email=private@example.org",
       head: { appendChild: script => scripts.push(script) },
-      createElement: tag => tag === "section" ? panel : {
+      createElement: tag => tag === "section" ? panel : tag === "dialog" ? dialog : {
         addEventListener(name, callback) { this[name] = callback; },
       },
       getElementById: () => ({ after() {} }),
@@ -72,7 +94,8 @@ function boot(options = {}) {
   vm.createContext(context);
   vm.runInContext(script, context);
   vm.runInContext(monitoring, context);
-  return { context, scripts, requests, panel, store, sessionStore, choices, settingsButton, privacyMessage, cookieWrites,
+  return { context, scripts, requests, panel, dialog, dialogChoices, closeButton, dialogListeners, bodyClasses, attributes, store, sessionStore, choices, settingsButton, privacyMessage, dialogPrivacyMessage, cookieWrites,
+    footerFocused: () => footerFocused, scrolls: () => scrolls,
     idsCreated: () => idsCreated,
     payloads: () => requests.map(({ request }) => JSON.parse(request.body)),
     headingFocused: () => headingFocused, reloads: () => reloads,
@@ -95,7 +118,7 @@ test("aggregate events start without consent; optional scripts and IDs wait for 
   assert.equal(app.idsCreated(), 2);
 });
 
-test("cookie preferences support declining and reopening the consent panel", () => {
+test("cookie preferences reopen in a modal without scrolling or revealing the banner", () => {
   const app = boot();
   assert.equal(app.panel.hidden, false);
   assert.match(app.panel.innerHTML, /Cookie preferences/);
@@ -113,11 +136,47 @@ test("cookie preferences support declining and reopening the consent panel", () 
   assert.equal(app.store.get("pp_analytics_consent_v1"), "denied");
   assert.equal(app.reloads(), 0);
   app.settingsButton.click();
-  assert.equal(app.panel.hidden, false);
+  assert.equal(app.panel.hidden, true);
+  assert.equal(app.dialog.open, true);
+  assert.equal(app.scrolls(), 0);
   assert.equal(app.headingFocused(), true);
   assert.equal(app.scripts.length, 0);
   assert.equal(app.requests.length, 2);
   assert.equal(app.idsCreated(), 0);
+});
+
+test("closing cookie preferences preserves consent, unlocks scrolling, and restores footer focus", () => {
+  for (const dismiss of [app => app.closeButton.click(), app => app.dialog.close(),
+    app => app.dialogListeners.get("click")({ target: app.dialog })]) {
+    const app = boot({ consent: "denied" });
+    app.settingsButton.click();
+    assert.equal(app.dialog.open, true);
+    assert.equal(app.attributes["aria-haspopup"], "dialog");
+    assert.equal(app.attributes["aria-controls"], "cookie-preferences-dialog");
+    assert.ok(app.bodyClasses.has("cookie-preferences-open"));
+    dismiss(app);
+    assert.equal(app.dialog.open, false);
+    assert.equal(app.bodyClasses.has("cookie-preferences-open"), false);
+    assert.equal(app.footerFocused(), true);
+    assert.equal(app.store.get("pp_analytics_consent_v1"), "denied");
+    assert.equal(app.panel.hidden, true);
+    assert.equal(app.scrolls(), 0);
+  }
+});
+
+test("dialog choices persist consent and close both consent surfaces", () => {
+  for (const choice of ["granted", "denied"]) {
+    const app = boot();
+    app.settingsButton.click();
+    assert.equal(app.panel.hidden, false); // Initial unanswered banner stays in place.
+    app.dialogChoices.find(button => button.dataset.analyticsChoice === choice).click();
+    assert.equal(app.store.get("pp_analytics_consent_v1"), choice);
+    assert.equal(app.dialog.open, false);
+    assert.equal(app.panel.hidden, true);
+    assert.equal(app.bodyClasses.has("cookie-preferences-open"), false);
+    assert.equal(app.context.productAnalytics.allowed(), choice === "granted");
+    assert.equal(app.footerFocused(), true);
+  }
 });
 
 test("GA events remove tokens and ignore arbitrary user data", () => {
@@ -165,10 +224,12 @@ test("cookie preferences explain browser privacy signals while keeping optional 
     const app = boot(options);
     assert.equal(app.panel.hidden, true);
     app.settingsButton.click();
-    assert.equal(app.panel.hidden, false);
+    assert.equal(app.panel.hidden, true);
+    assert.equal(app.dialog.open, true);
     assert.equal(app.headingFocused(), true);
     assert.match(app.privacyMessage.text, /privacy signal is enabled/);
-    assert.ok(app.choices.every(button => button.disabled));
+    assert.ok([...app.choices, ...app.dialogChoices].every(button => button.disabled));
+    assert.match(app.dialogPrivacyMessage.text, /privacy signal is enabled/);
     assert.equal(app.requests.length, 0);
     assert.equal(app.scripts.length, 0);
   }
