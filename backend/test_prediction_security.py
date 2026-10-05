@@ -113,7 +113,8 @@ class PredictionSecurityTests(unittest.TestCase):
             candidate = valid_prediction()
             candidate["seeds"]["AFC"] = (candidate["seeds"]["AFC"] * 2)[:length]
             self.assertEqual(self.submit(candidate)[0]["statusCode"], 400)
-        for body in ("{", "null", "[]", '"bracket"'):
+        for body in ("{", "null", "[]", '"bracket"',
+                     '{"divisionWinners":' + '[' * 2000 + ']' * 2000 + '}'):
             result, table = self.submit(body, raw=True)
             self.assertEqual(result["statusCode"], 400)
             table.put_item.assert_not_called()

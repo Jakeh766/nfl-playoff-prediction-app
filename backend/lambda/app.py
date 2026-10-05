@@ -945,7 +945,7 @@ def response(status_code: int, payload: dict) -> dict:
 def parse_body(event) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
-    except (TypeError, json.JSONDecodeError) as error:
+    except (TypeError, json.JSONDecodeError, RecursionError) as error:
         raise ValueError("Request body must be valid JSON") from error
     if not isinstance(body, dict):
         raise ValueError("Request body must be a JSON object")
