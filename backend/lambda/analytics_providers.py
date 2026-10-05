@@ -15,6 +15,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import boto3
+import daily_visitors
 
 
 class NotConfigured(Exception):
@@ -104,10 +105,24 @@ def custom(_config, start, end):
         metrics.append(metric(label, counts(event), note="Browser-reported event count."))
     metrics.append(metric("Groups joined", counts("group_joined") + counts("group_invite_joined"),
                           note="Includes joins through invitations."))
-    return {"metrics": metrics, "tables": [table("Top pages", [("page", "Page", "text"),
+    daily_tables = []
+    try:
+        days = daily_visitors.report(start, end)
+        latest = days[-1]["visitors"]
+        note = f"{end} UTC. Cookie-free estimate, deduplicated across public pages; returning visitors count again the next day."
+        if latest is None:
+            note += " Tracking had not started on this date; choose a current date."
+        daily_tables.append({"title": "Daily distinct visitors", "chart": "daily",
+            "columns": [{"key": "day", "label": "Day (UTC)", "format": "text"},
+                        {"key": "visitors", "label": "Distinct visitors", "format": "number"}], "rows": days})
+    except Exception:
+        latest = None
+        note = "Daily visitor counts could not be read. Other custom metrics are still available."
+    metrics.insert(0, metric("Distinct visitors (last day)", latest, note=note))
+    return {"metrics": metrics, "tables": daily_tables + [table("Top pages", [("page", "Page", "text"),
              ("pageviews", "Pageviews", "number")], [{"page": safe_path(row.get("page")),
              "pageviews": number(row["pageviews"])} for row in pages])],
-            "note": "Development events from CloudWatch. Counts include cookieless visits; visitor and visit counts require consent. Event counts are not account database totals."}
+            "note": "Dev only. Daily distinct visitors use first-party cookie-free daily aggregates; shared IP/browser combinations can merge people, and network/browser changes can count someone twice. Pageviews include cookieless visits; consented visitors/sessions use optional IDs. GPC and Do Not Track suppress collection. Event counts are not account database totals."}
 
 
 def goatcounter(config, start, end):

@@ -99,7 +99,8 @@ def cached_report(provider, start, end):
     # DynamoDB cache and leases work across Lambda containers. Authorization is
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
-    key = f"v1:{provider}:{'latest-72h' if provider == 'clarity' else f'{start}:{end}'}"
+    version = "v2" if provider == "custom" else "v1"
+    key = f"{version}:{provider}:{'latest-72h' if provider == 'clarity' else f'{start}:{end}'}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})
     if int(item.get("freshUntil", 0)) > now and item.get("report"):

@@ -38,6 +38,33 @@ class AnalyticsTests(unittest.TestCase):
         "visitorId": "23f1dc60-e4a2-4a12-b31c-1be61e25b455",
     }
 
+    def test_daily_counter_receives_only_valid_dev_public_pageviews(self):
+        import daily_visitors
+        for environment, body, expected in [
+            ("dev", {"event": "page_view", "page": "/"}, 1),
+            ("prod", {"event": "page_view", "page": "/"}, 0),
+            ("dev", {"event": "sign_in", "page": "/"}, 0),
+            ("dev", {"event": "page_view", "page": "/picks?invite=private"}, 0),
+            ("dev", {"event": "page_view", "page": "/admin/analytics"}, 0),
+            ("dev", {"event": "page_view", "page": "/", "visitorId": "private"}, 0),
+        ]:
+            with self.subTest(environment=environment, body=body), patch.dict(os.environ, {"ENVIRONMENT": environment}), \
+                 patch.object(daily_visitors, "record") as record, redirect_stdout(StringIO()):
+                lambda_app.handler(analytics_event(body), None)
+                self.assertEqual(record.call_count, expected)
+
+    def test_counter_failure_returns_accepted_and_never_logs_exception_or_headers(self):
+        import daily_visitors
+        output = StringIO()
+        event = analytics_event({"event": "page_view", "page": "/"})
+        event["headers"] = {"user-agent": "PRIVATE-UA", "cookie": "PRIVATE-COOKIE"}
+        with patch.dict(os.environ, {"ENVIRONMENT": "dev"}), \
+             patch.object(daily_visitors, "record", side_effect=RuntimeError("PRIVATE-IP-TOKEN")), redirect_stdout(output):
+            response = lambda_app.handler(event, None)
+        self.assertEqual(response["statusCode"], 202)
+        self.assertNotIn("PRIVATE", output.getvalue())
+        self.assertNotIn("Set-Cookie", response["headers"])
+
     def test_event_is_logged_without_request_metadata(self):
         output = StringIO()
         with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), redirect_stdout(output):

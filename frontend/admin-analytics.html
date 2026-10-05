@@ -35,12 +35,12 @@
         <span class="analytics-environment">Private · dev dashboard</span>
       </div>
       <section class="analytics-coverage" aria-label="Which environment each report measures">
-        <div><h2>Dev only</h2><p>CloudWatch activity and GoatCounter page visits. These measure the development app.</p></div>
+        <div><h2>Dev only</h2><p>Daily distinct visitors, CloudWatch activity and GoatCounter page visits. These measure the development app.</p></div>
         <div><h2>Production domain</h2><p>Search Console measures Google Search results for <strong>predictplayoffs.com</strong>, including its subdomains.</p></div>
         <div><h2>Property / project wide</h2><p>GA4 and Clarity have dev tracking connected. Reports include all collected hosts; dev and prod are not separated.</p></div>
       </section>
       <form id="analytics-range" class="analytics-range">
-        <label>Range<select id="analytics-preset"><option value="7">Last 7 days</option><option value="28" selected>Last 28 days</option><option value="90">Last 90 days</option><option value="custom">Custom dates</option></select></label>
+        <label>Range<select id="analytics-preset"><option value="today">Today (UTC)</option><option value="7">Last 7 days</option><option value="28" selected>Last 28 days</option><option value="90">Last 90 days</option><option value="custom">Custom dates</option></select></label>
         <label>Start date<input id="analytics-start" type="date" required /></label>
         <label>End date<input id="analytics-end" type="date" required /></label>
         <button class="button button-primary" id="analytics-apply" type="submit">Update reports</button>

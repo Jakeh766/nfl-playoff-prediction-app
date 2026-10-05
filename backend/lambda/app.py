@@ -910,6 +910,14 @@ def record_analytics_event(event: dict) -> None:
     ):
         raise ValueError("Invalid analytics visitor")
 
+    if event_name == "page_view" and os.environ.get("ENVIRONMENT") == "dev":
+        # Optional daily counting must never interrupt public app requests.
+        try:
+            from daily_visitors import record
+            record(event)
+        except Exception:
+            print('{"type":"daily_visitors_unavailable","environment":"dev"}')
+
     print(
         json.dumps(
             {

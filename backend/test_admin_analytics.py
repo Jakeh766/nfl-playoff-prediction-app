@@ -164,7 +164,7 @@ class AdminTests(unittest.TestCase):
     def test_cache_lease_prevents_concurrent_provider_requests(self):
         request = event("custom")
         params = request["queryStringParameters"]
-        self.cache.items[f"v1:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
+        self.cache.items[f"v2:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
         with patch.dict(admin.PROVIDERS, custom=Mock()) as adapter:
             result = admin.handler(request, None)
             self.assertEqual(json.loads(result["body"])["status"], "updating")
@@ -194,13 +194,24 @@ class ProviderTests(unittest.TestCase):
                 return [{"event": "page_view", "count": "15", "visitors": "3", "visits": "5"},
                         {"event": "group_joined", "count": "2"}, {"event": "group_invite_joined", "count": "4"}]
             return [{"page": "/picks?invite=secret#private", "pageviews": "10"}]
-        with patch.object(providers, "cloudwatch_query", side_effect=results):
+        with patch.object(providers, "cloudwatch_query", side_effect=results), \
+             patch.object(providers.daily_visitors, "report", return_value=[{"day": str(self.end), "visitors": 9}]):
             result = providers.custom({}, self.start, self.end)
         counts = {item["label"]: item["value"] for item in result["metrics"]}
         self.assertEqual(counts["Pageviews"], 15)
         self.assertEqual(counts["Visitors with consent"], 3)
         self.assertEqual(counts["Groups joined"], 6)
+        self.assertEqual(counts["Distinct visitors (last day)"], 9)
+        self.assertEqual(result["tables"][0]["chart"], "daily")
         self.assertNotIn("secret", json.dumps(result))
+
+    def test_daily_counter_read_failure_does_not_break_cloudwatch_or_leak_error(self):
+        with patch.object(providers, "cloudwatch_query", return_value=[]), \
+             patch.object(providers.daily_visitors, "report", side_effect=RuntimeError("SECRET-IP")):
+            result = providers.custom({}, self.start, self.end)
+        self.assertIsNone(result["metrics"][0]["value"])
+        self.assertEqual(result["metrics"][1]["value"], 0)
+        self.assertNotIn("SECRET", json.dumps(result))
 
     def test_goatcounter_api_referrers_and_counts_are_not_claimed_as_unique_visitors(self):
         def answer(url, token):

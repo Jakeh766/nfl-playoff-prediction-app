@@ -64,6 +64,40 @@ async function boot(options = {}) {
   return { elements, requests, redirects, store, listeners, context };
 }
 
+test("daily visitor chart keeps UTC chronology, excludes unknown days, and never sums range uniques", async () => {
+  const rows = Array.from({ length: 20 }, (_, index) => ({ day: `2026-09-${String(index + 1).padStart(2, "0")}`,
+    visitors: index === 6 ? null : 20 - index }));
+  const app = await boot({ reports: { custom: { metrics: [{ label: "Distinct visitors (last day)", value: 1,
+    note: "2026-09-20 UTC. Cookie-free estimate." }], tables: [{ title: "Daily distinct visitors", chart: "daily",
+    columns: [{ key: "day", label: "Day (UTC)", format: "text" }, { key: "visitors", label: "Distinct visitors", format: "number" }], rows }] } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
+  const breakdown = section.children.find(node => node.className === "analytics-breakdowns").children[0];
+  const chart = breakdown.children.find(node => node.tag === "figure");
+  const bars = chart.children.find(node => node.tag === "ul").children;
+  assert.equal(bars.length, 13);
+  assert.match(bars[0].text, /2026-09-08/);
+  assert.match(bars.at(-1).text, /2026-09-20/);
+  assert.doesNotMatch(chart.text, /2026-09-07/);
+  assert.match(chart.text, /adding days does not give distinct visitors for the entire range/);
+  assert.match(breakdown.children.find(node => node.tag === "details").text, /2026-09-01/);
+  assert.match(section.text, /Dev only/);
+  assert.ok(app.requests.every(({ url }) => !url.startsWith("/api/analytics")));
+});
+
+test("Today preset selects the current UTC day without changing completed-day presets", async () => {
+  const app = await boot();
+  const preset = app.elements.get("analytics-preset");
+  preset.value = "today";
+  preset.listeners.change();
+  assert.equal(app.elements.get("analytics-start").value, new Date().toISOString().slice(0, 10));
+  assert.equal(app.elements.get("analytics-end").value, app.elements.get("analytics-start").value);
+  preset.value = "7";
+  preset.listeners.change();
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  assert.equal(app.elements.get("analytics-end").value, yesterday.toISOString().slice(0, 10));
+});
+
 test("signed-out, non-admin, lookalike groups and production redirect without any analytics API request", async () => {
   for (const options of [{ noSession: true }, { groups: ["member"] }, { groups: ["administrator"] },
     { groups: "admin" }, { environment: "prod" }]) {
