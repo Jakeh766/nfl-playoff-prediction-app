@@ -7,6 +7,7 @@ const vm = require("node:vm");
 const root = path.join(__dirname, "..");
 const script = fs.readFileSync(path.join(root, "frontend/analytics.js"), "utf8");
 const monitoring = fs.readFileSync(path.join(root, "frontend/monitoring.js"), "utf8");
+const goatcounter = fs.readFileSync(path.join(root, "frontend/goatcounter.js"), "utf8");
 
 function boot(options = {}) {
   const scripts = [];
@@ -79,6 +80,7 @@ function boot(options = {}) {
       referrer: options.referrer || "https://example.org/article?email=private@example.org",
       head: { appendChild: script => scripts.push(script) },
       createElement: tag => tag === "section" ? panel : tag === "dialog" ? dialog : {
+        dataset: {},
         addEventListener(name, callback) { this[name] = callback; },
       },
       getElementById: () => ({ after() {} }),
@@ -94,6 +96,7 @@ function boot(options = {}) {
   };
   context.window = context;
   vm.createContext(context);
+  if (options.goatcounter) vm.runInContext(goatcounter, context);
   vm.runInContext(script, context);
   vm.runInContext(monitoring, context);
   return { context, scripts, requests, panel, dialog, dialogChoices, closeButton, dialogListeners, bodyClasses, attributes, store, sessionStore, choices, settingsButton, privacyMessage, dialogPrivacyMessage, preferenceStatus, cookieWrites,
@@ -182,6 +185,31 @@ test("dialog choices persist consent and close both consent surfaces", () => {
     assert.equal(app.preferenceStatus.textContent, choice === "granted" ?
       "Optional analytics: Allowed" : "Optional analytics: Declined");
   }
+});
+
+test("the GoatCounter loader leaves GA4 and Clarity consent behavior unchanged", () => {
+  for (const consent of [undefined, "denied", "granted"]) {
+    const app = boot({ goatcounter: true, consent, referrer: "https://dev.example.com/" });
+    const goatScripts = () => app.scripts.filter(script => script.dataset.goatcounter);
+    const optionalScripts = () => app.scripts.filter(script => !script.dataset.goatcounter);
+    assert.equal(goatScripts().length, 1);
+    assert.equal(optionalScripts().length, consent === "granted" ? 2 : 0);
+    assert.equal(app.context.productAnalytics.allowed(), consent === "granted");
+    if (consent !== "granted") app.choices[1].click();
+    assert.equal(optionalScripts().length, 2);
+    assert.equal(app.context.clarity.q[0][0], "consentv2");
+    assert.equal(app.context.clarity.q[0][1].ad_Storage, "denied");
+    app.choices[0].click();
+    assert.equal(app.context.productAnalytics.allowed(), false);
+    assert.equal(app.context["ga-disable-G-TEST123"], true);
+    assert.equal(app.context.clarity.q.at(-1)[0], "stop");
+    assert.equal(app.context.goatcounter.no_onload, true);
+    assert.equal(goatScripts().length, 1);
+  }
+  const prod = boot({ goatcounter: true, consent: "granted", environment: "prod",
+    referrer: "https://dev.example.com/" });
+  assert.equal(prod.scripts.filter(script => script.dataset.goatcounter).length, 0);
+  assert.equal(prod.scripts.length, 2);
 });
 
 test("cookie preferences show the effective current choice and an accessible X close button", () => {

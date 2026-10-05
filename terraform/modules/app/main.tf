@@ -6,6 +6,10 @@ locals {
   analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
 
   frontend_files = {
+    "goatcounter.js" = {
+      source       = "${var.frontend_dir}/goatcounter.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "analytics.js" = {
       source       = "${var.frontend_dir}/analytics.js"
       content_type = "application/javascript; charset=utf-8"

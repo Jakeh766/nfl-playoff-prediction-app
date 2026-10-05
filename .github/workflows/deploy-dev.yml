@@ -49,6 +49,7 @@ jobs:
           node --check frontend/leaderboard.js
           node --check frontend/monitoring.js
           node --check frontend/analytics.js
+          node --check frontend/goatcounter.js
           node --check frontend/picks.js
           node --check frontend/scoring.js
           node --check frontend/shell.js
@@ -61,7 +62,7 @@ jobs:
         run: node --test backend/test_leaderboard.cjs
 
       - name: Test analytics consent and privacy
-        run: node --test backend/test_product_analytics.cjs
+        run: node --test backend/test_product_analytics.cjs backend/test_goatcounter.cjs
 
       - name: Check backend Python syntax
         run: python -m py_compile backend/lambda/app.py backend/lambda/results_updater.py
