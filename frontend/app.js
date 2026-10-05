@@ -590,7 +590,7 @@ function loadAuthSession() {
     }
     return session;
   } catch (error) {
-    console.warn("Discarding an invalid authentication session.", error);
+    console.warn("Discarding an invalid authentication session.");
     localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     return null;
@@ -622,7 +622,7 @@ function decodeJwtPayload(token) {
     const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
     return JSON.parse(atob(padded));
   } catch (error) {
-    console.warn("Could not decode the Cognito token.", error);
+    console.warn("Could not decode the Cognito token.");
     return {};
   }
 }
@@ -634,6 +634,9 @@ async function requestCognito(operation, parameters) {
   }
   const response = await fetch(config.cognitoEndpoint, {
     method: "POST",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/x-amz-json-1.1",
       "X-Amz-Target": `AWSCognitoIdentityProviderService.${operation}`,
@@ -642,7 +645,12 @@ async function requestCognito(operation, parameters) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.message || "Cognito rejected the request.");
+    // Never render a provider response that could echo credentials or tokens.
+    const alreadyConfirmed = operation === "ResendConfirmationCode" &&
+      /already\s+confirmed|confirmed\s+user/i.test(payload.message || "");
+    const error = new Error(alreadyConfirmed
+      ? "This account is already confirmed."
+      : "Cognito rejected the request. Please try again.");
     error.code = String(payload.__type || "").split("#").at(-1);
     throw error;
   }
@@ -729,7 +737,7 @@ async function submitSignIn(event) {
   try {
     await finishPasswordSignIn(email, password);
   } catch (error) {
-    console.error("Could not sign in with Cognito.", error);
+    console.error("Could not sign in with Cognito.");
     if (error.code === "UserNotConfirmedException") {
       pendingAccountCredentials = { email, password };
       elements.loginPassword.value = "";
@@ -883,7 +891,7 @@ async function submitConfirmAccount(event) {
   try {
     await finishPasswordSignIn(credentials.email, credentials.password);
   } catch (error) {
-    console.error("Could not sign in after confirming the account.", error);
+    console.error("Could not sign in after confirming the account.");
     showAuthPanel(
       "signIn",
       `Email confirmed. ${signInErrorMessage(error)}`,
@@ -987,7 +995,7 @@ async function getValidAccessToken() {
       session,
     ).accessToken;
   } catch (error) {
-    console.warn("The Cognito session could not be refreshed.", error);
+    console.warn("The Cognito session could not be refreshed.");
     clearAuthSession();
     return null;
   }
@@ -1156,7 +1164,19 @@ async function signOut() {
         AccessToken: session.accessToken,
       });
     } catch (error) {
-      console.warn("The Cognito session could not be invalidated remotely.", error);
+      console.warn("The Cognito session could not be invalidated remotely.");
+    }
+  }
+  // Attempt global sign-out first: revoking this grant can invalidate its access
+  // token. Still revoke the refresh token when that access token has expired.
+  if (session?.refreshToken) {
+    try {
+      await requestCognito("RevokeToken", {
+        ClientId: authConfig().clientId,
+        Token: session.refreshToken,
+      });
+    } catch (_error) {
+      console.warn("The Cognito refresh token could not be revoked remotely.");
     }
   }
 }

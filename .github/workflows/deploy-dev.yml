@@ -83,6 +83,9 @@ jobs:
       - name: Test authenticated prediction ownership
         run: python -m unittest discover -s backend -p "test_*.py"
 
+      - name: Test Cognito token handling
+        run: node --test backend/test_token_security.cjs
+
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive terraform
 

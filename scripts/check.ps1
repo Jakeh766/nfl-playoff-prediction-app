@@ -55,6 +55,7 @@ try {
     }
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_leaderboard.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_account_modal.cjs")
+    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_token_security.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_product_analytics.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_goatcounter.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_admin_analytics.cjs")
