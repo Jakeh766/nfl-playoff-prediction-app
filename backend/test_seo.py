@@ -261,9 +261,10 @@ class SeoTests(unittest.TestCase):
         self.assertRegex(config, r'"nba"\s*=\s*\{\s*source\s*=\s*"\$\{var.frontend_dir\}/nba.html"\s*content_type\s*=\s*"text/html; charset=utf-8"')
         for filename, mime in [("robots.txt", "text/plain"), ("sitemap.xml", "application/xml")]:
             self.assertRegex(config, '"' + re.escape(filename) + r'"\s*=\s*\{\s*source\s*=\s*"\$\{var.frontend_dir\}/' + re.escape(filename) + r'"\s*content_type\s*=\s*"' + mime)
-        self.assertRegex(config, r'count\s*= var.environment == "prod" \? 0 : 1')
+        self.assertIn('from = aws_cloudfront_response_headers_policy.noindex[0]', config)
         self.assertRegex(config, r'header\s*= "X-Robots-Tag"\s*value\s*= "noindex, nofollow"\s*override\s*= true')
-        self.assertEqual(len(re.findall(r'response_headers_policy_id\s*= var.environment == "prod" \? null : aws_cloudfront_response_headers_policy.noindex\[0\].id', config)), 2)
+        self.assertEqual(len(re.findall(r'response_headers_policy_id\s*= aws_cloudfront_response_headers_policy.security.id', config)), 2)
+        self.assertIn('for_each = var.environment == "prod" ? [] : [1]', config)
         self.assertNotIn("custom_error_response", config)
         self.assertIn('default_root_object = "index.html"', config)
         for env in ["dev", "prod"]:

@@ -563,7 +563,7 @@ resource "aws_cognito_user_pool_client" "browser" {
   prevent_user_existence_errors        = "ENABLED"
   access_token_validity                = 1
   id_token_validity                    = 1
-  refresh_token_validity               = 30
+  refresh_token_validity               = 7
 
   token_validity_units {
     access_token  = "hours"
@@ -1090,15 +1090,93 @@ resource "aws_cloudfront_cache_policy" "frontend" {
   }
 }
 
-# Allow crawlers to fetch dev pages and read noindex. Production uses static page metadata.
-resource "aws_cloudfront_response_headers_policy" "noindex" {
-  count = var.environment == "prod" ? 0 : 1
-  name  = "${local.resource_prefix}-noindex"
+# Preserve the existing dev policy identity while adding browser protections.
+moved {
+  from = aws_cloudfront_response_headers_policy.noindex[0]
+  to   = aws_cloudfront_response_headers_policy.security
+}
+
+locals {
+  # Bare host sources inherit HTTPS from the document. Listing Clarity's 26
+  # load-balanced hosts explicitly keeps the CSP below CloudFront's size limit.
+  clarity_collectors = [for letter in split("", "abcdefghijklmnopqrstuvwxyz") : "${letter}.clarity.ms"]
+  analytics_connections = concat(
+    ["https://www.googletagmanager.com", "https://www.google-analytics.com",
+      "https://region1.google-analytics.com", "https://analytics.google.com",
+    "https://www.google.com", "https://www.clarity.ms", "https://c.bing.com"],
+    local.clarity_collectors,
+    var.environment == "dev" ? ["https://predictplayoffs.goatcounter.com"] : []
+  )
+  structured_data_hashes = distinct(flatten([
+    for html in values(local.frontend_pages) : [
+      for block in regexall("(?s)<script type=\"application/ld\\+json\">(.*?)</script>", html) :
+      "'sha256-${base64sha256(block[0])}'"
+    ]
+  ]))
+  content_security_policy = join("; ", [
+    "default-src 'self'",
+    "script-src 'self' ${join(" ", local.structured_data_hashes)} https://www.googletagmanager.com https://www.clarity.ms https://scripts.clarity.ms${var.environment == "dev" ? " https://gc.zgo.at" : ""}",
+    "script-src-attr 'none'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "connect-src 'self' https://cognito-idp.${var.aws_region}.amazonaws.com ${join(" ", local.analytics_connections)}",
+    "img-src 'self' https://a.espncdn.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://www.clarity.ms https://c.bing.com ${join(" ", local.clarity_collectors)}",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ])
+}
+
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name = "${local.resource_prefix}-security"
+  security_headers_config {
+    content_security_policy {
+      content_security_policy = local.content_security_policy
+      override                = true
+    }
+    content_type_options {
+      override = true
+    }
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+    referrer_policy {
+      referrer_policy = "no-referrer"
+      override        = true
+    }
+    dynamic "strict_transport_security" {
+      for_each = var.environment == "prod" && length(var.cloudfront_aliases) > 0 ? [1] : []
+      content {
+        access_control_max_age_sec = 31536000
+        include_subdomains         = false
+        preload                    = false
+        override                   = true
+      }
+    }
+  }
   custom_headers_config {
     items {
-      header   = "X-Robots-Tag"
-      value    = "noindex, nofollow"
+      header   = "Permissions-Policy"
+      value    = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
       override = true
+    }
+    dynamic "items" {
+      for_each = var.environment == "prod" ? [] : [1]
+      content {
+        header   = "X-Robots-Tag"
+        value    = "noindex, nofollow"
+        override = true
+      }
+    }
+  }
+  lifecycle {
+    precondition {
+      condition     = length(local.content_security_policy) <= 1783
+      error_message = "CSP exceeds CloudFront's 1783-character limit."
     }
   }
 }
@@ -1228,7 +1306,7 @@ resource "aws_cloudfront_distribution" "app" {
   }
 
   default_cache_behavior {
-    response_headers_policy_id = var.environment == "prod" ? null : aws_cloudfront_response_headers_policy.noindex[0].id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
     target_origin_id           = "frontend-s3"
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["GET", "HEAD", "OPTIONS"]
@@ -1238,7 +1316,7 @@ resource "aws_cloudfront_distribution" "app" {
   }
 
   ordered_cache_behavior {
-    response_headers_policy_id = var.environment == "prod" ? null : aws_cloudfront_response_headers_policy.noindex[0].id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
     path_pattern               = "/api/*"
     target_origin_id           = "backend-api"
     viewer_protocol_policy     = "redirect-to-https"
