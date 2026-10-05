@@ -119,9 +119,10 @@ def goatcounter(config, start, end):
         raise ValueError("Invalid GoatCounter site")
     base = f"https://{site}.goatcounter.com/api/v0/stats"
     query = urlencode({"start": f"{start}T00:00:00Z", "end": f"{end}T23:00:00Z"})
+    # Only paginated endpoints accept limit; /stats/total rejects it with 400.
     with ThreadPoolExecutor(max_workers=2) as executor:
-        totals, hits = list(executor.map(lambda suffix: http_json(f"{base}/{suffix}?{query}&limit=10", token),
-                                        ["total", "hits"]))
+        totals, hits = list(executor.map(lambda suffix: http_json(f"{base}/{suffix}", token),
+                                        [f"total?{query}", f"hits?{query}&limit=10"]))
     paths = [hit for hit in hits.get("hits", []) if not hit.get("event")]
     referrals = {}
     def refs(hit):

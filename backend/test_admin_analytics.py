@@ -9,6 +9,7 @@ import time
 import types
 import unittest
 from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend/lambda"))
@@ -204,10 +205,18 @@ class ProviderTests(unittest.TestCase):
     def test_goatcounter_api_referrers_and_counts_are_not_claimed_as_unique_visitors(self):
         def answer(url, token):
             self.assertEqual(token, "server-secret")
+            query = parse_qs(urlsplit(url).query)
+            self.assertEqual(query["start"], ["2026-10-01T00:00:00Z"])
+            self.assertEqual(query["end"], ["2026-10-04T23:00:00Z"])
             if "/total?" in url:
+                # GoatCounter rejects unknown query parameters with HTTP 400.
+                self.assertEqual(set(query), {"start", "end"})
                 return {"total": 14, "total_events": 2}
             if "/hits?" in url:
+                self.assertEqual(query["limit"], ["10"])
                 return {"hits": [{"path_id": 1, "path": "/picks?invite=secret", "count": 12}]}
+            self.assertEqual(urlsplit(url).path, "/api/v0/stats/hits/1")
+            self.assertEqual(query["limit"], ["20"])
             return {"refs": [{"name": "https://example.org/private?invite=secret", "count": 10}]}
         with patch.object(providers, "http_json", side_effect=answer):
             result = providers.goatcounter({"goatcounter": {"token": "server-secret"}}, self.start, self.end)
@@ -219,6 +228,21 @@ class ProviderTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 providers.goatcounter({"goatcounter": {"token": "secret", "site": "evil.example/"}}, self.start, self.end)
             http.assert_not_called()
+
+    def test_goatcounter_empty_site_returns_zero_without_requesting_referrers(self):
+        def answer(url, _token):
+            query = parse_qs(urlsplit(url).query)
+            if urlsplit(url).path.endswith("/total"):
+                self.assertEqual(set(query), {"start", "end"})
+                return {"total": 0, "total_events": 0}
+            self.assertEqual(urlsplit(url).path, "/api/v0/stats/hits")
+            self.assertEqual(query["limit"], ["10"])
+            return {"hits": []}
+        with patch.object(providers, "http_json", side_effect=answer) as http:
+            result = providers.goatcounter({"goatcounter": {"token": "server-secret"}}, self.start, self.end)
+        self.assertEqual(http.call_count, 2)
+        self.assertEqual(result["metrics"][0]["value"], 0)
+        self.assertTrue(all(not item["rows"] for item in result["tables"]))
 
     def test_ga4_uses_batch_reports_with_read_only_metrics_and_server_token(self):
         def report(names, values, dimension=None):
