@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const script = fs.readFileSync(path.join(__dirname, "../frontend/admin-analytics.js"), "utf8");
 
 class Element {
-  constructor(tag = "div") { this.tag = tag; this.children = []; this.dataset = {}; this.listeners = {}; this.value = ""; }
+  constructor(tag = "div") { this.tag = tag; this.children = []; this.dataset = {}; this.style = {}; this.listeners = {}; this.value = ""; }
   set innerHTML(_value) { assert.fail("Provider data must never render as HTML"); }
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = [...nodes]; }
@@ -55,7 +55,7 @@ async function boot(options = {}) {
           { label: "Rage clicks", value: 2.5, format: "percent100" }], tables: [{ title: "Top pages",
           columns: [{ key: "page", label: "Page", format: "text" }], rows: [{ page: "<script>alert('private')</script>" }] }],
           range: { start: "2026-09-01", end: "2026-09-28", timezone: "UTC" },
-          message: "Connect this provider using the setup guide." } };
+          message: "Connect this provider using the setup guide.", ...options.reports?.[provider] } };
     },
   };
   context.window = context;
@@ -145,7 +145,7 @@ test("one failing provider leaves other reports readable and setup states visibl
 
 test("provider strings render only as text and Clarity percentages keep their 0–100 scale", async () => {
   const app = await boot();
-  const section = app.elements.get("analytics-reports").children[0];
+  const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "custom");
   assert.match(section.text, /<img onerror=secret>/);
   assert.match(section.text, /<script>alert/);
   assert.match(section.text, /2\.5%/);
@@ -175,4 +175,63 @@ test("sign-out and session removal in another tab clear private data", async () 
     assert.deepEqual(app.redirects, ["/"]);
     assert.equal(app.elements.get("analytics-reports").children.length, 0);
   }
+});
+
+function nodes(node) { return [node, ...node.children.flatMap(nodes)]; }
+
+test("every provider explains data coverage rather than assuming the dev dashboard means dev data", async () => {
+  const app = await boot();
+  const reports = app.elements.get("analytics-reports").children;
+  const provider = name => reports.find(section => section.dataset.provider === name);
+  assert.match(provider("custom").text, /Dev only.*not production totals/);
+  assert.match(provider("goatcounter").text, /Dev only.*either consent choice/);
+  assert.match(provider("search-console").text, /Production domain.*sc-domain:predictplayoffs.com/);
+  assert.match(provider("ga4").text, /Property wide.*without a hostname filter/);
+  assert.match(provider("clarity").text, /Project wide.*browser dashboard filters do not apply/);
+  assert.match(provider("goatcounter").text, /not a unique person across the whole site/);
+  assert.match(provider("goatcounter").text, /can't|cannot isolate visitors who declined/);
+});
+
+test("ranked charts use returned counts, retain table data, and keep provider strings inert", async () => {
+  const rows = [
+    { page: "<img onerror=secret>", visits: 10 }, { page: "/picks", visits: 5 },
+    { page: "/zero", visits: 0 }, { page: "/missing", visits: null },
+    { page: "/negative", visits: -10 }, { page: "/invalid", visits: "url(secret)" },
+  ];
+  const app = await boot({ reports: { goatcounter: { tables: [{ title: "Top pages",
+    columns: [{ key: "page", label: "Page", format: "text" }, { key: "visits", label: "Page visits", format: "number" }], rows }] } } });
+  const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
+  const chart = nodes(section).find(node => node.className === "analytics-chart");
+  assert.match(chart.text, /<img onerror=secret>.*10.*\/picks.*5.*\/zero.*0/);
+  assert.deepEqual(nodes(chart).filter(node => node.className === "analytics-bar-fill").map(node => node.style.width), ["100%", "50%", "0%"]);
+  assert.ok(nodes(chart).filter(node => node.className === "analytics-bar-track").every(node => node["aria-hidden"] === "true"));
+  assert.equal(nodes(section).find(node => node.tag === "tbody").children.length, rows.length);
+  assert.match(section.text, /View data · Top pages/);
+});
+
+test("engagement charts normalize percentage scales, clamp bars and never turn missing data into zero", async () => {
+  const app = await boot({ reports: { ga4: { metrics: [
+    { label: "Engagement rate", value: 0.25, format: "percent" },
+    { label: "Missing rate", value: null, format: "percent" },
+    { label: "Unavailable rate", value: "", format: "percent" },
+  ], tables: [] }, clarity: { metrics: [
+    { label: "Rage clicks", value: 2.5, format: "percent100" },
+    { label: "Out of range", value: 120, format: "percent100" },
+  ], tables: [] } } });
+  const reports = app.elements.get("analytics-reports").children;
+  const ga = nodes(reports.find(section => section.dataset.provider === "ga4")).find(node => node.className === "analytics-chart");
+  assert.match(ga.text, /0–100%.*Engagement rate.*25%/);
+  assert.doesNotMatch(ga.text, /Missing rate|Unavailable rate/);
+  assert.equal(nodes(ga).find(node => node.className === "analytics-bar-fill").style.width, "25%");
+  const clarity = reports.find(section => section.dataset.provider === "clarity");
+  assert.deepEqual(nodes(clarity).filter(node => node.className === "analytics-bar-fill").map(node => node.style.width), ["2.5%", "100%"]);
+  assert.match(clarity.text, /120%/);
+});
+
+test("empty provider tables show no invented chart or sample traffic", async () => {
+  const app = await boot({ reports: { goatcounter: { tables: [{ title: "Top pages",
+    columns: [{ key: "page", label: "Page", format: "text" }, { key: "visits", label: "Page visits", format: "number" }], rows: [] }] } } });
+  const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
+  assert.equal(nodes(section).filter(node => node.className === "analytics-chart").length, 0);
+  assert.match(section.text, /No data reported for this range/);
 });

@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css?v=58" />
-    <link rel="stylesheet" href="/admin-analytics.css?v=1" />
+    <link rel="stylesheet" href="/admin-analytics.css?v=2" />
     <script src="/auth-config.js" defer></script>
-    <script src="/admin-analytics.js?v=1" defer></script>
+    <script src="/admin-analytics.js?v=2" defer></script>
   </head>
   <body data-page="admin-analytics">
     <a class="analytics-skip" href="#analytics-main">Skip to analytics</a>
@@ -31,16 +31,21 @@
     <p class="analytics-access" id="analytics-access" role="status">Checking administrator access…</p>
     <main id="analytics-main" class="analytics-main" hidden>
       <div class="analytics-heading">
-        <div><h1>Analytics</h1><p>Site traffic and prediction activity.</p></div>
-        <span class="analytics-environment">Development</span>
+        <div><h1>Analytics</h1><p>Traffic, search reach and prediction activity.</p></div>
+        <span class="analytics-environment">Private · dev dashboard</span>
       </div>
+      <section class="analytics-coverage" aria-label="Which environment each report measures">
+        <div><h2>Dev only</h2><p>CloudWatch activity and GoatCounter page visits. These measure the development app.</p></div>
+        <div><h2>Production domain</h2><p>Search Console measures Google Search results for <strong>predictplayoffs.com</strong>, including its subdomains.</p></div>
+        <div><h2>Property / project wide</h2><p>GA4 and Clarity have dev tracking connected. Reports include all collected hosts; dev and prod are not separated.</p></div>
+      </section>
       <form id="analytics-range" class="analytics-range">
         <label>Range<select id="analytics-preset"><option value="7">Last 7 days</option><option value="28" selected>Last 28 days</option><option value="90">Last 90 days</option><option value="custom">Custom dates</option></select></label>
         <label>Start date<input id="analytics-start" type="date" required /></label>
         <label>End date<input id="analytics-end" type="date" required /></label>
         <button class="button button-primary" id="analytics-apply" type="submit">Update reports</button>
       </form>
-      <p class="analytics-note">Each provider measures a different audience. Compare counts; don't add them together. Dates follow the timezone shown for each report.</p>
+      <p class="analytics-note">Compare providers; don't add their counts together. Each measures a different audience. Charts use the selected range, except Clarity's latest 72 hours.</p>
       <p id="analytics-status" class="analytics-status" role="status" aria-live="polite"></p>
       <div class="analytics-reports" id="analytics-reports" aria-busy="true"></div>
     </main>

@@ -4,6 +4,24 @@ Sign in through the existing Predict Playoffs Account dialog, then open `/admin/
 
 The unindexed static page is only a shell: it contains no report data or provider credentials. It does not load public tracking scripts. Existing public analytics, consent and privacy behavior remain unchanged.
 
+## Reading the reports
+
+The dashboard is hosted on dev, but that does not determine every report's audience:
+
+| Report | Coverage |
+|---|---|
+| CloudWatch / custom analytics | Dev only: development logs filtered to development events. Account, sign-in, bracket and group counts are browser-reported dev activity, not production database totals. |
+| GoatCounter | Dev only: the public-page loader requires the dev environment. The connected site is `predictplayoffs`. |
+| Google Analytics 4 | Entire connected property. Dev tracking is configured; any production or other-host traffic collected in that property is also included. No hostname filter is applied. |
+| Google Search Console | `sc-domain:predictplayoffs.com`: the production domain and its subdomains. The dev CloudFront hostname is outside that property. These are Google Search impressions/clicks, not app visits. |
+| Microsoft Clarity | Entire connected project. Dev tracking is configured; any production or other-host traffic collected there is also included. Saved filters in Clarity's browser dashboard do not filter Data Export reports. |
+
+Charts visualize the existing report responses without additional provider requests. Ranked charts show up to five returned rows; expand **View data** for all returned rows and columns. Bar lengths compare counts within one chart. Engagement percentages use a fixed 0–100% scale and have separate denominators. Activity bars are independent event counts, not a conversion funnel. The selected dates apply to ordinary reports; Clarity always uses its latest 72-hour window. Missing values remain unavailable and empty reports contain no sample traffic.
+
+**GoatCounter page visits:** with Sessions enabled in GoatCounter, the same session visiting the same page repeatedly counts once; visiting another page increments the total again. One visitor loading home three times and the leaderboard once in a session yields two page visits, not one site-wide unique visitor or four raw pageviews. Turning off Sessions makes each load count. GoatCounter temporarily maps site + IP + User-Agent to a random session ID in memory for up to eight hours; it does not persist an IP hash as a visitor identifier. See [Sessions and visitors](https://www.goatcounter.com/help/sessions).
+
+Our dev loader runs regardless of whether optional analytics are accepted or declined, while honoring GPC and Do Not Track. It sends neither the consent choice nor a visitor ID, so this report cannot isolate visitors who declined. The current API totals are deduplicated page visits with event counts excluded; they do not provide a distinct-person count across all pages or the whole selected date range. Production tracking is unchanged.
+
 ## One-time AWS setup
 
 1. **Before the first deployment**, have your authorized bootstrap administrator apply the change in `terraform/bootstrap/main.tf` through the established bootstrap process. It adds only Cognito `CreateGroup`, `GetGroup`, `UpdateGroup`, and `DeleteGroup` permissions to the **dev** deployment role, restricted to development-tagged pools. The production deployment policy is unchanged. Until this is done, dev deployment cannot create/read the group. No local Terraform apply is part of the application's normal deployment flow.

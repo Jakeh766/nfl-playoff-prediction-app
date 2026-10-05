@@ -2,6 +2,13 @@
   const sessionKey = "road-to-bowl.auth.session";
   const names = { custom: "CloudWatch / custom analytics", goatcounter: "GoatCounter",
     ga4: "Google Analytics 4", "search-console": "Google Search Console", clarity: "Microsoft Clarity" };
+  const coverage = {
+    custom: ["Dev only", "Development app events. Accounts, sign-ins, brackets and groups are browser-reported activity, not production totals."],
+    goatcounter: ["Dev only", "Public development pages · predictplayoffs.goatcounter.com. Tracking runs with either consent choice, unless GPC or Do Not Track is enabled."],
+    ga4: ["Property wide", "Dev tracking is connected. This report reads the entire configured GA4 property without a hostname filter; any production traffic collected there is included too."],
+    "search-console": ["Production domain", "Google Search performance for sc-domain:predictplayoffs.com, including subdomains. The development CloudFront hostname is outside this property."],
+    clarity: ["Project wide", "Dev tracking is connected. This report reads the entire Clarity project; any production traffic collected there is included too. Clarity's browser dashboard filters do not apply here."],
+  };
   const main = document.getElementById("analytics-main");
   const reports = document.getElementById("analytics-reports");
   const status = document.getElementById("analytics-status");
@@ -71,22 +78,76 @@
   function format(value, type) {
     if (value === null || value === undefined) return "Unavailable";
     if (type === "text") return String(value);
-    if (!Number.isFinite(Number(value))) return "Unavailable";
+    if (!numeric(value)) return "Unavailable";
     if (type === "percent" || type === "percent100") return new Intl.NumberFormat(undefined,
       { style: "percent", maximumFractionDigits: 1 }).format(Number(value) / (type === "percent100" ? 100 : 1));
     if (type === "seconds") return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} s`;
     return new Intl.NumberFormat(undefined, { maximumFractionDigits: type === "decimal" ? 2 : 0 }).format(value);
   }
+  function numeric(value) {
+    return (typeof value === "number" || typeof value === "string" && value.trim() !== "") && Number.isFinite(Number(value));
+  }
+  function barChart(title, items, { percent = false, note = "" } = {}) {
+    const valid = items.filter(item => numeric(item.value) && Number(item.value) >= 0);
+    if (!valid.length) return null;
+    const maximum = percent ? 100 : Math.max(...valid.map(item => Number(item.value)));
+    const figure = element("figure", undefined, "analytics-chart");
+    const caption = element("figcaption");
+    caption.append(element("span", title), element("span", percent ? "0–100%" : `0–${format(maximum)}`, "analytics-chart-scale"));
+    figure.append(caption);
+    const rows = element("ul", undefined, "analytics-bars");
+    for (const item of valid) {
+      const row = element("li", undefined, "analytics-bar-row");
+      const label = element("div", undefined, "analytics-bar-label");
+      label.append(element("span", item.label), element("strong", format(item.value, percent ? "percent100" : "number")));
+      const track = element("div", undefined, "analytics-bar-track");
+      track.setAttribute("aria-hidden", "true");
+      const bar = element("span", undefined, "analytics-bar-fill");
+      bar.style.width = `${maximum > 0 ? Math.min(100, Number(item.value) / maximum * 100) : 0}%`;
+      track.append(bar);
+      row.append(label, track);
+      rows.append(row);
+    }
+    figure.append(rows);
+    if (note) figure.append(element("p", note, "analytics-chart-note"));
+    return figure;
+  }
+  function tableChart(report) {
+    const label = report.columns.find(column => column.format === "text");
+    const count = report.columns.find(column => column.format === "number");
+    if (!label || !count) return null;
+    const rows = report.rows.filter(row => numeric(row[count.key]) && Number(row[count.key]) >= 0)
+      .sort((a, b) => Number(b[count.key]) - Number(a[count.key]));
+    return barChart(`${report.title} · ${count.label.toLowerCase()}`, rows.slice(0, 5).map(row => ({
+      label: row[label.key], value: row[count.key],
+    })), { note: `Top ${Math.min(rows.length, 5)} of ${rows.length} returned rows. Bar lengths compare counts within this chart.` });
+  }
+  function goatCounterGuide(section) {
+    const guide = element("details", undefined, "analytics-explainer");
+    guide.append(element("summary", "What is a GoatCounter page visit?"));
+    guide.append(element("p", "A page visit is a deduplicated visit to one page, not a unique person across the whole site. With GoatCounter's Sessions setting enabled, reloading or returning to the same page within its session counts once; visiting a different page adds another page visit."));
+    guide.append(element("p", "Example: one visitor opens home three times and the leaderboard once within the same session → 2 page visits. Turning off Sessions in GoatCounter makes every page load count."));
+    guide.append(element("p", "GoatCounter temporarily maps site + IP address + browser User-Agent to a random session ID in memory for up to eight hours. It does not store an IP hash as a persistent visitor ID or set analytics cookies. These are estimates, not exact counts of people."));
+    guide.append(element("p", "It runs for both accepted and declined optional analytics on dev. It cannot isolate visitors who declined because we don't send the consent choice. GPC, Do Not Track and blockers can prevent counting."));
+    const link = element("a", "GoatCounter: sessions and visitors");
+    link.href = "https://www.goatcounter.com/help/sessions";
+    link.rel = "noreferrer";
+    guide.append(link);
+    section.append(guide);
+  }
   function renderProvider(section, data) {
     section.replaceChildren();
     const heading = element("div", undefined, "analytics-provider-heading");
-    heading.append(element("h2", names[data.provider]));
+    const title = element("div", undefined, "analytics-provider-title");
+    title.append(element("h2", names[data.provider]), element("span", coverage[data.provider][0], "analytics-scope"));
+    heading.append(title);
     const states = { ok: data.cached ? "Cached report" : "Report ready", not_configured: "Setup needed",
       unavailable: "Unavailable", updating: "Refreshing" };
     const state = element("span", states[data.status] || "Unavailable", "analytics-provider-state");
     state.dataset.state = data.status;
     heading.append(state);
     section.append(heading);
+    section.append(element("p", coverage[data.provider][1], "analytics-provider-coverage"));
     if (data.range) {
       const range = data.range.window || `${data.range.start} to ${data.range.end}`;
       const fetched = data.fetchedAt ? ` · Retrieved ${new Date(data.fetchedAt).toLocaleString()}` : "";
@@ -112,7 +173,25 @@
     }
     section.append(metrics);
     if (data.note) section.append(element("p", data.note, "analytics-provider-note"));
+    if (data.provider === "goatcounter") goatCounterGuide(section);
+    if (data.provider === "custom") {
+      const activity = (data.metrics || []).filter(metric => /^(Accounts created|Sign-ins|Brackets |Groups )/.test(metric.label));
+      const chart = barChart("Prediction and account activity", activity, { note: "Independent event counts, not a conversion funnel. A visitor can trigger an action more than once." });
+      if (chart) section.append(chart);
+    }
+    const percentages = (data.metrics || []).filter(metric => ["percent", "percent100"].includes(metric.format) && numeric(metric.value))
+      .map(metric => ({ label: metric.label, value: Number(metric.value) * (metric.format === "percent" ? 100 : 1) }));
+    if (["ga4", "clarity"].includes(data.provider) && percentages.length) {
+      const chart = barChart("Engagement summary", percentages, { percent: true, note: "Each metric has its own definition; percentages do not add up to 100%." });
+      if (chart) section.append(chart);
+    }
+    const breakdowns = element("div", undefined, "analytics-breakdowns");
     for (const report of data.tables || []) {
+      const breakdown = element("div", undefined, "analytics-breakdown");
+      const chart = tableChart(report);
+      if (chart) breakdown.append(chart);
+      const details = element("details", undefined, "analytics-data-details");
+      details.append(element("summary", `View data · ${report.title}`));
       const wrap = element("div", undefined, "analytics-table-wrap");
       const table = element("table", undefined, "analytics-table");
       table.append(element("caption", report.title));
@@ -140,8 +219,11 @@
       }
       table.append(body);
       wrap.append(table);
-      section.append(wrap);
+      details.append(wrap);
+      breakdown.append(details);
+      breakdowns.append(breakdown);
     }
+    section.append(breakdowns);
   }
   function dates(days = 28) {
     const finish = new Date();
@@ -171,7 +253,8 @@
       main.hidden = false;
       access.hidden = true;
       reports.replaceChildren();
-      const providers = session.providers.filter(provider => Object.hasOwn(names, provider));
+      const order = ["goatcounter", "ga4", "custom", "search-console", "clarity"];
+      const providers = order.filter(provider => session.providers.includes(provider));
       let available = 0;
       await Promise.allSettled(providers.map(async provider => {
         const section = element("section", undefined, "analytics-provider");
