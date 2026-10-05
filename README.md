@@ -26,6 +26,11 @@ scores are separate for each sport.
 
 ## Architecture
 
+The development-only private dashboard at `/admin/analytics` combines custom,
+GoatCounter, GA4, Search Console and Clarity reports. See
+[admin analytics setup](docs/admin-analytics.md) for the deployment permission
+prerequisite, Cognito admin membership, and server-only provider credentials.
+
 - `frontend/` — static multi-page HTML, CSS, and JavaScript served through
   CloudFront from a private S3 bucket.
 - `backend/lambda/app.py` — Python Lambda API behind API Gateway. DynamoDB
@@ -127,10 +132,12 @@ Microsoft Clarity project ID through `AUTH_CONFIG.analytics`. The shared module
 defaults both IDs to empty, so production and local static previews do not load
 either provider until explicitly configured. These IDs are public, not secrets.
 
-Every page loads `analytics.js` from its head. Visitors must choose **Allow
-analytics** before optional scripts or first-party analytics requests begin;
-**Analytics settings** in the footer allows withdrawal. GPC and Do Not Track
-disable analytics. The privacy disclosure is available at `/privacy`.
+Every public page loads `analytics.js` from its head. Visitors must choose
+**Allow analytics** before GA4/Clarity scripts or custom visitor/session IDs are
+enabled. Existing custom aggregate events run without consent or identifiers;
+the dev GoatCounter integration also runs independently of that banner.
+**Cookie preferences** in the footer allows withdrawal. GPC and Do Not Track
+disable tracking. The privacy disclosure is available at `/privacy`.
 
 GA4 receives fixed event names only: `sign_up`, `login`, `bracket_started`
 (first valid bracket build), `bracket_completed` (all game winners picked),

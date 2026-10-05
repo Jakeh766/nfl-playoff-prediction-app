@@ -392,7 +392,7 @@ test("dashboard totals include cookieless events and identity metrics explicitly
 });
 
 test("every public HTML page includes ordered head scripts and masking", () => {
-  for (const name of fs.readdirSync(path.join(root, "frontend")).filter(name => name.endsWith(".html"))) {
+  for (const name of fs.readdirSync(path.join(root, "frontend")).filter(name => name.endsWith(".html") && name !== "admin-analytics.html")) {
     const html = fs.readFileSync(path.join(root, "frontend", name), "utf8");
     const head = html.split("</head>")[0];
     assert.ok(head.indexOf('/auth-config.js') < head.indexOf('/analytics.js'), name);

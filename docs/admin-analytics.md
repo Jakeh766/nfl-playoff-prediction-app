@@ -1,0 +1,60 @@
+# Private analytics dashboard (dev)
+
+Sign in through the existing Predict Playoffs Account dialog, then open `/admin/analytics` on the development deployment. Only members of the dev Cognito pool's `admin` group can read reports. Sign out and back in after a membership change to obtain fresh group claims. Non-admin visitors redirect to `/`; authenticated non-admin API callers receive `403`, and missing/invalid tokens receive `401`.
+
+The unindexed static page is only a shell: it contains no report data or provider credentials. It does not load public tracking scripts. Existing public analytics, consent and privacy behavior remain unchanged.
+
+## One-time AWS setup
+
+1. **Before the first deployment**, have your authorized bootstrap administrator apply the change in `terraform/bootstrap/main.tf` through the established bootstrap process. It adds only Cognito `CreateGroup`, `GetGroup`, `UpdateGroup`, and `DeleteGroup` permissions to the **dev** deployment role, restricted to development-tagged pools. The production deployment policy is unchanged. Until this is done, dev deployment cannot create/read the group. No local Terraform apply is part of the application's normal deployment flow.
+2. Let GitHub Actions deploy `dev`, or rerun its deployment after the prerequisite is complete. Terraform creates the `admin` group and an on-demand DynamoDB report cache. If the dev pool already has an `admin` group, import it into `module.nfl_app.aws_cognito_user_group.admin[0]` through your established dev Terraform process before applying (Cognito import ID: `<dev-pool-id>/admin`). Admin routes, assets, environment variables, and runtime permissions exist only in dev.
+3. In the AWS console, select the **development** Cognito pool and add your existing verified user to `admin`. Terraform grants nobody membership automatically. The browser and backend cannot assign memberships. Existing JWTs can retain membership for their one-hour lifetime; the JWT authorizer does not perform a live group lookup or token revocation check on every request. Plan membership removals accordingly.
+4. In Systems Manager → Parameter Store, create two **Standard SecureString** parameters in `us-east-1`, using the default AWS-managed `aws/ssm` encryption key. Enter credentials directly in the console, never in Git, frontend files, Terraform variables, deployment logs, or chat.
+
+| Parameter | Contents |
+|---|---|
+| `/nfl-playoff-predictor-dev/admin-analytics/config` | Provider configuration JSON, including GoatCounter and Clarity tokens |
+| `/nfl-playoff-predictor-dev/admin-analytics/google-service-account` | Complete Google service account JSON key |
+
+These parameters are intentionally not Terraform resources: secret values cannot enter Terraform state or be overwritten during deployment. Each must fit the Standard tier's 4 KB limit. For a different resource prefix, use the dev outputs `admin_analytics_config_parameter` and `admin_google_credentials_parameter`. A customer-managed KMS key requires an additional scoped decrypt permission; the default setup uses `aws/ssm`.
+
+Example configuration **shape**; replace placeholders privately in Parameter Store:
+
+```json
+{
+  "goatcounter": { "site": "predictplayoffs", "token": "REPLACE_PRIVATELY" },
+  "ga4": { "property_id": "123456789" },
+  "search_console": { "site_url": "sc-domain:predictplayoffs.com" },
+  "clarity": { "token": "REPLACE_PRIVATELY" }
+}
+```
+
+Omit providers you have not connected. They show “Setup needed” while other reports continue working. Choose external properties/projects containing the intended traffic; an external property can contain production traffic even though this dashboard runs only in dev. Reading it does not deploy or change that site.
+
+## Provider credentials and permissions
+
+**CloudWatch/custom analytics:** no secret is needed. The runtime reads its existing development log group using two bounded Logs Insights queries. It returns aggregate counts, never raw events, visitor IDs, IP addresses, email addresses or brackets. Account and bracket actions are browser-reported event counts, not authoritative database totals. Visitors/visits are approximate distinct IDs from consented events; cookieless pageviews are counted separately.
+
+**GoatCounter:** open Settings → API at `predictplayoffs.goatcounter.com` and create a token with read/statistics permissions only. Put it in `goatcounter.token`. The adapter reads totals, top paths and referrers for the top three returned paths. Its deduplicated totals are labelled **Page visits**, not site-wide unique visitors or raw pageviews. See the [API guide](https://www.goatcounter.com/help/api) and [schemas](https://www.goatcounter.com/api.json).
+
+**Google authentication:** create a Google Cloud service account and enable the **Google Analytics Data API** and **Google Search Console API**. Generate a JSON service account key and save the complete key only in the Google SecureString parameter. The server uses Google's maintained `google-auth` library with `analytics.readonly` and `webmasters.readonly` scopes. No domain-wide delegation or broad project Editor role is needed. Rotate exposed keys and delete superseded keys after updating the parameter. See Google's [service account quickstart](https://developers.google.com/analytics/devguides/reporting/data/v1/quickstart).
+
+**GA4:** add the service account email as **Viewer** in the relevant property's Access Management. Set the numeric property ID in `ga4.property_id`; the `G-...` measurement ID is different. Mark desired existing events as **key events** in GA4 to populate conversions, such as `sign_up`, `bracket_completed` or `bracket_saved`. Reporting access adds no tracking. The [Data API schema](https://developers.google.com/analytics/devguides/reporting/data/v1/api-schema) defines the visitor, session, pageview, engagement and key-event metrics.
+
+**Search Console:** an owner must already have verified the property. Add the service account email under Settings → Users and permissions with performance-report read access (Restricted access is sufficient; Full access also works). Use the exact property identifier: `sc-domain:predictplayoffs.com` or the full `https://.../` URL-prefix property. The adapter reads final web-search performance and top pages through [Search Analytics](https://developers.google.com/webmaster-tools/v1/searchanalytics/query). Final data can lag several days, and an unindexed development property may have no results. Aggregate CTR and position come from the provider's totals, not averages of page percentages.
+
+**Clarity:** a project administrator generates a token in Settings → Data Export. Put it in `clarity.token`. The [Data Export API](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api) permits ten requests per project per day and only the latest 24–72 hours. This dashboard always requests and labels **latest 72 hours at retrieval**, independently of selected dates. Supported traffic, engagement, scroll-depth, rage-click and dead-click percentages are displayed without breakdown dimensions. Missing fields are omitted rather than reported as zero. Visits include reported bots; no recordings or unsupported historical exports are requested.
+
+## Security, caching and cost
+
+`GET /api/admin/analytics` and `GET /api/admin/analytics/{provider}` both use the existing API Gateway Cognito JWT authorizer, which verifies signature, issuer, audience/client and token times. Lambda accepts only verified authorizer claims, rechecks the expected dev issuer/client and token times, and requires an exact `admin` group match **before** cache/config/provider access. Raw headers and decoded browser JWTs are not trusted for authorization. No function URL bypass is created.
+
+Responses use `Cache-Control: private, no-store` and `Vary: Authorization`. Existing `/api/*` CloudFront behavior disables caching and forwards Authorization. Server-side HTTP redirects are rejected to protect provider tokens. Errors expose no upstream bodies or exception details. Provider strings render as text, and URLs are reduced to paths/origins. Signing out or clearing the session in another tab clears rendered private reports.
+
+Default dates cover the last 28 completed days; presets offer 7, 28 or 90 days, plus up to 93 custom days within the past year. Current-day data can be incomplete. CloudWatch/GoatCounter use UTC; GA4 uses its property's timezone; Search Console uses Pacific dates; Clarity has its own recent window. Providers measure different audiences: compare counts, do not add them together.
+
+The shared DynamoDB cache lasts 15 minutes for ordinary reports and six hours for Clarity. Ordinary errors/unconfigured providers have a five-minute cooldown; Clarity API failures also have a six-hour cooldown. Conditional leases prevent simultaneous refreshes, and clients cannot bypass the cache. Items expire using DynamoDB TTL after two days. Configuration reloads after five minutes; report caches can delay visible credential changes, especially Clarity's six-hour cache.
+
+No scheduled polling, provisioned capacity, extra Lambda functions, NAT gateway, or paid Secrets Manager secret is added. Reports run only when an admin visits/updates the page. At current traffic, on-demand cache operations, small Logs Insights scans and existing Lambda execution should have incidental cost. Actual charges depend on scanned bytes and free-tier eligibility; date bounds and caching limit repeat scans.
+
+Run `scripts/setup.ps1` and `scripts/check.ps1 -Scope All`. Dev deployment packages Linux/Python 3.12-compatible Google dependencies into the existing Lambda ZIP. After configuration, verify non-admin API requests return `403`, admins load reports, and a revoked external token affects only its provider. Tests use fixtures/mocks and do not call live provider accounts.

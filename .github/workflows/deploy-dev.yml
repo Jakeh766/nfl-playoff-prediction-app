@@ -50,6 +50,7 @@ jobs:
           node --check frontend/monitoring.js
           node --check frontend/analytics.js
           node --check frontend/goatcounter.js
+          node --check frontend/admin-analytics.js
           node --check frontend/picks.js
           node --check frontend/scoring.js
           node --check frontend/shell.js
@@ -63,6 +64,12 @@ jobs:
 
       - name: Test analytics consent and privacy
         run: node --test backend/test_product_analytics.cjs backend/test_goatcounter.cjs
+
+      - name: Test private analytics navigation and rendering
+        run: node --test backend/test_admin_analytics.cjs
+
+      - name: Install admin provider dependencies
+        run: python -m pip install -r backend/admin-requirements.txt
 
       - name: Check backend Python syntax
         run: python -m py_compile backend/lambda/app.py backend/lambda/results_updater.py
@@ -132,7 +139,11 @@ jobs:
           fi
 
       - name: Plan dev deployment
-        run: terraform -chdir=terraform/envs/dev plan -out=tfplan
+        # Build Linux-compatible dependencies into the existing Lambda archive.
+        # Secrets are supplied only at runtime from Parameter Store.
+        run: |
+          python3 -m pip install -r backend/admin-requirements.txt --target backend/lambda/vendor --platform manylinux2014_x86_64 --python-version 3.12 --only-binary=:all:
+          terraform -chdir=terraform/envs/dev plan -out=tfplan
 
       - name: Apply dev deployment
         run: terraform -chdir=terraform/envs/dev apply tfplan

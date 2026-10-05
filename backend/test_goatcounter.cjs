@@ -190,7 +190,7 @@ test("provider failures and blocked network requests do not interrupt the app", 
 });
 
 test("every public HTML page loads the guarded integration after its environment configuration", () => {
-  for (const name of fs.readdirSync(path.join(root, "frontend")).filter(name => name.endsWith(".html"))) {
+  for (const name of fs.readdirSync(path.join(root, "frontend")).filter(name => name.endsWith(".html") && name !== "admin-analytics.html")) {
     const head = fs.readFileSync(path.join(root, "frontend", name), "utf8").split("</head>")[0];
     assert.match(head, /<script src="\/goatcounter\.js\?v=\d+" defer><\/script>/, name);
     assert.ok(head.indexOf("/auth-config.js") < head.indexOf("/goatcounter.js"), name);

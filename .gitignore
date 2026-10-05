@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 screenshots/
+.impeccable/review/
 terraform/**/.terraform/
 terraform/**/*.tfstate
 terraform/**/*.tfstate.*
@@ -9,3 +10,4 @@ terraform/**/lambda.zip
 terraform/**/custom-email-sender.zip
 terraform/**/crash.log
 backend/custom-email-sender/node_modules/
+backend/lambda/vendor/

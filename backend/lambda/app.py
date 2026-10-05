@@ -1621,6 +1621,9 @@ def authenticated_user_id(event: dict) -> str | None:
 
 
 def handler(event, context):
+    if (event.get("rawPath") or "").startswith("/api/admin/analytics"):
+        from admin_analytics import handler as admin_handler
+        return admin_handler(event, context)
     if event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event":
         return archive_completed_group_seasons()
     sport = (event.get("queryStringParameters") or {}).get("sport", "nfl")

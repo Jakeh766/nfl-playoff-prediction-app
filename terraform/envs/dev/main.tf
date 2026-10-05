@@ -78,6 +78,14 @@ output "groups_table" {
   value = module.nfl_app.groups_table
 }
 
+output "admin_analytics_config_parameter" {
+  value = module.nfl_app.admin_analytics_config_parameter
+}
+
+output "admin_google_credentials_parameter" {
+  value = module.nfl_app.admin_google_credentials_parameter
+}
+
 output "season_results_table" {
   value = module.nfl_app.season_results_table
 }

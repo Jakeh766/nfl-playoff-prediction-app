@@ -217,9 +217,10 @@ class SeoTests(unittest.TestCase):
     def test_terraform_renders_release_versions_without_aws(self):
         """Evaluate the real module expressions without a backend, providers, or credentials."""
         config = (ROOT / "terraform/modules/app/main.tf").read_text()
-        assets = re.search(r'  frontend_files = \{.*?\n  \}', config, re.S)[0]
+        assets = re.search(r'  frontend_files = merge\(\{.*?\n  \} : \{\}\)', config, re.S)[0]
         rendering = re.search(r'locals \{\n  # One content-derived release version.*?\n\}', config, re.S)[0]
         fixture = 'variable "frontend_dir" { default = ' + json.dumps((ROOT / "frontend").as_posix()) + ' }\n'
+        fixture += 'variable "environment" { default = "dev" }\n'
         fixture += 'locals {\n' + assets + '\n}\n' + rendering
         terraform = Path(shutil.which("terraform"))
         # setup-terraform's output wrapper does not forward console stdin.
@@ -229,22 +230,31 @@ class SeoTests(unittest.TestCase):
             terraform = binary
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "main.tf").write_text(fixture, encoding="utf-8")
-            result = subprocess.run(
-                [str(terraform), "console", "-no-color"], cwd=directory,
-                input='jsonencode({ version = local.frontend_version, pages = local.frontend_pages })\n',
+            results = {environment: subprocess.run(
+                [str(terraform), "console", "-no-color", f"-var=environment={environment}"], cwd=directory,
+                input='jsonencode({ version = local.frontend_version, pages = local.frontend_pages, files = keys(local.frontend_files) })\n',
                 capture_output=True, text=True, encoding="utf-8", timeout=30,
-            )
+            ) for environment in ["dev", "prod"]}
+        result = results["dev"]
         self.assertEqual(result.returncode, 0, result.stderr)
         rendered = json.loads(json.loads(result.stdout))
         files = sorted(p for p in (ROOT / "frontend").iterdir() if p.suffix in [".js", ".css"] and p.name != "auth-config.js")
         expected = hashlib.sha256(''.join(hashlib.md5(p.read_bytes()).hexdigest() for p in files).encode()).hexdigest()[:16]
         self.assertEqual(rendered["version"], expected)
-        self.assertEqual(set(rendered["pages"]), {"index.html", "nba", "scoring", "leaderboard", "picks", "privacy"})
+        self.assertEqual(set(rendered["pages"]), {"index.html", "nba", "scoring", "leaderboard", "picks", "privacy", "admin/analytics"})
         for html in rendered["pages"].values():
             versions = re.findall(r'\?v=([^" ]+)', html)
             self.assertTrue(versions)
             self.assertEqual(set(versions), {expected})
             self.assertIn('src="/auth-config.js"', html)
+        production = results["prod"]
+        self.assertEqual(production.returncode, 0, production.stderr)
+        rendered_prod = json.loads(json.loads(production.stdout))
+        self.assertEqual(set(rendered_prod["pages"]), set(rendered["pages"]) - {"admin/analytics"})
+        self.assertFalse(any(key.startswith("admin") for key in rendered_prod["files"]))
+        public_files = [p for p in files if not p.name.startswith("admin-")]
+        expected_prod = hashlib.sha256(''.join(hashlib.md5(p.read_bytes()).hexdigest() for p in public_files).encode()).hexdigest()[:16]
+        self.assertEqual(rendered_prod["version"], expected_prod)
 
     def test_environment_and_publication_guards(self):
         config = (ROOT / "terraform/modules/app/main.tf").read_text()

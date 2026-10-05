@@ -5,7 +5,7 @@ locals {
 
   analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
 
-  frontend_files = {
+  frontend_files = merge({
     "goatcounter.js" = {
       source       = "${var.frontend_dir}/goatcounter.js"
       content_type = "application/javascript; charset=utf-8"
@@ -118,7 +118,20 @@ locals {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
       content_type = "image/svg+xml"
     }
-  }
+    }, var.environment == "dev" ? {
+    "admin/analytics" = {
+      source       = "${var.frontend_dir}/admin-analytics.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "admin-analytics.js" = {
+      source       = "${var.frontend_dir}/admin-analytics.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "admin-analytics.css" = {
+      source       = "${var.frontend_dir}/admin-analytics.css"
+      content_type = "text/css; charset=utf-8"
+    }
+  } : {})
 }
 
 resource "aws_dynamodb_table" "win_totals_cache" {
@@ -507,7 +520,7 @@ resource "aws_lambda_function" "backend" {
   memory_size = 256
 
   environment {
-    variables = {
+    variables = merge({
       CACHE_TABLE        = aws_dynamodb_table.win_totals_cache.name
       CACHE_TTL_SECONDS  = tostring(var.cache_ttl_seconds)
       ENVIRONMENT        = var.environment
@@ -517,11 +530,19 @@ resource "aws_lambda_function" "backend" {
       PROFILES_TABLE     = aws_dynamodb_table.profiles.name
       RESULTS_SEASON     = tostring(var.results_season)
       RESULTS_TABLE      = aws_dynamodb_table.season_results.name
-    }
+      }, var.environment == "dev" ? {
+      ADMIN_COGNITO_ISSUER               = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+      ADMIN_COGNITO_CLIENT_ID            = aws_cognito_user_pool_client.browser.id
+      ADMIN_ANALYTICS_CACHE_TABLE        = aws_dynamodb_table.admin_analytics_cache[0].name
+      ADMIN_ANALYTICS_CONFIG_PARAMETER   = "/${local.resource_prefix}/admin-analytics/config"
+      ADMIN_GOOGLE_CREDENTIALS_PARAMETER = "/${local.resource_prefix}/admin-analytics/google-service-account"
+      ADMIN_ANALYTICS_LOG_GROUP          = local.analytics_log_group
+    } : {})
   }
 
   depends_on = [
     aws_iam_role_policy.lambda_cache,
+    aws_iam_role_policy.admin_analytics,
     aws_iam_role_policy_attachment.lambda_logs,
   ]
 }
