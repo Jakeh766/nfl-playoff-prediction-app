@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import itertools
 import json
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -42,6 +43,32 @@ class PredictionSecurityTests(unittest.TestCase):
                     reopened = app.handler(event("GET", sport=sport), None)
                 self.assertEqual(reopened["statusCode"], 200)
                 self.assertEqual(json.loads(reopened["body"])["picks"], candidate["picks"])
+
+    def test_new_nba_bracket_uses_actual_frontend_division_initializer(self):
+        # Exercise the frontend's wire shape, not only the canonical saved record.
+        script = r'''
+const fs = require("node:fs");
+const vm = require("node:vm");
+const source = fs.readFileSync("frontend/app.js", "utf8");
+const context = vm.createContext({ IS_NBA: true });
+vm.runInContext(source.slice(source.indexOf("function createEmptyDivisionWinners()"),
+  source.indexOf("const state =")), context);
+process.stdout.write(JSON.stringify(context.createEmptyDivisionWinners()));
+'''
+        result = subprocess.run(["node", "-e", script], cwd=Path(__file__).resolve().parent.parent,
+                                capture_output=True, text=True, timeout=10, check=True)
+        candidate = nba_prediction()
+        candidate["divisionWinners"] = json.loads(result.stdout)
+        response, table = self.submit(candidate, "nba")
+        self.assertEqual(response["statusCode"], 200, response)
+        self.assertEqual(table.put_item.call_args.kwargs["Item"]["divisionWinners"], {})
+        for invalid in ({"East": {}}, {"East": {}, "West": {}, "extra": {}},
+                        {"East": {"North": "Boston Celtics"}, "West": {}},
+                        {"East": [], "West": {}}):
+            candidate["divisionWinners"] = invalid
+            response, table = self.submit(candidate, "nba")
+            self.assertEqual(response["statusCode"], 400)
+            table.put_item.assert_not_called()
 
     def test_manipulated_nfl_requests_return_400_without_writing(self):
         mutations = {

@@ -11,7 +11,9 @@ wire format has no separate participant fields that a client could override.
 Only the documented `divisionWinners`, `seeds`, `picks`, and `bracketBuilt: true`
 properties are accepted. Missing/extra properties and malformed or incomplete
 brackets receive HTTP 400 before a DynamoDB write. NBA keeps its fixed bracket
-and now shares the strict shape checks. Existing saved records are not migrated;
+and now shares the strict shape checks, accepting both empty East/West division
+objects from new brackets and the canonical empty object from reopened records.
+Existing saved records are not migrated;
 an invalid old prediction must be corrected before it can be saved again.
 
 ## Sessions

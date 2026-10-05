@@ -1022,7 +1022,12 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
                      f"{conference} picks")
 
     if SPORT.get() == "nba":
-        require_keys(division_winners, (), "NBA division winners")
+        # New NBA brackets use empty conference objects; reopened records use {}.
+        # Neither form may carry division picks or arbitrary nested properties.
+        if division_winners:
+            require_keys(division_winners, conferences(), "NBA division winners")
+            for conference in conferences():
+                require_keys(division_winners[conference], (), f"{conference} division winners")
         validate_nba_bracket(prediction)
         seeds = {conference: seeds[conference] for conference in conferences()}
         picks = {conference: {game: picks[conference][game]
