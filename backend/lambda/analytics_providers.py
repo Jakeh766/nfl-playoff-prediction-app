@@ -19,6 +19,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import boto3
 import daily_visitors
+import goatcounter_sessions
 
 
 class NotConfigured(Exception):
@@ -39,6 +40,17 @@ def http_json(url, token, body=None):
         if len(data) > 2_000_000:
             raise ValueError("Provider response too large")
         return json.loads(data)
+
+
+def http_export(url, token):
+    request = Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/gzip"})
+    with build_opener(NoRedirect).open(request, timeout=4) as result:
+        if result.status != 200:
+            raise ValueError("Export is not ready")
+        data = result.read(goatcounter_sessions.MAX_COMPRESSED + 1)
+        if len(data) > goatcounter_sessions.MAX_COMPRESSED:
+            raise ValueError("Export too large")
+        return data
 
 
 def number(value):
@@ -135,12 +147,12 @@ def goatcounter(config, start, end):
         raise NotConfigured()
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", site):
         raise ValueError("Invalid GoatCounter site")
-    base = f"https://{site}.goatcounter.com/api/v0/stats"
+    base = f"https://{site}.goatcounter.com/api/v0"
     query = urlencode({"start": f"{start}T00:00:00Z", "end": f"{end}T23:00:00Z"})
     # GoatCounter permits four requests per second. Three populated pages need
     # five requests; bound the burst even when independent calls run in parallel.
     starts, lock = deque(maxlen=4), Lock()
-    def request(suffix):
+    def api_request(suffix, body=None, binary=False):
         for attempt in range(2):
             with lock:
                 if len(starts) == 4:
@@ -149,13 +161,20 @@ def goatcounter(config, start, end):
                         time.sleep(pause)
                 starts.append(time.monotonic())
             try:
-                return http_json(f"{base}/{suffix}", token)
+                url = f"{base}/{suffix}"
+                if binary:
+                    return http_export(url, token)
+                return http_json(url, token, body) if body is not None else http_json(url, token)
             except HTTPError as error:
-                if error.code != 429 or attempt:
+                # POST must never be retried: a lost response may already have
+                # created an export and consumed the site's hourly quota.
+                if body is not None or error.code != 429 or attempt:
                     raise
                 # One bounded retry also handles other reports sharing the quota.
                 # Never expose the upstream body, URL, or Authorization header.
                 time.sleep(1.05)
+    def request(suffix):
+        return api_request(f"stats/{suffix}")
     # Only paginated endpoints accept limit; /stats/total rejects it with 400.
     with ThreadPoolExecutor(max_workers=2) as executor:
         totals, hits = list(executor.map(request,
@@ -195,13 +214,14 @@ def goatcounter(config, start, end):
     if refs_unavailable:
         referrals.clear()
         note += " Referrers are temporarily unavailable; visit counts remain available."
+    sessions, cache_seconds = goatcounter_sessions.report(settings, start, end, api_request)
     return {"metrics": [metric("Unique visits (per page)", number(totals.get("total", 0)) - events,
-                               note="GoatCounter estimate across the selected range. Repeat visits to the same page within a session count once; tracked events excluded.")],
+                               note="GoatCounter estimate across the selected range. Repeat visits to the same page within a session count once; tracked events excluded."), sessions],
             "tables": ([daily_table] if daily else []) + [table("Top pages", [("page", "Page", "text"), ("visits", "Unique visits", "number")],
                              [{"page": safe_path(hit["path"]), "visits": number(hit["count"])} for hit in paths]),
                        table("Referrers across the top three pages" + (" (unavailable)" if refs_unavailable else ""), [("source", "Referrer", "text"), ("visits", "Unique visits", "number")],
                              [{"source": key, "visits": value} for key, value in sorted(referrals.items(), key=lambda item: -item[1])])],
-            "note": note}
+            "note": note, "_cache_seconds": cache_seconds}
 
 
 _google_credentials = {}

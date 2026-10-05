@@ -99,7 +99,7 @@ def cached_report(provider, start, end):
     # DynamoDB cache and leases work across Lambda containers. Authorization is
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
-    version = {"custom": "v3", "goatcounter": "v2"}.get(provider, "v1")
+    version = {"custom": "v3", "goatcounter": "v3"}.get(provider, "v1")
     key = f"{version}:{provider}:{'latest-72h' if provider == 'clarity' else f'{start}:{end}'}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})
@@ -126,7 +126,11 @@ def cached_report(provider, start, end):
     ttl = 21600 if provider == "clarity" else 900
     try:
         config = {} if provider == "custom" else settings()
-        result.update(PROVIDERS[provider](config, start, end))
+        report = PROVIDERS[provider](config, start, end)
+        if provider == "goatcounter":
+            # Pending exports need a short retry, not the normal 15-minute cache.
+            ttl = min(900, max(30, int(report.pop("_cache_seconds", 900))))
+        result.update(report)
     except NotConfigured:
         result.update(status="not_configured", message="Connect this provider using the admin analytics setup guide.",
                       metrics=[], tables=[])

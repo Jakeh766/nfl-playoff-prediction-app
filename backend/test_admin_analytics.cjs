@@ -95,7 +95,7 @@ test("GoatCounter unique visits use its own daily data and explain per-page dedu
   assert.match(section.text, /Unique visits \(per page\)/);
   assert.match(section.text, /up to eight hours/);
   assert.match(section.text, /not a unique person across the whole site/);
-  assert.match(section.text, /separate daily estimate comes from our own counter, not GoatCounter/);
+  assert.match(section.text, /separate daily estimate from our own counter.*not the GoatCounter session metric/);
   const chart = section.children.find(node => node.className === "analytics-breakdowns").children[0].children[0];
   const bars = chart.children.find(node => node.tag === "ul").children;
   assert.match(bars[0].text, /2026-10-01.*2/);
@@ -232,6 +232,20 @@ test("sign-out and session removal in another tab clear private data", async () 
 });
 
 function nodes(node) { return [node, ...node.children.flatMap(nodes)]; }
+
+test("GoatCounter site-wide sessions and per-page visits retain distinct definitions", async () => {
+  const app = await boot({ reports: { goatcounter: { metrics: [
+    { label: "Distinct visitors (GoatCounter sessions)", value: 2, note: "Cookieless short-lived session estimate; initial day is partial." },
+    { label: "Unique visits (per page)", value: 7, note: "Repeat visits to a page count once." },
+  ], tables: [] } } });
+  const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
+  assert.match(section.text, /Distinct visitors \(GoatCounter sessions\).*2/);
+  assert.match(section.text, /Unique visits \(per page\).*7/);
+  assert.match(section.text, /cookieless short-lived session estimate, not a permanent person ID/i);
+  assert.match(section.text, /all public pages and all selected UTC dates/);
+  assert.match(section.text, /never displayed.*at most hourly/);
+  assert.match(section.text, /before Individual pageviews was enabled are unavailable/);
+});
 
 test("every provider explains data coverage rather than assuming the dev dashboard means dev data", async () => {
   const app = await boot();

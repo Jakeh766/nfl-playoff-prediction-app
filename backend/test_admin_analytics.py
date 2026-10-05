@@ -180,6 +180,19 @@ class AdminTests(unittest.TestCase):
             admin.handler(event("ga4"), None)
             self.assertEqual(admin.PROVIDERS["ga4"].call_count, 2)
 
+    def test_pending_goatcounter_export_short_cache_hint_is_internal_and_admin_only(self):
+        adapter = Mock(return_value={"metrics": [{"label": "Distinct visitors (GoatCounter sessions)",
+                                                 "value": None}], "tables": [], "_cache_seconds": 30})
+        with patch.object(admin, "settings", return_value={}), patch.dict(admin.PROVIDERS, goatcounter=adapter):
+            self.assertEqual(admin.handler(event("goatcounter", ["member"]), None)["statusCode"], 403)
+            adapter.assert_not_called()
+            result = admin.handler(event("goatcounter"), None)
+            self.assertEqual(json.loads(result["body"])["status"], "ok")
+            self.assertNotIn("_cache_seconds", result["body"])
+            cached = next(iter(self.cache.items.values()))
+            self.assertNotIn("_cache_seconds", cached["report"])
+            self.assertLessEqual(cached["freshUntil"] - int(time.time()), 30)
+
 
 class ProviderTests(unittest.TestCase):
     start, end = date(2026, 10, 1), date(2026, 10, 4)
