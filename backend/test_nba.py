@@ -150,6 +150,9 @@ class NbaTests(unittest.TestCase):
                  "requestContext": {"http": {"method": "PUT"}, "authorizer": {"jwt": {"claims": {"sub": "user"}}}},
                  "body": json.dumps({**prediction(), "profileKey": "someone-else", "ownerId": "someone-else"})}
         with patch.object(app, "predictions_table", return_value=table), patch.object(app, "get_profile", return_value={"leaderboardName": "Player"}), patch.object(app, "load_season_results", return_value=final_results()), patch.object(app.time, "time", return_value=0):
+            self.assertEqual(app.handler(event, None)["statusCode"], 400)
+            self.assertNotIn("nba#2027#user", items)
+            event["body"] = json.dumps(prediction())
             self.assertEqual(app.handler(event, None)["statusCode"], 200)
             self.assertEqual(items["nba#2027#user"]["ownerId"], "user")
             event["requestContext"]["http"]["method"] = "GET"

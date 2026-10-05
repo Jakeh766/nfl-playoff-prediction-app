@@ -159,11 +159,21 @@ def event(
 
 
 def valid_prediction():
+    afc = ["Baltimore Ravens", "Houston Texans", "Buffalo Bills", "Kansas City Chiefs",
+           "Denver Broncos", "Cincinnati Bengals", "Los Angeles Chargers"]
+    nfc = ["Detroit Lions", "Tampa Bay Buccaneers", "Philadelphia Eagles", "Los Angeles Rams",
+           "Green Bay Packers", "Minnesota Vikings", "Seattle Seahawks"]
     return {
-        "displayName": "must not be persisted",
-        "divisionWinners": {"AFC": {}, "NFC": {}},
-        "seeds": {"AFC": ["team"] * 7, "NFC": ["team"] * 7},
-        "picks": {"AFC": {}, "NFC": {}, "superBowl": "team"},
+        "divisionWinners": {
+            "AFC": dict(zip(("North", "South", "East", "West"), afc[:4])),
+            "NFC": dict(zip(("North", "South", "East", "West"), nfc[:4])),
+        },
+        "seeds": {"AFC": afc, "NFC": nfc},
+        "picks": {
+            c: {"wc-2-7": teams[1], "wc-3-6": teams[2], "wc-4-5": teams[3],
+                "div-1": teams[0], "div-2": teams[1], "conf": teams[0]}
+            for c, teams in (("AFC", afc), ("NFC", nfc))
+        } | {"superBowl": afc[0]},
         "bracketBuilt": True,
     }
 
@@ -233,7 +243,7 @@ class PredictionAuthorizationTests(unittest.TestCase):
 
         self.assertEqual(result["statusCode"], 401)
 
-    def test_put_uses_sub_and_does_not_store_display_name(self):
+    def test_put_uses_sub_and_stores_only_prediction_fields(self):
         result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
         stored = self.table.items["user-123"]
 

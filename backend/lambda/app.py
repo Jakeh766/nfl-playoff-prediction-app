@@ -114,6 +114,71 @@ FALLBACK_TOTALS = {
 SPORT = ContextVar("sport", default="nfl")
 NBA = json.loads(Path(__file__).with_name("nba_season.json").read_text(encoding="utf-8"))
 
+# Server-owned membership; never infer conferences or divisions from a submission.
+NFL_DIVISIONS = {
+    "AFC": {
+        "North": ("Baltimore Ravens", "Cincinnati Bengals", "Cleveland Browns", "Pittsburgh Steelers"),
+        "South": ("Houston Texans", "Indianapolis Colts", "Jacksonville Jaguars", "Tennessee Titans"),
+        "East": ("Buffalo Bills", "Miami Dolphins", "New England Patriots", "New York Jets"),
+        "West": ("Kansas City Chiefs", "Los Angeles Chargers", "Denver Broncos", "Las Vegas Raiders"),
+    },
+    "NFC": {
+        "North": ("Minnesota Vikings", "Green Bay Packers", "Chicago Bears", "Detroit Lions"),
+        "South": ("Tampa Bay Buccaneers", "Atlanta Falcons", "New Orleans Saints", "Carolina Panthers"),
+        "East": ("Philadelphia Eagles", "Dallas Cowboys", "Washington Commanders", "New York Giants"),
+        "West": ("San Francisco 49ers", "Los Angeles Rams", "Seattle Seahawks", "Arizona Cardinals"),
+    },
+}
+
+
+def require_keys(value, keys, label):
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise ValueError(f"{label} must contain exactly the expected properties")
+
+
+def validate_nfl_bracket(prediction):
+    seeds = prediction["seeds"]
+    picks = prediction["picks"]
+    divisions = prediction["divisionWinners"]
+    require_keys(divisions, NFL_DIVISIONS, "divisionWinners")
+    finalists = []
+    for conference, membership in NFL_DIVISIONS.items():
+        selected = seeds[conference]
+        teams = {team for division in membership.values() for team in division}
+        if (not isinstance(selected, list) or len(selected) != 7
+                or any(not isinstance(team, str) or team not in teams for team in selected)
+                or len(set(selected)) != 7):
+            raise ValueError(f"Choose seven different {conference} teams")
+        winners = divisions[conference]
+        require_keys(winners, membership, f"{conference} division winners")
+        for division, members in membership.items():
+            if not isinstance(winners[division], str) or winners[division] not in members:
+                raise ValueError(f"Invalid {conference} {division} winner")
+        if set(selected[:4]) != set(winners.values()):
+            raise ValueError("Seeds 1–4 must be the four division winners")
+
+        choices = picks[conference]
+        advanced = [selected[0]]  # The first seed has a Wild Card bye.
+        for game, (a, b) in zip(first_round_games(), ((2, 7), (3, 6), (4, 5))):
+            winner = choices[game]
+            if not isinstance(winner, str) or winner not in (selected[a-1], selected[b-1]):
+                raise ValueError("Wild Card winner must be in its game")
+            advanced.append(winner)
+        advanced.sort(key=selected.index)
+        divisional_winners = []
+        # Reseed: first seed plays the lowest surviving seed; the others meet.
+        for game, participants in (("div-1", (advanced[0], advanced[3])),
+                                   ("div-2", (advanced[1], advanced[2]))):
+            winner = choices[game]
+            if not isinstance(winner, str) or winner not in participants:
+                raise ValueError("Divisional winner must advance into its reseeded game")
+            divisional_winners.append(winner)
+        if not isinstance(choices["conf"], str) or choices["conf"] not in divisional_winners:
+            raise ValueError("Conference champion must win its Divisional game")
+        finalists.append(choices["conf"])
+    if not isinstance(picks["superBowl"], str) or picks["superBowl"] not in finalists:
+        raise ValueError("Super Bowl champion must be an AFC or NFC champion")
+
 
 def conferences():
     return ("East", "West") if SPORT.get() == "nba" else ("AFC", "NFC")
@@ -934,6 +999,9 @@ def record_analytics_event(event: dict) -> None:
 
 
 def validate_prediction(user_id: str, prediction: dict) -> dict:
+    require_keys(prediction, ("divisionWinners", "seeds", "picks", "bracketBuilt"), "Prediction")
+    if prediction["bracketBuilt"] is not True:
+        raise ValueError("Save a completed bracket")
     division_winners = prediction.get("divisionWinners")
     seeds = prediction.get("seeds")
     picks = prediction.get("picks")
@@ -947,15 +1015,21 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
     if not isinstance(picks, dict):
         raise ValueError("picks must be an object")
 
+    require_keys(seeds, conferences(), "Seeds")
+    require_keys(picks, (*conferences(), "superBowl"), "Picks")
+    for conference in conferences():
+        require_keys(picks[conference], (*first_round_games(), "div-1", "div-2", "conf"),
+                     f"{conference} picks")
+
     if SPORT.get() == "nba":
+        require_keys(division_winners, (), "NBA division winners")
         validate_nba_bracket(prediction)
         seeds = {conference: seeds[conference] for conference in conferences()}
         picks = {conference: {game: picks[conference][game]
                               for game in (*first_round_games(), "div-1", "div-2", "conf")}
                  for conference in conferences()} | {"superBowl": picks["superBowl"]}
-    for conference in conferences():
-        if not isinstance(seeds.get(conference), list) or len(seeds[conference]) != len(exact_seed_values()):
-            raise ValueError(f"{conference} seeds must contain seven teams")
+    else:
+        validate_nfl_bracket(prediction)
 
     saved_at = int(time.time() * 1000)
     return {
@@ -964,7 +1038,7 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
         "divisionWinners": {} if SPORT.get() == "nba" else division_winners,
         "seeds": seeds,
         "picks": picks,
-        "bracketBuilt": bool(prediction.get("bracketBuilt")),
+        "bracketBuilt": True,
         "savedAt": saved_at,
     }
 
