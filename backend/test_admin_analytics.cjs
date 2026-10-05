@@ -64,10 +64,10 @@ async function boot(options = {}) {
   return { elements, requests, redirects, store, listeners, context };
 }
 
-test("daily visitor chart keeps UTC chronology, excludes unknown days, and never sums range uniques", async () => {
+test("first-party daily visitors have an explicit source and keep UTC chronology", async () => {
   const rows = Array.from({ length: 20 }, (_, index) => ({ day: `2026-09-${String(index + 1).padStart(2, "0")}`,
     visitors: index === 6 ? null : 20 - index }));
-  const app = await boot({ reports: { custom: { metrics: [{ label: "Distinct visitors (last day)", value: 1,
+  const app = await boot({ reports: { custom: { metrics: [{ label: "First-party distinct visitors (last day)", value: 1,
     note: "2026-09-20 UTC. Cookie-free estimate." }], tables: [{ title: "Daily distinct visitors", chart: "daily",
     columns: [{ key: "day", label: "Day (UTC)", format: "text" }, { key: "visitors", label: "Distinct visitors", format: "number" }], rows }] } } });
   const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
@@ -81,7 +81,27 @@ test("daily visitor chart keeps UTC chronology, excludes unknown days, and never
   assert.match(chart.text, /adding days does not give distinct visitors for the entire range/);
   assert.match(breakdown.children.find(node => node.tag === "details").text, /2026-09-01/);
   assert.match(section.text, /Dev only/);
+  assert.match(section.text, /First-party analytics \(AWS\)/);
   assert.ok(app.requests.every(({ url }) => !url.startsWith("/api/analytics")));
+});
+
+test("GoatCounter unique visits use its own daily data and explain per-page deduplication", async () => {
+  const app = await boot({ reports: { goatcounter: { metrics: [
+    { label: "Unique visits (per page)", value: 3, note: "GoatCounter estimate." }], tables: [
+    { title: "Daily unique visits", chart: "goatcounter-daily", columns: [
+      { key: "day", label: "Day", format: "text" }, { key: "visits", label: "Unique visits", format: "number" }],
+      rows: [{ day: "2026-10-01", visits: 2 }, { day: "2026-10-02", visits: 1 }] }] } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "goatcounter");
+  assert.match(section.text, /Unique visits \(per page\)/);
+  assert.match(section.text, /up to eight hours/);
+  assert.match(section.text, /not a unique person across the whole site/);
+  assert.match(section.text, /separate daily estimate comes from our own counter, not GoatCounter/);
+  const chart = section.children.find(node => node.className === "analytics-breakdowns").children[0].children[0];
+  const bars = chart.children.find(node => node.tag === "ul").children;
+  assert.match(bars[0].text, /2026-10-01.*2/);
+  assert.match(bars[1].text, /2026-10-02.*1/);
+  assert.match(chart.text, /GoatCounter account timezone/);
+  assert.doesNotMatch(chart.text, /UTC|Each day deduplicates separately/);
 });
 
 test("Today preset selects the current UTC day without changing completed-day presets", async () => {

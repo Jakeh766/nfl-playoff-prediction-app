@@ -13,7 +13,7 @@ import boto3
 
 from analytics_providers import PROVIDERS, NotConfigured
 
-NAMES = {"custom": "CloudWatch / custom analytics", "goatcounter": "GoatCounter",
+NAMES = {"custom": "First-party analytics (AWS)", "goatcounter": "GoatCounter",
          "ga4": "Google Analytics 4", "search-console": "Google Search Console",
          "clarity": "Microsoft Clarity"}
 _config = None
@@ -99,7 +99,7 @@ def cached_report(provider, start, end):
     # DynamoDB cache and leases work across Lambda containers. Authorization is
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
-    version = "v2" if provider == "custom" else "v1"
+    version = {"custom": "v3", "goatcounter": "v2"}.get(provider, "v1")
     key = f"{version}:{provider}:{'latest-72h' if provider == 'clarity' else f'{start}:{end}'}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})

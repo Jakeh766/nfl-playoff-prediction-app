@@ -1,9 +1,9 @@
 (function initializeAdminAnalytics() {
   const sessionKey = "road-to-bowl.auth.session";
-  const names = { custom: "CloudWatch / custom analytics", goatcounter: "GoatCounter",
+  const names = { custom: "First-party analytics (AWS)", goatcounter: "GoatCounter",
     ga4: "Google Analytics 4", "search-console": "Google Search Console", clarity: "Microsoft Clarity" };
   const coverage = {
-    custom: ["Dev only", "Daily cookie-free visitor estimates and development app events. Accounts, sign-ins, brackets and groups are browser-reported activity, not production totals."],
+    custom: ["Dev only", "Our daily cookie-free visitor estimates (DynamoDB) and development app events (CloudWatch). Accounts, sign-ins, brackets and groups are browser-reported activity, not production totals."],
     goatcounter: ["Dev only", "Public development pages · predictplayoffs.goatcounter.com. Tracking runs with either consent choice, unless GPC or Do Not Track is enabled."],
     ga4: ["Property wide", "Dev tracking is connected. This report reads the entire configured GA4 property without a hostname filter; any production traffic collected there is included too."],
     "search-console": ["Production domain", "Google Search performance for sc-domain:predictplayoffs.com, including subdomains. The development CloudFront hostname is outside this property."],
@@ -116,6 +116,10 @@
     const label = report.columns.find(column => column.format === "text");
     const count = report.columns.find(column => column.format === "number");
     if (!label || !count) return null;
+    if (report.chart === "goatcounter-daily") {
+      const days = report.rows.slice(-14).map(row => ({ label: row[label.key], value: row[count.key] }));
+      return barChart(report.title, days, { note: "GoatCounter's own daily counts, latest 14 selected days in chronological order. Days follow the GoatCounter account timezone; today is incomplete. Visits are unique per page within a session, not distinct people across the site. View data for the full range." });
+    }
     if (report.chart === "daily") {
       const days = report.rows.slice(-14).map(row => ({ label: row[label.key], value: row[count.key] }));
       return barChart(report.title, days, { note: "Up to 14 selected days in chronological order (UTC). Unmeasured days are omitted; today and the initial collection day are incomplete. Each day deduplicates separately, so adding days does not give distinct visitors for the entire range. View data for the full range." });
@@ -128,11 +132,11 @@
   }
   function goatCounterGuide(section) {
     const guide = element("details", undefined, "analytics-explainer");
-    guide.append(element("summary", "What is a GoatCounter page visit?"));
-    guide.append(element("p", "A page visit is a deduplicated visit to one page, not a unique person across the whole site. With GoatCounter's Sessions setting enabled, reloading or returning to the same page within its session counts once; visiting a different page adds another page visit."));
-    guide.append(element("p", "Example: one visitor opens home three times and the leaderboard once within the same session → 2 page visits. Turning off Sessions in GoatCounter makes every page load count."));
+    guide.append(element("summary", "How does GoatCounter count unique visits?"));
+    guide.append(element("p", "GoatCounter estimates cookie-free unique visits to each page, not a unique person across the whole site. With its Sessions setting enabled, reloading or returning to the same page within its session counts once; visiting a different page adds another unique visit."));
+    guide.append(element("p", "Example: one visitor opens home three times and the leaderboard once within the same session → 2 unique visits. Turning off Sessions in GoatCounter makes every page load count."));
     guide.append(element("p", "GoatCounter temporarily maps site + IP address + browser User-Agent to a random session ID in memory for up to eight hours. It does not store an IP hash as a persistent visitor ID or set analytics cookies. These are estimates, not exact counts of people."));
-    guide.append(element("p", "For distinct visitors per UTC day across all public pages, see Daily distinct visitors under CloudWatch / custom analytics. That first-party estimate includes both consent choices, unless GPC or Do Not Track is enabled."));
+    guide.append(element("p", "For distinct visitors per UTC day across all public pages, see First-party analytics (AWS). Its separate daily estimate comes from our own counter, not GoatCounter. Both counters include either consent choice, unless GPC or Do Not Track is enabled."));
     guide.append(element("p", "It runs for both accepted and declined optional analytics on dev. It cannot isolate visitors who declined because we don't send the consent choice. GPC, Do Not Track and blockers can prevent counting."));
     const link = element("a", "GoatCounter: sessions and visitors");
     link.href = "https://www.goatcounter.com/help/sessions";

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from collections import deque
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -10,7 +11,9 @@ import os
 from pathlib import Path
 import re
 import sys
+from threading import Lock
 import time
+from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -118,7 +121,7 @@ def custom(_config, start, end):
     except Exception:
         latest = None
         note = "Daily visitor counts could not be read. Other custom metrics are still available."
-    metrics.insert(0, metric("Distinct visitors (last day)", latest, note=note))
+    metrics.insert(0, metric("First-party distinct visitors (last day)", latest, note=note))
     return {"metrics": metrics, "tables": daily_tables + [table("Top pages", [("page", "Page", "text"),
              ("pageviews", "Pageviews", "number")], [{"page": safe_path(row.get("page")),
              "pageviews": number(row["pageviews"])} for row in pages])],
@@ -134,26 +137,71 @@ def goatcounter(config, start, end):
         raise ValueError("Invalid GoatCounter site")
     base = f"https://{site}.goatcounter.com/api/v0/stats"
     query = urlencode({"start": f"{start}T00:00:00Z", "end": f"{end}T23:00:00Z"})
+    # GoatCounter permits four requests per second. Three populated pages need
+    # five requests; bound the burst even when independent calls run in parallel.
+    starts, lock = deque(maxlen=4), Lock()
+    def request(suffix):
+        for attempt in range(2):
+            with lock:
+                if len(starts) == 4:
+                    pause = 1.05 - (time.monotonic() - starts[0])
+                    if pause > 0:
+                        time.sleep(pause)
+                starts.append(time.monotonic())
+            try:
+                return http_json(f"{base}/{suffix}", token)
+            except HTTPError as error:
+                if error.code != 429 or attempt:
+                    raise
+                # One bounded retry also handles other reports sharing the quota.
+                # Never expose the upstream body, URL, or Authorization header.
+                time.sleep(1.05)
     # Only paginated endpoints accept limit; /stats/total rejects it with 400.
     with ThreadPoolExecutor(max_workers=2) as executor:
-        totals, hits = list(executor.map(lambda suffix: http_json(f"{base}/{suffix}", token),
+        totals, hits = list(executor.map(request,
                                         [f"total?{query}", f"hits?{query}&limit=10"]))
-    paths = [hit for hit in hits.get("hits", []) if not hit.get("event")]
+    paths = [hit for hit in hits.get("hits") or [] if not hit.get("event")]
     referrals = {}
     def refs(hit):
         path_id = int(hit["path_id"])
-        return http_json(f"{base}/hits/{path_id}?{query}&limit=20", token)
+        try:
+            return request(f"hits/{path_id}?{query}&limit=20")
+        except Exception:
+            # A failed optional breakdown must not hide the main visit counts.
+            return None
+    refs_unavailable = False
     with ThreadPoolExecutor(max_workers=3) as executor:
         for result in executor.map(refs, paths[:3]):
-            for ref in result.get("refs", []):
+            if result is None:
+                refs_unavailable = True
+                continue
+            for ref in result.get("refs") or []:
                 name = safe_source(ref.get("name"))
                 referrals[name] = referrals.get(name, 0) + number(ref.get("count", 0))
-    return {"metrics": [metric("Page visits", number(totals.get("total", 0)) - number(totals.get("total_events", 0)))],
-            "tables": [table("Top pages", [("page", "Page", "text"), ("visits", "Page visits", "number")],
+    events = number(totals.get("total_events", 0))
+    daily = []
+    for row in totals.get("stats") or []:
+        day = str(row.get("day", ""))
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            raise ValueError("Invalid GoatCounter day")
+        datetime.strptime(day, "%Y-%m-%d")
+        daily.append({"day": day, "visits": number(row.get("daily"))})
+    daily.sort(key=lambda row: row["day"])
+    daily_table = {"title": "Daily unique visits" + (" (including events)" if events else ""),
+        "chart": "goatcounter-daily", "columns": [
+            {"key": "day", "label": "Day (GoatCounter timezone)", "format": "text"},
+            {"key": "visits", "label": "Unique visits", "format": "number"}], "rows": daily[:93]}
+    note = "Cookie-free unique visits per page with Sessions enabled (up to eight hours). A visitor opening two pages contributes two visits; this is not a site-wide count of distinct people. Referrers cover only the top three returned pages."
+    if refs_unavailable:
+        referrals.clear()
+        note += " Referrers are temporarily unavailable; visit counts remain available."
+    return {"metrics": [metric("Unique visits (per page)", number(totals.get("total", 0)) - events,
+                               note="GoatCounter estimate across the selected range. Repeat visits to the same page within a session count once; tracked events excluded.")],
+            "tables": ([daily_table] if daily else []) + [table("Top pages", [("page", "Page", "text"), ("visits", "Unique visits", "number")],
                              [{"page": safe_path(hit["path"]), "visits": number(hit["count"])} for hit in paths]),
-                       table("Referrers across the top three pages", [("source", "Referrer", "text"), ("visits", "Page visits", "number")],
+                       table("Referrers across the top three pages" + (" (unavailable)" if refs_unavailable else ""), [("source", "Referrer", "text"), ("visits", "Unique visits", "number")],
                              [{"source": key, "visits": value} for key, value in sorted(referrals.items(), key=lambda item: -item[1])])],
-            "note": "GoatCounter deduplicates repeat visits. Page visits are not site-wide unique visitors or raw pageviews. Referrers cover only the top three returned pages."}
+            "note": note}
 
 
 _google_credentials = {}
