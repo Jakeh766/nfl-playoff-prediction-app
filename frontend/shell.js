@@ -21,7 +21,7 @@ if (header) {
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
       <a href="${routeHref("/leaderboard")}" data-nav-page="leaderboard">Leaderboard</a>
-      <a href="${routeHref("/groups")}" data-nav-page="groups">My Groups</a>
+      <a href="${routeHref("/groups")}" data-nav-page="groups">Groups</a>
       <a href="${routeHref("/scoring")}" data-nav-page="scoring">Scoring</a>
     </nav>
     <button class="button button-ghost header-account" id="header-account" type="button">

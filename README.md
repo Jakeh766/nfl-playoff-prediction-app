@@ -49,7 +49,7 @@ See the app's [scoring page](https://predictplayoffs.com/scoring) for the full r
 
 ## Playing with friends
 
-Open **My Groups** at `/groups` to see all your NFL and NBA groups. Each group has
+Open **Groups** at `/groups` to see all your NFL and NBA groups. Each group has
 Standings, Members, History, and Settings tabs. Create a private group and share
 its invite link, or join with the group's name
 and password. Only members can view its leaderboard. The group commissioner

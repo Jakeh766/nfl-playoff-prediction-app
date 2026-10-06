@@ -71,7 +71,7 @@ function boot() {
 
 test('Groups owns its page and controls while the leaderboard stays public', () => {
   const html = read('groups.html');
-  assert.match(html, /<title>My Groups \| Predict Playoffs<\/title>/);
+  assert.match(html, /<title>Groups \| Predict Playoffs<\/title>/);
   assert.match(html, /data-page="groups"/);
   assert.match(html, /id="create-group"/); assert.match(html, /id="join-group"/);
   assert.doesNotMatch(html, /id="leaderboard-body"|public-leaderboard-panel/);
@@ -79,7 +79,7 @@ test('Groups owns its page and controls while the leaderboard stays public', () 
   assert.doesNotMatch(read('leaderboard.html'), /groups-leaderboard|group-settings|group-tabs|id="create-group"/);
   assert.doesNotMatch(leaderboard, /function refreshGroups|function submitGroup/);
   for (const file of ['index.html', 'nba.html']) {
-    assert.match(read(file), /href="\/groups" data-clean-route="\/groups">View my groups/);
+    assert.match(read(file), /href="\/groups" data-clean-route="\/groups">View groups/);
     assert.match(read(file), /src="\/groups.js/);
   }
   assert.match(read('shell.js'), /routeHref\("\/groups"\).*data-nav-page="groups"/);
@@ -254,11 +254,11 @@ test('detail tabs preserve direct links, support arrow keys and return to the di
   context.window.events.popstate();
   assert.equal(context.state.activeGroupId, '');
   assert.equal(node('#group-leaderboard').classes.has('hidden'), true);
-  assert.equal(context.document.title, 'My Groups | Predict Playoffs');
+  assert.equal(context.document.title, 'Groups | Predict Playoffs');
   context.window.location.search = '?group=g&view=members';
   context.window.events.popstate();
   assert.equal(tabs[1].attributes['aria-selected'], 'true');
-  assert.equal(context.document.title, 'Crew | My Groups | Predict Playoffs');
+  assert.equal(context.document.title, 'Crew | Groups | Predict Playoffs');
   context.selectGroupView('unknown');
   assert.equal(tabs[0].attributes['aria-selected'], 'true');
 });

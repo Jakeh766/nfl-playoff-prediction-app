@@ -1,6 +1,6 @@
 # Group history
 
-Open **My Groups**, select a group, then choose **History**. History
+Open **Groups**, select a group, then choose **History**. History
 is visible only to current group members and is scoped to the selected sport.
 New groups show an empty state until a season has ended and been archived.
 
@@ -74,7 +74,7 @@ The dev deployment seeder skips existing demo groups and their membership
 records, so repeated deployments preserve commissioner edits, kicked members,
 and voluntary departures. It continues initializing new demo groups normally.
 
-**My Groups** in primary navigation and **View my groups** on the homepage open
+**Groups** in primary navigation and **View groups** on the homepage open
 `/groups` directly, retaining the NBA query parameter when selected. Old
 `/leaderboard#groups` links redirect to this page. The public leaderboard remains
 on `/leaderboard` and does not load private memberships.

@@ -178,10 +178,10 @@ function renderGroups() {
     document.getElementById("group-settings-description").textContent = isCommissioner
       ? "You are the commissioner. Manage sports, invite links, and members from here. Remove members from the Members tab."
       : "Invite friends or leave the group. The commissioner manages sports, invite links, and members.";
-    document.title = `${activeGroup.groupName} | My Groups | Predict Playoffs`;
+    document.title = `${activeGroup.groupName} | Groups | Predict Playoffs`;
     selectGroupView(new URLSearchParams(window.location.search).get("view"), false);
   } else {
-    document.title = "My Groups | Predict Playoffs";
+    document.title = "Groups | Predict Playoffs";
   }
 }
 
@@ -692,7 +692,7 @@ async function submitGroup(event) {
     if (elements.homeGroupStatus) {
       elements.homeGroupStatus.textContent = creating
         ? `${group.groupName} is ready. Copy the invite link to bring people in.`
-        : `You joined ${group.groupName}. Open My Groups to view its standings.`;
+        : `You joined ${group.groupName}. Open Groups to view its standings.`;
     }
     showToast(creating ? `Created ${group.groupName}.` : `Joined ${group.groupName}.`);
     if (creating) await openGroupInviteDialog(group);
@@ -802,7 +802,7 @@ async function acceptPendingGroupInvite() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     renderHomeGroupInvite();
     elements.homeGroupStatus.textContent =
-      `You joined ${group.groupName}. Open My Groups to view its standings.`;
+      `You joined ${group.groupName}. Open Groups to view its standings.`;
     showToast(`Joined ${group.groupName}.`);
   } catch (error) {
     elements.homeInviteStatus.textContent = error.message;

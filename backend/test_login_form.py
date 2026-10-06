@@ -302,7 +302,7 @@ class LoginFormTests(unittest.TestCase):
         html = (FRONTEND_DIR / "groups.html").read_text(encoding="utf-8")
         public = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
         self.assertIn('data-page="groups"', html)
-        self.assertIn('<title>My Groups | Predict Playoffs</title>', html)
+        self.assertIn('<title>Groups | Predict Playoffs</title>', html)
         self.assertNotIn('groups-leaderboard-panel', public)
         self.assertNotIn('id="create-group"', public)
         for view in ["standings", "members", "history", "settings"]:
