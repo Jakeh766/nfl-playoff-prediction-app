@@ -29,8 +29,13 @@ counts between Daily and Cumulative; distinct sessions and rates are never
 accumulated. Hover or tap a graph for its nearest day's exact value. Focus a graph
 and use Left/Right, Home/End, or Escape to explore or dismiss the readout with a
 keyboard. The selected section, metric, and view survive date updates only in
-memory, without analytics storage or extra provider calls. Tables
-retain every selected day and every returned breakdown column. Missing values
+memory, without analytics storage or extra provider calls. Pageviews by page use a
+pie chart with exact counts and percentages in its keyboard-accessible legend;
+hovering or tapping a slice also shows its values. Percentages cover returned
+pages only. The fallback report labels its counts as unique visits by page.
+Session duration displays hours, minutes and seconds (4,604 seconds becomes
+1 hr 16 min 44 sec). Bracket and search breakdown tables are directly visible;
+there are no View data disclosures or duplicate chart tables. Missing values
 remain unavailable; blank days in Search Console are unreported, not zero.
 Breakdowns can omit anonymized queries and lower-ranked rows and need not sum to
 totals. CTR and position use provider aggregates, never averages of row percentages.

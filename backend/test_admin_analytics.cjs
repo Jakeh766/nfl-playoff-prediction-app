@@ -209,7 +209,7 @@ test("sign-out and session removal in another tab clear private data", async () 
 
 function nodes(node) { return [node, ...node.children.flatMap(nodes)]; }
 
-test("ranked charts use returned counts, retain table data, and keep provider strings inert", async () => {
+test("pie charts use all valid returned counts, expose percentages and keep provider strings inert", async () => {
   const rows = [
     { page: "<img onerror=secret>", visits: 10 }, { page: "/picks", visits: 5 },
     { page: "/zero", visits: 0 }, { page: "/missing", visits: null },
@@ -218,19 +218,35 @@ test("ranked charts use returned counts, retain table data, and keep provider st
   const app = await boot({ reports: { goatcounter: { tables: [{ title: "Top pages",
     columns: [{ key: "page", label: "Page", format: "text" }, { key: "visits", label: "Page visits", format: "number" }], rows }] } } });
   const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
-  const chart = nodes(section).find(node => node.className === "analytics-chart");
-  assert.match(chart.text, /<img onerror=secret>.*10.*\/picks.*5.*\/zero.*0/);
-  assert.deepEqual(nodes(chart).filter(node => node.className === "analytics-bar-fill").map(node => node.style.width), ["100%", "50%", "0%"]);
-  assert.ok(nodes(chart).filter(node => node.className === "analytics-bar-track").every(node => node["aria-hidden"] === "true"));
-  assert.equal(nodes(section).find(node => node.tag === "tbody").children.length, rows.length);
-  assert.match(section.text, /View data · Top pages/);
+  const chart = nodes(section).find(node => node.className === "analytics-chart analytics-pie");
+  const keys = nodes(chart).filter(node => node.className === "analytics-pie-key");
+  assert.equal(keys.length, 3);
+  assert.match(keys[0].text, /<img onerror=secret>.*10.*66.7%/);
+  assert.match(keys[1].text, /\/picks.*5.*33.3%/);
+  assert.match(keys[2].text, /\/zero.*0.*0%/);
+  const slices = nodes(chart).filter(node => node.className === "analytics-pie-slice");
+  assert.equal(slices.length, 2);
+  assert.ok(slices.every(node => !node.d.includes("NaN")));
+  assert.equal(nodes(section).filter(node => node.tag === "tbody").length, 0);
+  assert.doesNotMatch(section.text, /View data/);
+  const readout = nodes(chart).find(node => node.className === "analytics-pie-readout");
+  slices[1].listeners.pointerenter();
+  assert.equal(readout.textContent, "/picks · 5 page visits · 33.3%");
+  assert.equal(slices[0].style.opacity, "0.45");
+  slices[1].listeners.pointerleave();
+  assert.equal(slices[0].style.opacity, "1");
+  keys[0].focus();
+  assert.match(readout.textContent, /<img onerror=secret> · 10 page visits · 66.7%/);
+  keys[0].listeners.blur();
+  keys[1].listeners.click();
+  assert.match(readout.textContent, /\/picks · 5 page visits · 33.3%/);
 });
 
 test("empty provider tables show no invented chart or sample traffic", async () => {
   const app = await boot({ reports: { goatcounter: { tables: [{ title: "Top pages",
     columns: [{ key: "page", label: "Page", format: "text" }, { key: "visits", label: "Page visits", format: "number" }], rows: [] }] } } });
   const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
-  assert.equal(nodes(section).filter(node => node.className === "analytics-chart").length, 0);
+  assert.equal(nodes(section).filter(node => node.className === "analytics-pie-slice").length, 0);
   assert.match(section.text, /No data reported for this range/);
 });
 
@@ -256,7 +272,7 @@ test("daily charts keep all 93 days, gaps, exact data and correct running totals
   const plot = nodes(section).find(node => node.className === "analytics-plot");
   plot.listeners.keydown({ key: "End", preventDefault() {} });
   assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /day-92.*92.*Cumulative actions/);
-  assert.equal(nodes(section).find(node => node.tag === "tbody").children.length, 93);
+  assert.equal(nodes(section).filter(node => node.tag === "tbody").length, 0);
 });
 test("daily metric controls change charts and never sum distinct sessions or rates", async () => {
   const app = await boot({ reports: { goatcounter: { tables: [{ title: "Daily traffic", chart: "trend", series: ["pageviews"],
@@ -275,6 +291,38 @@ test("daily metric controls change charts and never sum distinct sessions or rat
   assert.equal(view.value, "daily");
   assert.equal(view.parent.hidden, true);
   assert.doesNotMatch(section.text, /Cumulative distinct sessions/);
+});
+
+test("pie charts handle a single page, zero traffic and more than five pages", async () => {
+  for (const [rows, expected] of [[[{ page: "/", views: 5 }], 1], [[{ page: "/", views: 0 }], 0],
+    [Array.from({ length: 12 }, (_, i) => ({ page: `/page-${i}`, views: i + 1 })), 12]]) {
+    const app = await boot({ reports: { goatcounter: { tables: [{ title: "Pageviews by page",
+      columns: [{ key: "page", label: "Page", format: "text" }, { key: "views", label: "Pageviews", format: "number" }], rows }] } } });
+    const section = app.elements.get("analytics-reports").children[0];
+    const slices = nodes(section).filter(node => node.className === "analytics-pie-slice");
+    assert.equal(slices.length, expected);
+    if (expected === 1) { assert.equal(slices[0].tag, "circle"); assert.match(section.text, /100%/); }
+    if (!expected) assert.match(section.text, /No visits recorded/);
+    if (expected === 12) assert.equal(nodes(section).filter(node => node.className === "analytics-pie-key").length, 12);
+  }
+});
+
+test("durations show readable hours, minutes and seconds, keeping missing values distinct from zero", async () => {
+  const cases = [[4604, "1 hr 16 min 44 sec"], [84.3, "1 min 24 sec"], [3600, "1 hr"], [60, "1 min"],
+    [59.9, "1 min"], [12, "12 sec"], [0, "0 sec"], [null, "Unavailable"], [-1, "Unavailable"], ["bad", "Unavailable"]];
+  const app = await boot({ reports: { goatcounter: { metrics: cases.map(([value]) => ({ label: "Duration", value, format: "seconds" })), tables: [] } } });
+  const values = nodes(app.elements.get("analytics-reports").children[0]).filter(node => node.tag === "dd");
+  assert.deepEqual(values.map(node => node.textContent), cases.map(([, expected]) => expected));
+});
+
+test("all providers omit View data disclosures and keep useful breakdown tables directly visible", async () => {
+  const app = await boot({ reports: { custom: { note: "Collection coverage", tables: [{ title: "Brackets by type",
+    columns: [{ key: "type", label: "Bracket type", format: "text" }], rows: [{ type: "NFL" }] }] } } });
+  const reports = app.elements.get("analytics-reports");
+  assert.doesNotMatch(reports.text, /View data/);
+  assert.deepEqual(nodes(reports).filter(node => node.tag === "summary").map(node => node.textContent), ["Definitions and coverage"]);
+  assert.ok(nodes(reports.children[1]).some(node => node.tag === "caption" && node.textContent === "Brackets by type"));
+  assert.equal(nodes(reports.children[1]).filter(node => node.tag === "details").length, 1);
 });
 
 function dailyReport(rows, format = "number") {

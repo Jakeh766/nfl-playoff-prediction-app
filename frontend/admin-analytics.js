@@ -112,36 +112,18 @@
     if (!numeric(value)) return "Unavailable";
     if (type === "percent" || type === "percent100") return new Intl.NumberFormat(undefined,
       { style: "percent", maximumFractionDigits: 1 }).format(Number(value) / (type === "percent100" ? 100 : 1));
-    if (type === "seconds") return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} s`;
+    if (type === "seconds") {
+      if (Number(value) < 0) return "Unavailable";
+      const seconds = Math.round(Number(value));
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor(seconds % 3600 / 60);
+      return [hours ? `${format(hours)} hr` : "", minutes ? `${minutes} min` : "",
+        seconds % 60 || !seconds ? `${seconds % 60} sec` : ""].filter(Boolean).join(" ");
+    }
     return new Intl.NumberFormat(undefined, { maximumFractionDigits: type === "decimal" ? 2 : 0 }).format(value);
   }
   function numeric(value) {
     return (typeof value === "number" || typeof value === "string" && value.trim() !== "") && Number.isFinite(Number(value));
-  }
-  function barChart(title, items, { percent = false, note = "" } = {}) {
-    const valid = items.filter(item => numeric(item.value) && Number(item.value) >= 0);
-    if (!valid.length) return null;
-    const maximum = percent ? 100 : Math.max(...valid.map(item => Number(item.value)));
-    const figure = element("figure", undefined, "analytics-chart");
-    const caption = element("figcaption");
-    caption.append(element("span", title), element("span", percent ? "0–100%" : `0–${format(maximum)}`, "analytics-chart-scale"));
-    figure.append(caption);
-    const rows = element("ul", undefined, "analytics-bars");
-    for (const item of valid) {
-      const row = element("li", undefined, "analytics-bar-row");
-      const label = element("div", undefined, "analytics-bar-label");
-      label.append(element("span", item.label), element("strong", format(item.value, percent ? "percent100" : "number")));
-      const track = element("div", undefined, "analytics-bar-track");
-      track.setAttribute("aria-hidden", "true");
-      const bar = element("span", undefined, "analytics-bar-fill");
-      bar.style.width = `${maximum > 0 ? Math.min(100, Number(item.value) / maximum * 100) : 0}%`;
-      track.append(bar);
-      row.append(label, track);
-      rows.append(row);
-    }
-    figure.append(rows);
-    if (note) figure.append(element("p", note, "analytics-chart-note"));
-    return figure;
   }
   function svgElement(tag, attributes, text) {
     const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -340,9 +322,73 @@
     if (!label || !count || report.title === "Brackets by day and type") return null;
     const rows = report.rows.filter(row => numeric(row[count.key]) && Number(row[count.key]) >= 0)
       .sort((a, b) => Number(b[count.key]) - Number(a[count.key]));
-    return barChart(`${report.title} · ${count.label.toLowerCase()}`, rows.slice(0, 5).map(row => ({
-      label: row[label.key], value: row[count.key],
-    })), { note: `Top ${Math.min(rows.length, 5)} of ${rows.length} returned rows.` });
+    const figure = element("figure", undefined, "analytics-chart analytics-pie");
+    figure.append(element("figcaption", report.title));
+    const total = rows.reduce((sum, row) => sum + Number(row[count.key]), 0);
+    if (!total) {
+      figure.append(element("p", rows.length ? "No visits recorded for this range." : "No data reported for this range.", "analytics-empty"));
+      return figure;
+    }
+    const layout = element("div", undefined, "analytics-pie-layout");
+    const plot = element("div", undefined, "analytics-pie-plot");
+    const svg = svgElement("svg", { viewBox: "0 0 240 240", "aria-hidden": "true" });
+    const legend = element("ul", undefined, "analytics-pie-legend");
+    const hint = "Hover or tap a slice, or focus a page for details.";
+    const readout = element("p", hint, "analytics-pie-readout");
+    readout.setAttribute("role", "status");
+    const colors = ["var(--analytics-daily)", "var(--analytics-total)", "var(--red)", "var(--gold)",
+      "#8a5e9b", "#568e99", "#c78348", "#8b7f67", "#ab6281", "#7589ad", "#82994e", "#777777"];
+    const slices = [];
+    let angle = -Math.PI / 2;
+    for (const [index, row] of rows.entries()) {
+      const value = Number(row[count.key]);
+      const share = value / total;
+      const color = colors[index % colors.length];
+      const description = `${row[label.key]} · ${format(value)} ${count.label.toLowerCase()} · ${format(share, "percent")}`;
+      let slice;
+      if (share > 0) {
+        const finish = angle + share * Math.PI * 2;
+        const point = a => `${120 + 112 * Math.cos(a)},${120 + 112 * Math.sin(a)}`;
+        slice = share === 1 ? svgElement("circle", { cx: 120, cy: 120, r: 112 }) :
+          svgElement("path", { d: `M120,120 L${point(angle)} A112,112 0 ${share > 0.5 ? 1 : 0},1 ${point(finish)} Z` });
+        slice.setAttribute("class", "analytics-pie-slice");
+        slice.style.fill = color;
+        slice.append(svgElement("title", {}, description));
+        svg.append(slice);
+        slices.push(slice);
+        angle = finish;
+      }
+      const show = () => {
+        for (const other of slices) other.style.opacity = other === slice || !slice ? "1" : "0.45";
+        readout.textContent = description;
+      };
+      const reset = () => { for (const other of slices) other.style.opacity = "1"; readout.textContent = hint; };
+      if (slice) {
+        slice.addEventListener("pointerenter", show);
+        slice.addEventListener("pointerleave", reset);
+        slice.addEventListener("click", show);
+      }
+      const item = element("li");
+      const button = element("button", undefined, "analytics-pie-key");
+      button.type = "button";
+      button.setAttribute("aria-label", description);
+      const swatch = element("span", undefined, "analytics-pie-swatch");
+      swatch.style.background = color;
+      swatch.setAttribute("aria-hidden", "true");
+      button.append(swatch, element("span", row[label.key], "analytics-pie-page"),
+        element("strong", format(value)), element("span", format(share, "percent"), "analytics-pie-share"));
+      button.addEventListener("focus", show);
+      button.addEventListener("blur", reset);
+      button.addEventListener("pointerenter", show);
+      button.addEventListener("pointerleave", reset);
+      button.addEventListener("click", show);
+      item.append(button);
+      legend.append(item);
+    }
+    plot.append(svg, readout);
+    layout.append(plot, legend);
+    figure.append(layout, element("p", `Counts and percentages cover the ${rows.length} returned pages; omitted pages are not included.`, "analytics-chart-note"));
+    return figure;
   }
   function renderProvider(section, data) {
     section.replaceChildren();
@@ -412,11 +458,9 @@
       const chart = report.chart === "trend" ? dailyCharts(report, data.provider) :
         data.provider === "goatcounter" ? tableChart(report) : null;
       if (chart) breakdown.append(chart);
-      const details = element("details", undefined, "analytics-data-details");
-      details.append(element("summary", `View data · ${report.title}`));
-      if (report.title === "Brackets by type") details.open = true;
+      // Charts expose exact values through their controls and legend, without duplicate tables.
+      if (chart) { breakdowns.append(breakdown); continue; }
       if (data.provider === "search-console" && report.chart !== "trend") {
-        details.open = true;
         searchBreakdowns.push({ report, breakdown });
       }
       const wrap = element("div", undefined, "analytics-table-wrap");
@@ -449,8 +493,7 @@
       }
       table.append(body);
       wrap.append(table);
-      details.append(wrap);
-      breakdown.append(details);
+      breakdown.append(wrap);
       breakdowns.append(breakdown);
     }
     if (searchBreakdowns.length) {
