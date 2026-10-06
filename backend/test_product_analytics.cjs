@@ -7,14 +7,20 @@ const root = path.join(__dirname, "..");
 const script = fs.readFileSync(path.join(root, "frontend/monitoring.js"), "utf8");
 function boot(options = {}) {
   const requests = [];
-  const forbiddenStorage = new Proxy({}, { get() { assert.fail("Analytics must never access browser storage"); } });
+  const legacy = new Map([["road-to-bowl.auth.session", "AUTH"], ["draft", "DRAFT"],
+    ["pp_analytics_consent_v1", "granted"], ["rtb_visitor_id", "old"], ["rtb_session_id", "old"]]);
+  const storage = { getItem() { assert.fail("Analytics must not read browser storage"); },
+    setItem() { assert.fail("Analytics must not write browser identifiers"); }, removeItem(key) { legacy.delete(key); } };
+  const expiredCookies = [];
+  const document = { get cookie() { return "_ga=old; _ga_OLD=old; _clck=old; essential=AUTH"; },
+    set cookie(value) { expiredCookies.push(value); } };
   const navigator = { doNotTrack: options.dnt, globalPrivacyControl: options.gpc };
   const context = { AUTH_CONFIG: { environment: options.environment || "dev" }, navigator,
-    location: { pathname: options.page || "/picks" }, localStorage: forbiddenStorage, sessionStorage: forbiddenStorage,
+    location: { pathname: options.page || "/picks", hostname: "dev.example.com" }, document, localStorage: storage, sessionStorage: storage,
     fetch(url, request) { requests.push({ url, request }); return Promise.resolve(); } };
   context.window = context;
   vm.runInNewContext(script, context);
-  return { context, navigator, requests, payloads: () => requests.map(item => JSON.parse(item.request.body)) };
+  return { context, navigator, requests, legacy, expiredCookies, payloads: () => requests.map(item => JSON.parse(item.request.body)) };
 }
 test("product events send only coarse fields, never identifiers or auth", () => {
   const app = boot();
@@ -64,4 +70,14 @@ test("public pages keep auth before monitoring and remove consent surfaces", () 
   assert.match(app, /await requestCognito\("DeleteUser"[^;]+;\s*window.siteAnalytics\?\.track\("account_deleted"\)/);
   const picks = fs.readFileSync(path.join(root, "frontend/picks.js"), "utf8");
   for (const event of ["bracket_created", "bracket_completed", "prediction_saved"]) assert.ok(picks.includes(`track("${event}", { bracketType: SPORT })`));
+});
+
+test("migration removes only legacy analytics storage/cookies even with privacy signals", () => {
+  for (const options of [{}, { gpc: true }, { dnt: "1" }]) {
+    const app = boot(options);
+    assert.deepEqual([...app.legacy], [["road-to-bowl.auth.session", "AUTH"], ["draft", "DRAFT"]]);
+    assert.ok(app.expiredCookies.length > 0);
+    assert.ok(app.expiredCookies.every(cookie => /^_(ga|clck)/.test(cookie) && cookie.includes("Max-Age=0")));
+    assert.equal(app.requests.length, 0);
+  }
 });

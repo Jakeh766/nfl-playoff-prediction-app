@@ -30,7 +30,7 @@ Providers measure different audiences; do not add their totals.
 ## Collection and interpretation
 
 There are no analytics cookies, localStorage/sessionStorage identifiers, consent
-state or consent UI. Cognito sign-in storage, preferences and drafts remain.
+state or consent UI. A targeted public-page migration expires legacy analytics cookies and removes only the old analytics consent/visitor/session keys. It creates no new storage. Cognito sign-in storage, preferences and drafts remain.
 GPC/DNT disable GoatCounter and first-party collection, including signals enabled
 after page load. The AWS endpoint honors `Sec-GPC: 1` and `DNT: 1` headers. No
 account/email/IP/browser IDs, invite codes or picks enter product analytics logs.
