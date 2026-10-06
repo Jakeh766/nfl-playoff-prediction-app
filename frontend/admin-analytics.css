@@ -30,7 +30,7 @@ body[data-page="admin-analytics"] { background: var(--paper); }
 .analytics-metrics dt { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .analytics-metrics dd { margin: 6px 0 0; font: 500 32px/1.2 var(--display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .analytics-metric-note { display: block; font: 400 11px/1.5 var(--body); color: var(--muted); margin-top: 8px; max-width: 28ch; }
-.analytics-breakdowns { display: grid; gap: 28px; }
+.analytics-breakdowns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
 [data-provider="custom"] .analytics-breakdowns { margin-top: 28px; }
 .analytics-chart { margin: 28px 0 0; min-width: 0; }
 .analytics-chart figcaption { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; font-size: 14px; font-weight: 600; margin-bottom: 20px; }
