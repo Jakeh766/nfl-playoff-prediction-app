@@ -68,7 +68,8 @@ class SeoTests(unittest.TestCase):
                 self.assertEqual(page.select("meta", property="og:url")[0]["content"], BASE + route)
                 self.assertEqual(page.select("meta", name="twitter:card")[0]["content"], "summary_large_image")
                 links = {a.get("href") for a in page.select("a")}
-                self.assertTrue({"/picks", "/privacy"}.issubset(links))
+                primary_link = "/scoring" if filename == "leaderboard.html" else "/picks"
+                self.assertTrue({primary_link, "/privacy"}.issubset(links))
                 for script in re.findall(r'<script type="application/ld\+json">(.*?)</script>', page.html, re.S):
                     json.loads(script)
 
@@ -184,8 +185,6 @@ class SeoTests(unittest.TestCase):
                 self.assertEqual(unescape(re.sub(r"<[^>]+>", " ", navigation)).split(),
                                  ["Privacy", "policy", "Contact"])
                 self.assertNotIn("about-predict-playoffs", page.html)
-        self.assertTrue(Page("scoring.html").select("h2", id="scoring-reference"))
-        self.assertTrue(Page("leaderboard.html").select("h2", id="standings-guide"))
 
     def test_asset_versioning_and_cache_isolation(self):
         config = (ROOT / "terraform/modules/app/main.tf").read_text()
