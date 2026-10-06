@@ -37,37 +37,14 @@ try {
 
   if (Test-Scope "Frontend") {
     Write-Host "Checking frontend JavaScript..."
-    foreach ($file in @(
-      "frontend/sports.js",
-      "frontend/app.js",
-      "frontend/bootstrap.js",
-      "frontend/leaderboard.js",
-      "frontend/monitoring.js",
-      "frontend/goatcounter.js",
-      "frontend/engagement.js",
-      "frontend/admin-analytics.js",
-      "frontend/picks.js",
-      "frontend/scoring.js",
-      "frontend/shell.js",
-      "frontend/auth-config.js"
-    )) {
-      Invoke-NativeCommand -FilePath node -ArgumentList @("--check", $file)
-    }
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_leaderboard.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_account_modal.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_token_security.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_product_analytics.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_goatcounter.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_engagement.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_admin_analytics.cjs")
+    Invoke-NativeCommand -FilePath node -ArgumentList @("scripts/check-frontend.cjs")
   }
 
   if (Test-Scope "Backend") {
     Write-Host "Checking backend Python..."
-    Invoke-NativeCommand -FilePath $python -ArgumentList @(
-      "-m", "py_compile", "backend/lambda/app.py", "backend/lambda/results_updater.py", "backend/lambda/nba_results_updater.py", "backend/lambda/results_dispatcher.py"
-      "backend/lambda/admin_analytics.py", "backend/lambda/analytics_providers.py", "backend/lambda/goatcounter_sessions.py", "backend/lambda/engagement.py"
-    )
+    $lambdaFiles = @(Get-ChildItem -LiteralPath "backend/lambda" -Filter "*.py" -File |
+      Sort-Object Name | ForEach-Object { $_.FullName })
+    Invoke-NativeCommand -FilePath $python -ArgumentList (@("-m", "py_compile") + $lambdaFiles)
     Invoke-NativeCommand -FilePath $python -ArgumentList @("-m", "unittest", "discover", "-s", "backend", "-p", "test_*.py")
   }
 
