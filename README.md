@@ -49,7 +49,9 @@ See the app's [scoring page](https://predictplayoffs.com/scoring) for the full r
 
 ## Playing with friends
 
-Create a private group and share its invite link, or join with the group's name
+Open **My Groups** at `/groups` to see all your NFL and NBA groups. Each group has
+Standings, Members, History, and Settings tabs. Create a private group and share
+its invite link, or join with the group's name
 and password. Only members can view its leaderboard. The group commissioner
 (the person managing the group) can change which sports it includes or delete
 it. A commissioner must hand that role to another member before leaving.
@@ -74,7 +76,7 @@ You can build brackets and see bundled win projections. Signing in, saving
 picks, private groups, and live data require the deployed app.
 
 The basic preview uses file addresses such as `/picks.html`,
-`/leaderboard.html`, and `/scoring.html`. Add `?sport=nba` to preview NBA.
+`/leaderboard.html`, `/groups.html`, and `/scoring.html`. Add `?sport=nba` to preview NBA.
 
 Before sending code changes, run:
 

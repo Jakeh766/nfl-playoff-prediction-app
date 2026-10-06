@@ -38,6 +38,7 @@ class LoginFormTests(unittest.TestCase):
         cls.leaderboard_javascript = (
             FRONTEND_DIR / "leaderboard.js"
         ).read_text(encoding="utf-8")
+        cls.groups_javascript = (FRONTEND_DIR / "groups.js").read_text(encoding="utf-8")
         cls.picks_javascript = (FRONTEND_DIR / "picks.js").read_text(
             encoding="utf-8"
         )
@@ -297,36 +298,25 @@ class LoginFormTests(unittest.TestCase):
             terraform,
         )
 
-    def test_public_and_group_leaderboards_share_a_toggleable_section(self):
-        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
-        html += self.shell
-        app_javascript = "\n".join(
-            (
-                self.app_javascript,
-                self.leaderboard_javascript,
-                self.bootstrap_javascript,
-            )
-        )
-
-        self.assertIn('id="leaderboard-section"', html)
-        self.assertIn('id="public-leaderboard-tab"', html)
-        self.assertIn('id="groups-leaderboard-tab"', html)
-        self.assertIn('id="public-leaderboard-panel"', html)
-        self.assertIn('id="groups-leaderboard-panel"', html)
-        self.assertNotIn('id="groups-section"', html)
-        self.assertIn('renderLeaderboardView("groups")', app_javascript)
-        self.assertIn('id="create-group"', html)
-        self.assertIn('id="join-group"', html)
-        self.assertIn('id="group-password"', html)
-        self.assertIn('type="password"', html)
+    def test_groups_have_a_standalone_page_and_preserve_group_forms(self):
+        html = (FRONTEND_DIR / "groups.html").read_text(encoding="utf-8")
+        public = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        self.assertIn('data-page="groups"', html)
+        self.assertIn('<title>My Groups | Predict Playoffs</title>', html)
+        self.assertNotIn('groups-leaderboard-panel', public)
+        self.assertNotIn('id="create-group"', public)
+        for view in ["standings", "members", "history", "settings"]:
+            self.assertIn(f'id="group-panel-{view}"', html)
+        for control in ["create-group", "join-group", "share-group-invite", "leave-group", "delete-group"]:
+            self.assertIn(f'id="{control}"', html)
         self.assertIn(
             'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true"',
-            html,
+            self.shell,
         )
-        self.assertIn('apiRequest("/api/groups")', app_javascript)
-        self.assertIn('"/api/groups/join"', app_javascript)
-        self.assertIn("/leaderboard`", app_javascript)
-        self.assertIn('path.startsWith("/api/groups")', app_javascript)
+        self.assertIn('apiRequest("/api/groups", { sport })', self.groups_javascript)
+        self.assertIn('"/api/groups/join"', self.groups_javascript)
+        self.assertIn('/leaderboard`', self.groups_javascript)
+        self.assertIn('path.startsWith("/api/groups")', self.app_javascript)
 
     def test_password_fields_share_an_accessible_visibility_toggle(self):
         password_ids = (
@@ -363,6 +353,7 @@ class LoginFormTests(unittest.TestCase):
             (
                 self.app_javascript,
                 self.leaderboard_javascript,
+                self.groups_javascript,
                 self.bootstrap_javascript,
             )
         )
@@ -381,7 +372,7 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('document.body.classList.toggle("has-group-invite"', app_javascript)
         self.assertIn('"Sign in to join group"', app_javascript)
         self.assertIn('id="group-invite-dialog"', self.shell)
-        leaderboard = (FRONTEND_DIR / "leaderboard.html").read_text(
+        leaderboard = (FRONTEND_DIR / "groups.html").read_text(
             encoding="utf-8"
         )
         self.assertIn('id="share-group-invite"', leaderboard)
@@ -395,11 +386,12 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('"dynamodb:UpdateItem"', groups_permissions)
 
     def test_group_deletion_is_creator_only_and_confirmed(self):
-        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        html = (FRONTEND_DIR / "groups.html").read_text(encoding="utf-8")
         app_javascript = "\n".join(
             (
                 self.app_javascript,
                 self.leaderboard_javascript,
+                self.groups_javascript,
                 self.bootstrap_javascript,
             )
         )

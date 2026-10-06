@@ -259,10 +259,10 @@ const state = {
   savedPrediction: null,
   leaderboard: null,
   leaderboardScoringMode: "classic",
-  leaderboardView: window.location.hash === "#groups" ? "groups" : "public",
   groups: [],
   activeGroupId: "",
   groupLeaderboard: null,
+  groupSummaries: {},
   predictionWindow: null,
   predictionsLocked: !LOCAL_PREVIEW,
   predictionClockOffset: 0,
@@ -341,11 +341,7 @@ const elements = {
   savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
   emptyLocker: document.querySelector("#empty-locker"),
-  publicLeaderboardTab: document.querySelector("#public-leaderboard-tab"),
-  groupsLeaderboardTab: document.querySelector("#groups-leaderboard-tab"),
-  publicLeaderboardPanel: document.querySelector("#public-leaderboard-panel"),
-  groupsLeaderboardPanel: document.querySelector("#groups-leaderboard-panel"),
-  groupTabs: document.querySelector("#group-tabs"),
+  groupCards: document.querySelector("#group-cards"),
   emptyGroups: document.querySelector("#empty-groups"),
   groupLeaderboard: document.querySelector("#group-leaderboard"),
   activeGroupName: document.querySelector("#active-group-name"),
@@ -692,7 +688,7 @@ async function finishPasswordSignIn(email, password) {
   if (PAGE === "picks") {
     await refreshSavedPrediction();
     if (loadAuthSession() && !state.bracketBuilt) openPrediction();
-  } else if (PAGE === "leaderboard") {
+  } else if (PAGE === "groups") {
     await refreshGroups();
   }
   if (typeof resumePendingGroupAction === "function") {
@@ -1006,44 +1002,6 @@ function currentUserEmail() {
   return String(decodeJwtPayload(session?.idToken || "").email || "");
 }
 
-function renderLeaderboardView(view = state.leaderboardView) {
-  if (!elements.publicLeaderboardTab) return;
-  const nextView = view === "groups" ? "groups" : "public";
-  const publicActive = nextView === "public";
-  state.leaderboardView = nextView;
-
-  elements.groupsLeaderboardTab.classList.remove("hidden");
-  if (window.location.hash !== (publicActive ? "" : "#groups")) {
-    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}${publicActive ? "" : "#groups"}`);
-  }
-  document.querySelectorAll('[data-nav-page="leaderboard"], [data-nav-page="groups"]').forEach((link) => {
-    if (link.dataset.navPage === (publicActive ? "leaderboard" : "groups")) link.setAttribute("aria-current", "page");
-    else link.removeAttribute("aria-current");
-  });
-  if (!state.signedIn && elements.emptyGroups) {
-    elements.emptyGroups.textContent = "Sign in to see your groups, or create or join a group to get started.";
-  }
-  elements.publicLeaderboardTab.classList.toggle("active", publicActive);
-  elements.publicLeaderboardTab.setAttribute("aria-selected", String(publicActive));
-  elements.publicLeaderboardTab.tabIndex = publicActive ? 0 : -1;
-  elements.groupsLeaderboardTab.classList.toggle("active", !publicActive);
-  elements.groupsLeaderboardTab.setAttribute("aria-selected", String(!publicActive));
-  elements.groupsLeaderboardTab.tabIndex = publicActive ? -1 : 0;
-  elements.publicLeaderboardPanel.classList.toggle("hidden", !publicActive);
-  elements.groupsLeaderboardPanel.classList.toggle("hidden", publicActive);
-}
-
-function handleLeaderboardViewKeydown(event) {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-  event.preventDefault();
-  const view = event.key === "ArrowLeft" || event.key === "Home" ? "public" : "groups";
-  renderLeaderboardView(view);
-  (state.leaderboardView === "public"
-    ? elements.publicLeaderboardTab
-    : elements.groupsLeaderboardTab
-  ).focus();
-}
-
 function renderLeaderboardProfile() {
   elements.signedInPanel?.classList.toggle("hidden", !state.signedIn);
   elements.accountLeaderboardName.textContent =
@@ -1052,7 +1010,6 @@ function renderLeaderboardProfile() {
     ? "Change leaderboard name"
     : "Choose leaderboard name";
   elements.savedSection?.classList.toggle("hidden", !state.signedIn);
-  renderLeaderboardView();
 }
 
 function renderAuthentication(signedIn) {
@@ -1079,6 +1036,7 @@ function renderAuthentication(signedIn) {
     state.groups = [];
     state.activeGroupId = "";
     state.groupLeaderboard = null;
+    state.groupSummaries = {};
     elements.savedSection?.classList.add("hidden");
   }
   renderLeaderboardProfile();
@@ -1131,7 +1089,7 @@ async function submitLeaderboardName(event) {
           : `Leaderboard name set to ${state.leaderboardName}.`,
       );
       if (elements.leaderboardBody) await loadLeaderboard();
-      if (PAGE === "leaderboard" && state.activeGroupId) await loadGroupLeaderboard();
+      if (PAGE === "groups" && state.activeGroupId) await loadGroupLeaderboard();
     }
   } catch (error) {
     elements.leaderboardNameMessage.textContent = error.message;
@@ -1275,9 +1233,12 @@ async function apiRequest(path, options = {}) {
     throw error;
   }
 
-  const response = await fetch(sportUrl(path), {
+  const { sport: requestSport, ...requestOptions } = options;
+  const url = new URL(sportUrl(path), window.location.origin);
+  if (requestSport) url.searchParams.set("sport", requestSport);
+  const response = await fetch(url.pathname + url.search + url.hash, {
     cache: "no-store",
-    ...options,
+    ...requestOptions,
     headers: {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),

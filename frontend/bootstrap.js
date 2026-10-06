@@ -61,15 +61,7 @@ elements.groupName?.addEventListener("invalid", () => {
 elements.groupName?.addEventListener("input", () => {
   elements.groupName.setCustomValidity("");
 });
-elements.publicLeaderboardTab?.addEventListener("click", () => {
-  renderLeaderboardView("public");
-});
-elements.groupsLeaderboardTab?.addEventListener("click", () => {
-  renderLeaderboardView("groups");
-});
-elements.publicLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
-elements.groupsLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
-window.addEventListener("hashchange", () => renderLeaderboardView(window.location.hash === "#groups" ? "groups" : "public"));
+if (typeof initializeGroupsPage === "function") initializeGroupsPage();
 elements.classicLeaderboardMode?.addEventListener("click", () => {
   selectLeaderboardScoringMode("classic");
 });
@@ -240,7 +232,7 @@ async function initializeAuthentication() {
       await refreshSavedPrediction();
       if (!loadAuthSession()) return;
       openPrediction(false);
-    } else if (PAGE === "leaderboard") {
+    } else if (PAGE === "groups") {
       await refreshGroups();
     }
   } catch (error) {
@@ -251,7 +243,7 @@ async function initializeAuthentication() {
 }
 
 if (PAGE === "picks") loadWinTotals();
-if (elements.leaderboardBody) loadLeaderboard();
+if (elements.leaderboardBody && window.location.hash !== "#groups") loadLeaderboard();
 if (["home", "picks"].includes(PAGE)) initializePredictionWindow();
 if (typeof renderHomeGroupInvite === "function") renderHomeGroupInvite();
 initializeAuthentication();

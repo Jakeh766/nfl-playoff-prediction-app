@@ -1,6 +1,6 @@
 # Group history
 
-Expand **Group history** beneath a private group's season leaderboard. History
+Open **My Groups**, select a group, then choose **History**. History
 is visible only to current group members and is scoped to the selected sport.
 New groups show an empty state until a season has ended and been archived.
 
@@ -75,19 +75,35 @@ records, so repeated deployments preserve commissioner edits, kicked members,
 and voluntary departures. It continues initializing new demo groups normally.
 
 **My Groups** in primary navigation and **View my groups** on the homepage open
-`/leaderboard#groups` directly, retaining the NBA query parameter when selected.
+`/groups` directly, retaining the NBA query parameter when selected. Old
+`/leaderboard#groups` links redirect to this page. The public leaderboard remains
+on `/leaderboard` and does not load private memberships.
 Signed-out visitors see a sign-in prompt and can start the existing create/join
 authentication flows. Commissioner identity appears in standings and Members.
 
+The directory merges the existing NFL and NBA membership responses by group ID.
+Cards show sports, scoring mode, commissioner role, member count, and personal
+rank for the selected sport (or the group's supported sport). Up to three board
+reads run concurrently to fill in counts and ranks using the existing API;
+failed summaries keep their cards visible with a retry prompt. No new backend
+endpoint or stored group field is required.
+
+Group details use `?group=<id>` and optional `&view=members|history|settings`.
+The default view is Standings. Browser Back restores the directory, and tabs
+support arrow keys, Home, and End. Closing or signing out of a group prevents
+late requests from restoring private content. Leaving or deleting returns to
+the directory. Settings retains invites, sport edits, departure/commissioner
+transfer, and confirmed deletion; member removal stays in Members.
+
 ## UI maintenance
 
-Keep this feature within the existing leaderboard design: inherit DM Sans body
+Keep this feature consistent with the site: inherit DM Sans body
 type, use the `--display` Oswald stack for history headings and years, and reuse
 `--line`, `--link`, `--muted`, `--surface-soft`, and `--focus-outline` so light
 and dark themes remain consistent. There is no separate approved visual comp.
 
-The native `details`/`summary` disclosure belongs beneath private season
-standings. Preserve keyboard operation, visible focus, and the polite live
+History lives in its own tab beside Standings, Members, and Settings.
+Preserve tab keyboard operation, visible focus, and the polite live
 region for content updates. Label the selected NFL or NBA scope explicitly;
 only completed seasons populate champions and all-time standings.
 

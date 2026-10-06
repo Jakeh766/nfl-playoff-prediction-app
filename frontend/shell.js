@@ -2,6 +2,10 @@ const pageName = document.body.dataset.page || "home";
 const localPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 const routeHref = (path) => sportUrl(localPreview && path !== "/" ? `${path}.html` : path);
 
+if (pageName === "leaderboard" && window.location.hash === "#groups") {
+  window.location.replace(routeHref("/groups"));
+}
+
 const header = document.querySelector("#site-header");
 if (header) {
   header.className = "site-header";
@@ -17,20 +21,20 @@ if (header) {
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
       <a href="${routeHref("/leaderboard")}" data-nav-page="leaderboard">Leaderboard</a>
-      <a href="${routeHref("/leaderboard")}#groups" data-nav-page="groups">My Groups</a>
+      <a href="${routeHref("/groups")}" data-nav-page="groups">My Groups</a>
       <a href="${routeHref("/scoring")}" data-nav-page="scoring">Scoring</a>
     </nav>
     <button class="button button-ghost header-account" id="header-account" type="button">
       Account
     </button>
   `;
-  header.querySelector(`[data-nav-page="${pageName === "leaderboard" && window.location.hash === "#groups" ? "groups" : pageName}"]`)?.setAttribute("aria-current", "page");
+  header.querySelector(`[data-nav-page="${pageName}"]`)?.setAttribute("aria-current", "page");
 }
 
 const dialogs = document.querySelector("#site-dialogs");
 if (dialogs) {
   dialogs.innerHTML = `
-    ${["home", "leaderboard"].includes(pageName) ? `
+    ${["home", "leaderboard", "groups"].includes(pageName) ? `
       <dialog class="account-dialog public-bracket-dialog" id="public-bracket-dialog" aria-labelledby="public-bracket-title">
         <div class="dialog-heading">
           <div>
@@ -178,7 +182,7 @@ if (dialogs) {
       </form>
     </dialog>
 
-    ${["home", "leaderboard"].includes(pageName) ? `
+    ${["home", "groups"].includes(pageName) ? `
       <dialog class="account-dialog" id="group-dialog" aria-labelledby="group-dialog-title" aria-describedby="group-dialog-description">
         <form id="group-form" method="post">
           <p class="card-kicker" id="group-dialog-kicker">PRIVATE GROUP</p>
@@ -306,7 +310,7 @@ if (dialogs) {
 
 {
   document.querySelectorAll("a[data-clean-route]").forEach((link) => {
-    link.href = routeHref(link.getAttribute("data-clean-route")) + (link.dataset.leaderboardView === "groups" ? "#groups" : "");
+    link.href = routeHref(link.getAttribute("data-clean-route"));
   });
 }
 

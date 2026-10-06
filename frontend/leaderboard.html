@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. View public brackets or compete with friends in a private group." />
+    <meta name="description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. Explore public brackets and season standings." />
     <title>NFL &amp; NBA Playoff Prediction Leaderboard | Predict Playoffs</title>
     <meta name="robots" content="index,follow" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Predict Playoffs" />
     <meta property="og:title" content="NFL &amp; NBA Playoff Prediction Leaderboard | Predict Playoffs" />
-    <meta property="og:description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. View public brackets or compete with friends in a private group." />
+    <meta property="og:description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. Explore public brackets and season standings." />
     <meta property="og:url" content="https://predictplayoffs.com/leaderboard" />
     <meta property="og:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
     <meta property="og:image:type" content="image/png" />
@@ -18,7 +18,7 @@
     <meta property="og:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="NFL &amp; NBA Playoff Prediction Leaderboard | Predict Playoffs" />
-    <meta name="twitter:description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. View public brackets or compete with friends in a private group." />
+    <meta name="twitter:description" content="Compare NFL and NBA playoff predictions with Classic or Upset Edge scores. Explore public brackets and season standings." />
     <meta name="twitter:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
     <meta name="twitter:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
     <link rel="canonical" href="https://predictplayoffs.com/leaderboard" />
@@ -29,16 +29,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=59" />
+    <link rel="stylesheet" href="/styles.css?v=60" />
     <script src="/sports.js?v=4" defer></script>
-    <script src="/shell.js?v=19" defer></script>
+    <script src="/shell.js?v=20" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/goatcounter.js?v=1" defer></script>
     <script src="/monitoring.js?v=8" defer></script>
     <script src="/engagement.js?v=1" defer></script>
-    <script src="/app.js?v=35" defer></script>
-    <script src="/leaderboard.js?v=22" defer></script>
-    <script src="/bootstrap.js?v=11" defer></script>
+    <script src="/app.js?v=36" defer></script>
+    <script src="/leaderboard.js?v=23" defer></script>
+    <script src="/bootstrap.js?v=12" defer></script>
   </head>
   <body data-page="leaderboard">
     <header id="site-header"></header>
@@ -46,18 +46,12 @@
       <section class="page-intro compact-page-intro">
         <p class="eyebrow">THE STANDINGS</p>
         <h1>NFL Leaderboard</h1>
-        <p>Compare public predictions or switch to a private group. Select any player to view their bracket; account details stay private.</p>
+        <p>Compare public predictions. Select any player to view their bracket; account details stay private.</p>
       </section>
-
       <section class="leaderboard-section page-section" id="leaderboard-section">
         <div class="section-heading compact leaderboard-heading">
           <div><h2>Season standings.</h2><p>Scores update as official results become available.</p></div>
-          <div class="leaderboard-view-tabs" role="tablist" aria-label="Leaderboard view">
-            <button class="leaderboard-view-tab active" id="public-leaderboard-tab" type="button" role="tab" aria-selected="true" aria-controls="public-leaderboard-panel">Public</button>
-            <button class="leaderboard-view-tab hidden" id="groups-leaderboard-tab" type="button" role="tab" aria-selected="false" aria-controls="groups-leaderboard-panel" tabindex="-1">My Groups</button>
-          </div>
         </div>
-        <div class="leaderboard-view-panel" id="public-leaderboard-panel" role="tabpanel" aria-labelledby="public-leaderboard-tab">
           <div class="leaderboard-score-toolbar">
             <div class="leaderboard-scoring-toggle" role="group" aria-label="Public leaderboard scoring">
               <button class="leaderboard-scoring-option active" id="classic-leaderboard-mode" type="button" aria-pressed="true">Classic</button>
@@ -81,59 +75,6 @@
             </table>
           </div>
           <p class="empty-leaderboard hidden" id="empty-leaderboard">No scored predictions yet. The first saved prediction will take the top spot.</p>
-        </div>
-        <div class="leaderboard-view-panel hidden" id="groups-leaderboard-panel" role="tabpanel" aria-labelledby="groups-leaderboard-tab">
-          <div class="groups-toolbar">
-            <p>Create or join a password-protected group to compare only its members.</p>
-            <div class="group-actions"><button class="button button-secondary" id="join-group" type="button">Join group</button><button class="button button-primary" id="create-group" type="button">Create group</button></div>
-          </div>
-          <div class="group-tabs" id="group-tabs" aria-label="Your groups"></div>
-          <p class="empty-groups" id="empty-groups">You have not joined a group yet. Create one for friends or join one with its name and password.</p>
-          <div class="group-leaderboard hidden" id="group-leaderboard">
-            <div class="group-leaderboard-heading">
-              <div><p class="card-kicker">GROUP LEADERBOARD</p><h3 id="active-group-name"></h3></div>
-              <div class="group-leaderboard-heading-actions">
-                <p class="leaderboard-status" id="group-leaderboard-status" role="status"></p>
-                <details class="group-settings" id="group-settings">
-                  <summary class="button button-secondary">Group settings <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
-                  <div class="group-settings-menu" role="group" aria-label="Group settings">
-                    <button id="share-group-invite" type="button">Invite others</button>
-                    <button class="hidden" id="edit-group-sports" type="button">Edit sports</button>
-                    <button class="hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button>
-                    <button class="hidden" id="revoke-group-invite" type="button">Revoke invite link</button>
-                    <button class="group-settings-leave" id="leave-group" type="button">Leave group</button>
-                    <button class="group-settings-danger hidden" id="delete-group" type="button">Delete group</button>
-                  </div>
-                </details>
-              </div>
-            </div>
-            <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Rankings and scores use this group’s scoring option. Select a player to view their bracket.</p>
-            <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell" role="region" aria-label="Group leaderboard table" tabindex="0">
-              <table class="leaderboard-table" aria-describedby="group-leaderboard-sort-hint">
-                <thead><tr>
-                  <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
-                  <th scope="col" class="leaderboard-player-heading">Player</th>
-                  <th scope="col" class="leaderboard-champion-heading" aria-label="Super Bowl pick"></th>
-                  <th scope="col" data-sort-key="field" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="field" data-sort-label="Field and seeding" aria-label="Sort by field and seeding, descending"><span>Field + seeding</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
-                  <th scope="col" data-sort-key="playoffs" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="playoffs" data-sort-label="Playoffs" aria-label="Sort by playoffs, descending"><span>Playoffs</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
-                  <th scope="col" data-sort-key="total" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="total" data-sort-label="Classic total" aria-label="Sort by Classic total, descending"><span data-score-label>Classic total</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
-                </tr></thead>
-                <tbody id="group-leaderboard-body"></tbody>
-              </table>
-            </div>
-            <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No group member has a saved prediction yet.</p>
-            <details class="group-members">
-              <summary>Members <span id="group-member-count"></span></summary>
-              <p class="input-hint">The commissioner manages sports, invites, and members. Removed members cannot rejoin with an invite or password.</p>
-              <ul id="group-member-list" class="group-member-list"></ul>
-              <p id="group-members-status" role="status" aria-live="polite"></p>
-            </details>
-            <details class="group-history" id="group-history">
-              <summary>Group history <span>Champions &amp; all-time standings</span></summary>
-              <div class="group-history-content" id="group-history-content" aria-live="polite"></div>
-            </details>
-          </div>
-        </div>
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

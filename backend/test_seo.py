@@ -240,7 +240,7 @@ class SeoTests(unittest.TestCase):
         files = sorted(p for p in (ROOT / "frontend").iterdir() if p.suffix in [".js", ".css"] and p.name != "auth-config.js")
         expected = hashlib.sha256(''.join(hashlib.md5(p.read_bytes()).hexdigest() for p in files).encode()).hexdigest()[:16]
         self.assertEqual(rendered["version"], expected)
-        self.assertEqual(set(rendered["pages"]), {"index.html", "nba", "scoring", "leaderboard", "picks", "privacy", "admin/analytics"})
+        self.assertEqual(set(rendered["pages"]), {"index.html", "nba", "scoring", "leaderboard", "groups", "picks", "privacy", "admin/analytics"})
         for html in rendered["pages"].values():
             versions = re.findall(r'\?v=([^" ]+)', html)
             self.assertTrue(versions)

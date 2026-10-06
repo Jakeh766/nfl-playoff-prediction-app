@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Create a private NFL or NBA prediction group, invite friends, and follow your standings and group history." />
+    <title>My Groups | Predict Playoffs</title>
+    <meta name="robots" content="noindex,follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Predict Playoffs" />
+    <meta property="og:title" content="My Groups | Predict Playoffs" />
+    <meta property="og:description" content="Create a private NFL or NBA prediction group, invite friends, and follow your standings and group history." />
+    <meta property="og:url" content="https://predictplayoffs.com/groups" />
+    <meta property="og:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="My Groups | Predict Playoffs" />
+    <meta name="twitter:description" content="Create a private NFL or NBA prediction group, invite friends, and follow your standings and group history." />
+    <meta name="twitter:image" content="https://predictplayoffs.com/assets/predict-playoffs-social-v2.png" />
+    <meta name="twitter:image:alt" content="Predict Playoffs — NFL and NBA playoff predictions" />
+    <link rel="canonical" href="https://predictplayoffs.com/groups" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/assets/predict-playoffs-mark.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=60" />
+    <script src="/sports.js?v=4" defer></script>
+    <script src="/shell.js?v=20" defer></script>
+    <script src="/auth-config.js" defer></script>
+    <script src="/goatcounter.js?v=1" defer></script>
+    <script src="/monitoring.js?v=8" defer></script>
+    <script src="/engagement.js?v=1" defer></script>
+    <script src="/app.js?v=36" defer></script>
+    <script src="/leaderboard.js?v=23" defer></script>
+    <script src="/groups.js?v=1" defer></script>
+    <script src="/bootstrap.js?v=12" defer></script>
+  </head>
+  <body data-page="groups">
+    <header id="site-header"></header>
+    <main class="groups-page">
+      <section class="page-intro compact-page-intro groups-intro">
+        <div><h1>My Groups</h1><p>Your people. Your predictions. Your competition.</p></div>
+        <div class="group-actions"><button class="button button-secondary" id="join-group" type="button">Join Group</button><button class="button button-primary" id="create-group" type="button">Create Group</button></div>
+      </section>
+      <section class="groups-section" aria-label="My Groups">
+        <p id="groups-status" class="input-hint" role="status" aria-live="polite">Sign in to see your groups.</p>
+        <div id="groups-directory">
+          <p class="groups-directory-copy">All your NFL and NBA groups in one place. Open a group to follow the season or manage your competition.</p>
+          <div class="group-directory" id="group-cards" aria-label="Your groups" data-no-sport-copy></div>
+          <p class="empty-groups" id="empty-groups">Sign in to see your groups, or create or join a group to get started.</p>
+        </div>
+        <section class="group-detail hidden" id="group-leaderboard" aria-labelledby="active-group-name">
+          <button class="text-link groups-back" id="groups-back" type="button">Back to My Groups</button>
+          <div class="group-leaderboard-heading">
+            <div><h1 id="active-group-name" tabindex="-1"></h1><p id="active-group-meta" class="input-hint" data-no-sport-copy></p></div>
+            <p class="leaderboard-status" id="group-leaderboard-status" role="status" aria-live="polite"></p>
+          </div>
+          <div class="group-detail-tabs" role="tablist" aria-label="Group details">
+            <button class="group-detail-tab active" id="group-tab-standings" role="tab" type="button" aria-selected="true" aria-controls="group-panel-standings" data-group-view="standings">Standings</button>
+            <button class="group-detail-tab" id="group-tab-members" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-members" data-group-view="members">Members</button>
+            <button class="group-detail-tab" id="group-tab-history" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-history" data-group-view="history">History</button>
+            <button class="group-detail-tab" id="group-tab-settings" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-settings" data-group-view="settings">Settings</button>
+          </div>
+          <div id="group-panel-standings" role="tabpanel" aria-labelledby="group-tab-standings" tabindex="0">
+            <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Rankings and scores use this group’s scoring option. Select a player to view their bracket.</p>
+            <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell" role="region" aria-label="Group leaderboard table" tabindex="0">
+              <table class="leaderboard-table" aria-describedby="group-leaderboard-sort-hint">
+                <thead><tr>
+                  <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" class="leaderboard-player-heading">Player</th>
+                  <th scope="col" class="leaderboard-champion-heading" aria-label="Super Bowl pick"></th>
+                  <th scope="col" data-sort-key="field" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="field" data-sort-label="Field and seeding" aria-label="Sort by field and seeding, descending"><span>Field + seeding</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" data-sort-key="playoffs" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="playoffs" data-sort-label="Playoffs" aria-label="Sort by playoffs, descending"><span>Playoffs</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                  <th scope="col" data-sort-key="total" aria-sort="none"><button class="leaderboard-sort-button" type="button" data-sort-key="total" data-sort-label="Classic total" aria-label="Sort by Classic total, descending"><span data-score-label>Classic total</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
+                </tr></thead>
+                <tbody id="group-leaderboard-body"></tbody>
+              </table>
+            </div>
+            <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No group member has a saved prediction yet.</p>
+          </div>
+          <div id="group-panel-members" class="hidden" role="tabpanel" aria-labelledby="group-tab-members" tabindex="0">
+            <h3>Members <span id="group-member-count"></span></h3>
+            <p class="input-hint">The commissioner manages sports, invites, and members. Removed members cannot rejoin with an invite or password.</p>
+            <ul id="group-member-list" class="group-member-list"></ul>
+            <p id="group-members-status" role="status" aria-live="polite"></p>
+          </div>
+          <div id="group-panel-history" class="group-history hidden" role="tabpanel" aria-labelledby="group-tab-history" tabindex="0">
+            <h3>Group history</h3>
+            <div class="group-history-content" id="group-history-content" aria-live="polite"></div>
+          </div>
+          <div id="group-panel-settings" class="hidden" role="tabpanel" aria-labelledby="group-tab-settings" tabindex="0">
+            <h3>Group settings</h3>
+            <p class="input-hint" id="group-settings-description"></p>
+            <div class="group-settings-actions" role="group" aria-label="Group settings">
+              <button class="button button-secondary" id="share-group-invite" type="button">Invite others</button>
+              <button class="button button-secondary hidden" id="edit-group-sports" type="button">Edit sports</button>
+              <button class="button button-secondary hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button>
+              <button class="button button-secondary hidden" id="revoke-group-invite" type="button">Revoke invite link</button>
+              <button class="button button-secondary" id="leave-group" type="button">Leave group</button>
+              <button class="button button-secondary group-settings-danger hidden" id="delete-group" type="button">Delete group</button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div id="site-dialogs"></div>
+    <footer id="site-footer" data-no-sport-copy>
+      <div class="footer-brand">
+        <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
+        <div class="footer-wordmark"><span>PREDICT PLAYOFFS</span><small>Call the season.</small></div>
+      </div>
+      <nav class="footer-links" aria-label="Privacy and contact">
+        <a href="/privacy">Privacy policy</a>
+        <a href="mailto:contact@predictplayoffs.com">Contact</a>
+      </nav>
+      <p>Predict Playoffs is an independent playoff prediction and bracket competition app. Not affiliated with the NFL or NBA.</p>
+    </footer>
+  </body>
+</html>

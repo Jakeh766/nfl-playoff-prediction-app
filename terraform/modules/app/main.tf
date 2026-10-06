@@ -50,6 +50,14 @@ locals {
       source       = "${var.frontend_dir}/leaderboard.html"
       content_type = "text/html; charset=utf-8"
     }
+    "groups" = {
+      source       = "${var.frontend_dir}/groups.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "groups.js" = {
+      source       = "${var.frontend_dir}/groups.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "scoring" = {
       source       = "${var.frontend_dir}/scoring.html"
       content_type = "text/html; charset=utf-8"
