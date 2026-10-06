@@ -99,3 +99,15 @@ test('private leaderboard reads only its fixed scoring mode', () => {
   assert.equal(vm.runInContext(`leaderboardSortValue(privateEntry, 'total', 'vegas')`, context), 60.75);
   assert.equal(vm.runInContext(`leaderboardSortValue(privateEntry, 'total', 'classic')`, context), null);
 });
+
+test('identical scoring results share competition ranks in both scoring modes', () => {
+  context.tied = [
+    { leaderboardName: 'Zoe', scores: { classic: { total: 20, regularSeason: 15, playoffs: 5 }, vegas: { total: 12.5, regularSeason: 10, playoffs: 2.5 } } },
+    { leaderboardName: 'Adam', scores: { classic: { total: 20, regularSeason: 15, playoffs: 5 }, vegas: { total: 12.5, regularSeason: 10, playoffs: 2.5 } } },
+    { leaderboardName: 'Third', scores: { classic: { total: 20, regularSeason: 10, playoffs: 10 }, vegas: { total: 12.5, regularSeason: 9, playoffs: 3.5 } } },
+    { leaderboardName: 'No picks', hasPrediction: false, total: null, regularSeason: null, playoffs: null },
+  ];
+  for (const mode of ['classic', 'vegas']) {
+    assert.deepEqual(Array.from(vm.runInContext(`rankLeaderboardEntries(tied, '${mode}').map(entry => entry.rank)`, context)), [1, 1, 3, null]);
+  }
+});

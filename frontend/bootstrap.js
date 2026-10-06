@@ -69,6 +69,7 @@ elements.groupsLeaderboardTab?.addEventListener("click", () => {
 });
 elements.publicLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
 elements.groupsLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
+window.addEventListener("hashchange", () => renderLeaderboardView(window.location.hash === "#groups" ? "groups" : "public"));
 elements.classicLeaderboardMode?.addEventListener("click", () => {
   selectLeaderboardScoringMode("classic");
 });

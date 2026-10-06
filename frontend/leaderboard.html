@@ -99,6 +99,8 @@
                   <div class="group-settings-menu" role="group" aria-label="Group settings">
                     <button id="share-group-invite" type="button">Invite others</button>
                     <button class="hidden" id="edit-group-sports" type="button">Edit sports</button>
+                    <button class="hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button>
+                    <button class="hidden" id="revoke-group-invite" type="button">Revoke invite link</button>
                     <button class="group-settings-leave" id="leave-group" type="button">Leave group</button>
                     <button class="group-settings-danger hidden" id="delete-group" type="button">Delete group</button>
                   </div>
@@ -120,6 +122,12 @@
               </table>
             </div>
             <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No group member has a saved prediction yet.</p>
+            <details class="group-members">
+              <summary>Members <span id="group-member-count"></span></summary>
+              <p class="input-hint">The commissioner manages sports, invites, and members. Removed members cannot rejoin with an invite or password.</p>
+              <ul id="group-member-list" class="group-member-list"></ul>
+              <p id="group-members-status" role="status" aria-live="polite"></p>
+            </details>
             <details class="group-history" id="group-history">
               <summary>Group history <span>Champions &amp; all-time standings</span></summary>
               <div class="group-history-content" id="group-history-content" aria-live="polite"></div>

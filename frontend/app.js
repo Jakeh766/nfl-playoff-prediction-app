@@ -259,7 +259,7 @@ const state = {
   savedPrediction: null,
   leaderboard: null,
   leaderboardScoringMode: "classic",
-  leaderboardView: "public",
+  leaderboardView: window.location.hash === "#groups" ? "groups" : "public",
   groups: [],
   activeGroupId: "",
   groupLeaderboard: null,
@@ -1008,11 +1008,21 @@ function currentUserEmail() {
 
 function renderLeaderboardView(view = state.leaderboardView) {
   if (!elements.publicLeaderboardTab) return;
-  const nextView = view === "groups" && state.signedIn ? "groups" : "public";
+  const nextView = view === "groups" ? "groups" : "public";
   const publicActive = nextView === "public";
   state.leaderboardView = nextView;
 
-  elements.groupsLeaderboardTab.classList.toggle("hidden", !state.signedIn);
+  elements.groupsLeaderboardTab.classList.remove("hidden");
+  if (window.location.hash !== (publicActive ? "" : "#groups")) {
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}${publicActive ? "" : "#groups"}`);
+  }
+  document.querySelectorAll('[data-nav-page="leaderboard"], [data-nav-page="groups"]').forEach((link) => {
+    if (link.dataset.navPage === (publicActive ? "leaderboard" : "groups")) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  if (!state.signedIn && elements.emptyGroups) {
+    elements.emptyGroups.textContent = "Sign in to see your groups, or create or join a group to get started.";
+  }
   elements.publicLeaderboardTab.classList.toggle("active", publicActive);
   elements.publicLeaderboardTab.setAttribute("aria-selected", String(publicActive));
   elements.publicLeaderboardTab.tabIndex = publicActive ? 0 : -1;
@@ -1066,13 +1076,13 @@ function renderAuthentication(signedIn) {
     state.leaderboardName = "";
     pendingPredictionSave = false;
     state.savedPrediction = null;
-    state.leaderboardView = "public";
     state.groups = [];
     state.activeGroupId = "";
     state.groupLeaderboard = null;
     elements.savedSection?.classList.add("hidden");
   }
   renderLeaderboardProfile();
+  if (!signedIn && typeof renderGroups === "function") renderGroups();
 }
 
 async function refreshProfile() {

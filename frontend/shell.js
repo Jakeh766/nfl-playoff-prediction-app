@@ -17,13 +17,14 @@ if (header) {
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
       <a href="${routeHref("/leaderboard")}" data-nav-page="leaderboard">Leaderboard</a>
+      <a href="${routeHref("/leaderboard")}#groups" data-nav-page="groups">My Groups</a>
       <a href="${routeHref("/scoring")}" data-nav-page="scoring">Scoring</a>
     </nav>
     <button class="button button-ghost header-account" id="header-account" type="button">
       Account
     </button>
   `;
-  header.querySelector(`[data-nav-page="${pageName}"]`)?.setAttribute("aria-current", "page");
+  header.querySelector(`[data-nav-page="${pageName === "leaderboard" && window.location.hash === "#groups" ? "groups" : pageName}"]`)?.setAttribute("aria-current", "page");
 }
 
 const dialogs = document.querySelector("#site-dialogs");
@@ -305,7 +306,7 @@ if (dialogs) {
 
 {
   document.querySelectorAll("a[data-clean-route]").forEach((link) => {
-    link.href = routeHref(link.getAttribute("data-clean-route"));
+    link.href = routeHref(link.getAttribute("data-clean-route")) + (link.dataset.leaderboardView === "groups" ? "#groups" : "");
   });
 }
 

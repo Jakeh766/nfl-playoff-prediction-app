@@ -329,11 +329,15 @@ function rankLeaderboardEntries(entries, mode = "classic") {
       1,
     );
   });
+  let previous = "", rank = null;
   return ordered.map((entry, index) => {
     const total = leaderboardSortValue(entry, "total", mode);
+    const result = JSON.stringify(["total", "field", "playoffs"].map(key => leaderboardSortValue(entry, key, mode)));
+    if (result !== previous) rank = index + 1;
+    previous = result;
     return {
       ...entry,
-      rank: total != null && total > 0 ? index + 1 : null,
+      rank: total != null && total > 0 ? rank : null,
       scoringMode: mode,
     };
   });
@@ -432,7 +436,8 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
   visibleEntries.forEach((entry) => {
     const row = document.createElement("tr");
     row.className = "leaderboard-row";
-    row.addEventListener("click", () => openPublicBracket(entry));
+    const hasPrediction = entry.hasPrediction !== false;
+    if (hasPrediction) row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
     rank.textContent = formatLeaderboardRank(entry.rank);
@@ -447,9 +452,10 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
     playerButton.className = "leaderboard-player-button";
     playerButton.type = "button";
     const playerName = document.createElement("strong");
-    playerName.textContent = entry.leaderboardName;
+    playerName.textContent = entry.leaderboardName + (entry.isCommissioner ? " · Commissioner" : "");
     const viewLabel = document.createElement("span");
-    viewLabel.textContent = "View bracket";
+    viewLabel.textContent = hasPrediction ? "View bracket" : "No prediction";
+    playerButton.disabled = !hasPrediction;
     playerButton.append(playerName, viewLabel);
     player.appendChild(playerButton);
 
@@ -626,6 +632,11 @@ function renderGroups() {
   elements.leaveGroup?.classList.toggle("hidden", !activeGroup);
   elements.editGroupSports?.classList.toggle("hidden", !isCommissioner);
   elements.deleteGroup?.classList.toggle("hidden", !isCommissioner);
+  for (const id of ["regenerate-group-invite", "revoke-group-invite"]) {
+    document.getElementById(id)?.classList.toggle("hidden", !isCommissioner);
+  }
+  document.querySelector("#group-member-list")?.replaceChildren();
+  if (document.querySelector("#group-member-count")) document.querySelector("#group-member-count").textContent = "";
   if (activeGroup) {
     elements.leaveGroup?.setAttribute(
       "aria-label",
@@ -672,6 +683,8 @@ function renderGroups() {
 function initializeGroupSettings() {
   const settings = document.querySelector("#group-settings");
   if (!settings) return;
+  document.getElementById("regenerate-group-invite")?.addEventListener("click", () => changeActiveGroupInvite(false));
+  document.getElementById("revoke-group-invite")?.addEventListener("click", () => changeActiveGroupInvite(true));
   const trigger = settings.querySelector("summary");
   const actionDialogs = {
     "share-group-invite": elements.groupInviteDialog,
@@ -717,6 +730,7 @@ function initializeGroupSettings() {
 }
 
 function renderGroupLeaderboard() {
+  renderGroupMembers();
   renderGroupHistory();
   const leaderboard = state.groupLeaderboard;
   const mode = leaderboard?.scoringOption || "classic";
@@ -753,6 +767,62 @@ async function loadGroupLeaderboard(groupId = state.activeGroupId) {
       "The group leaderboard could not be loaded.";
     elements.groupLeaderboardStatus.title = error.message;
     renderGroupHistory(true);
+  }
+}
+
+function renderGroupMembers() {
+  const list = document.querySelector("#group-member-list");
+  if (!list) return;
+  list.replaceChildren();
+  const group = state.groups.find(item => item.groupId === state.activeGroupId);
+  const members = state.groupLeaderboard?.members || [];
+  document.querySelector("#group-member-count").textContent = `(${members.length})`;
+  document.querySelector("#group-members-status").textContent = "";
+  for (const member of members) {
+    const item = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = `${member.displayName}${member.isCommissioner ? " · Commissioner" : ""}${member.isCurrentUser ? " · You" : ""}${member.hasPrediction ? "" : " · No prediction"}`;
+    item.appendChild(name);
+    if ((group?.isCommissioner ?? group?.isCreator) && !member.isCommissioner && !member.isCurrentUser) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button button-secondary";
+      button.textContent = "Remove";
+      button.setAttribute("aria-label", `Remove ${member.displayName}`);
+      button.addEventListener("click", async () => {
+        if (!window.confirm(`Remove ${member.displayName} from ${group.groupName}? They will not be able to rejoin with an invite or password.`)) return;
+        button.disabled = true;
+        const status = document.querySelector("#group-members-status");
+        status.textContent = `Removing ${member.displayName}…`;
+        try {
+          await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}/members/${encodeURIComponent(member.userId)}`, { method: "DELETE" });
+          await loadGroupLeaderboard(group.groupId);
+          status.textContent = `${member.displayName} was removed.`;
+        } catch (error) {
+          status.textContent = error.message;
+          button.disabled = false;
+        }
+      });
+      item.appendChild(button);
+    }
+    list.appendChild(item);
+  }
+}
+
+async function changeActiveGroupInvite(revoke) {
+  const group = state.groups.find(item => item.groupId === state.activeGroupId);
+  if (!(group?.isCommissioner ?? group?.isCreator)) return;
+  if (!window.confirm(`${revoke ? "Revoke" : "Regenerate"} the invite link for ${group.groupName}? Existing invite links will stop working.`)) return;
+  const buttons = ["regenerate-group-invite", "revoke-group-invite"].map(id => document.getElementById(id));
+  buttons.forEach(button => { button.disabled = true; });
+  try {
+    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}/invite`, { method: revoke ? "DELETE" : "POST" });
+    showToast(revoke ? "Invite link revoked. Regenerate it to invite new members." : "Invite link regenerated. Old links no longer work.");
+    if (!revoke) await openGroupInviteDialog(group);
+  } catch (error) {
+    elements.groupLeaderboardStatus.textContent = error.message;
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -1257,6 +1327,10 @@ async function openGroupInviteDialog(group) {
     const invite = await apiRequest(
       `/api/groups/${encodeURIComponent(group.groupId)}/invite`,
     );
+    if (!invite.inviteCode) {
+      elements.groupInviteMessage.textContent = "Invites are revoked. The commissioner can regenerate the link in Group settings.";
+      return;
+    }
     elements.groupInviteName.textContent = invite.groupName;
     elements.groupInviteLink.value = groupInviteUrl(
       invite.groupId,

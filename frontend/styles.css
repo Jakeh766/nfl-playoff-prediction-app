@@ -2785,6 +2785,14 @@ body .champion-display strong {
   border-radius: 8px;
 }
 
+.group-members { margin-block: 24px; }
+.group-members summary { cursor: pointer; font-weight: 700; padding-block: 12px; }
+.group-member-list { list-style: none; padding: 0; margin: 0; }
+.group-member-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.group-member-list li span { min-width: 0; overflow-wrap: anywhere; }
+.group-member-list button { flex-shrink: 0; }
+.leaderboard-player-button:disabled { color: inherit; cursor: default; opacity: 1; }
+
 .group-leaderboard-heading {
   display: flex;
   align-items: center;
