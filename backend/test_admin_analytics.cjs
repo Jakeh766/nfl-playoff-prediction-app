@@ -336,6 +336,29 @@ function dailyReport(rows, format = "number") {
     columns: [{ key: "day", label: "Day", format: "text" }, { key: "actions", label: "Actions", format }], rows };
 }
 
+test("active time has a readable total, daily hover values, compact axes and a visible sport table", async () => {
+  const app = await boot({ reports: { custom: {
+    engagement: { label: "Active engagement time", value: 4604, format: "seconds", note: "Total across opted-in page visits" },
+    tables: [{ title: "Daily activity", chart: "trend", series: ["active_time"],
+      columns: [{ key: "day", label: "Day", format: "text" }, { key: "active_time", label: "Active engagement time", format: "seconds" }],
+      rows: [{ day: "2026-10-01", active_time: null }, { day: "2026-10-02", active_time: 4604 }] },
+      { title: "Active time by page", columns: [{ key: "page", label: "Page", format: "text" },
+        { key: "sport", label: "Sport", format: "text" }, { key: "seconds", label: "Active time", format: "seconds" }],
+        rows: [{ page: "Leaderboard", sport: "NBA", seconds: 4604 }] }] } } });
+  const section = app.elements.get("analytics-reports").children[1];
+  assert.match(section.text, /Active engagement time.*1 hr 16 min 44 sec.*Total across opted-in/);
+  assert.match(section.text, /Active time by page.*Leaderboard.*NBA.*1 hr 16 min 44 sec/);
+  const axes = nodes(section).filter(node => node.className === "analytics-axis");
+  assert.ok(axes.some(node => node.textContent === "1.3 hr"));
+  const plot = nodes(section).find(node => node.className === "analytics-plot");
+  plot.listeners.focus(); plot.listeners.keydown({ key: "End", preventDefault() {} });
+  const tooltip = nodes(plot).find(node => node.className === "analytics-tooltip");
+  assert.match(tooltip.text, /1 hr 16 min 44 sec/);
+  plot.listeners.keydown({ key: "Home", preventDefault() {} });
+  assert.match(tooltip.text, /Unavailable.*No data/);
+  assert.equal(app.requests.length, 4);
+});
+
 test("section tabs support clicks and arrow navigation, preserve the chosen section on refresh, and do not fetch on navigation", async () => {
   const app = await boot();
   const custom = app.elements.get("analytics-tab-custom");

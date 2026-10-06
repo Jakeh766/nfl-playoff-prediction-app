@@ -14,7 +14,7 @@ Activity totals are grouped into accounts/access, brackets, and groups. Search h
 
 Trend graphs use native SVG and show the nearest day's exact date/value on pointer hover or touch. Each graph is one keyboard stop: Left/Right move by day, Home/End go to range boundaries, and Escape dismisses the tooltip. Focused values are announced politely for screen readers. Missing days show Unavailable, while measured zeroes show 0. Exact values remain accessible through chart keyboard controls, and daily charts retain gaps without inventing data. Page breakdowns use a pie chart with all valid returned pages, counts and percentages in a focusable legend; slice hover/tap and legend focus expose a readout. Percentages describe returned pages only. Session durations use hours, minutes and seconds. View data disclosures and duplicate chart tables are removed; bracket and search tables remain directly visible. Charts adapt to their visible panel width; observers are released on refresh, metric changes, and loss of access.
 
-Only aggregates reach the browser. Public tracking is cookieless, honors GPC/DNT and has no consent UI/state; authentication storage is unchanged.
+Only aggregates reach the browser. Analytics are cookieless and honor GPC/DNT; authentication storage is unchanged. Optional active-time measurement has a per-page footer opt-in held only in memory, without a banner or persistent consent state.
 
 ## Range and refresh behavior
 
@@ -30,4 +30,6 @@ Retain the Predict Playoffs header, branding, shared fonts, colors, and controls
 
 Primary UI evidence: `frontend/admin-analytics.html`, `frontend/admin-analytics.css`, `frontend/admin-analytics.js`, and shared `frontend/styles.css`. Range/security and provider constraints are corroborated by `backend/lambda/admin_analytics.py` and `backend/lambda/analytics_providers.py`. These documents do not authorize production deployment or broaden access.
 
-Source captions are concise: GoatCounter, First-party AWS, and Google Search Console with its domain. The footer links only to the privacy policy. Shared picks, leaderboard and scoring views receive fixed NFL/NBA analytics paths from this release onward. The pie legend names each sport; historical unsplit paths explicitly say sport not recorded. No new cookies, storage or raw URL fields are introduced. Active engagement collection is not enabled.
+Source captions are concise: GoatCounter, First-party AWS, and Google Search Console with its domain. The dashboard footer links only to the privacy policy. Shared picks, leaderboard and scoring views receive fixed NFL/NBA analytics paths. The pie legend names each sport; historical unsplit paths explicitly say sport not recorded. No new cookies, storage or raw URL fields are introduced.
+
+The AWS section shows total active engagement time across opted-in page visits, a daily chart option, and a directly visible page/sport table. Hours, minutes and seconds appear in totals, tables and tooltips; chart axes use compact time units. Idle time after one minute and background tabs are excluded. This is a total, not average session duration. Missing measurements stay unavailable, and the note explains opt-in coverage. The Today preset includes new measurements; completed-day ranges exclude today.

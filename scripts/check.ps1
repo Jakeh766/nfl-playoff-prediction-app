@@ -44,6 +44,7 @@ try {
       "frontend/leaderboard.js",
       "frontend/monitoring.js",
       "frontend/goatcounter.js",
+      "frontend/engagement.js",
       "frontend/admin-analytics.js",
       "frontend/picks.js",
       "frontend/scoring.js",
@@ -57,6 +58,7 @@ try {
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_token_security.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_product_analytics.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_goatcounter.cjs")
+    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_engagement.cjs")
     Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_admin_analytics.cjs")
   }
 
@@ -64,7 +66,7 @@ try {
     Write-Host "Checking backend Python..."
     Invoke-NativeCommand -FilePath $python -ArgumentList @(
       "-m", "py_compile", "backend/lambda/app.py", "backend/lambda/results_updater.py", "backend/lambda/nba_results_updater.py", "backend/lambda/results_dispatcher.py"
-      "backend/lambda/admin_analytics.py", "backend/lambda/analytics_providers.py", "backend/lambda/goatcounter_sessions.py"
+      "backend/lambda/admin_analytics.py", "backend/lambda/analytics_providers.py", "backend/lambda/goatcounter_sessions.py", "backend/lambda/engagement.py"
     )
     Invoke-NativeCommand -FilePath $python -ArgumentList @("-m", "unittest", "discover", "-s", "backend", "-p", "test_*.py")
   }

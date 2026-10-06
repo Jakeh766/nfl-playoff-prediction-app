@@ -19,6 +19,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import boto3
 import goatcounter_sessions
+import engagement
 
 
 class NotConfigured(Exception):
@@ -133,13 +134,22 @@ def custom(_config, start, end):
             bracket_totals[kind][event] += count
             bracket_daily.setdefault((day, kind), {key: 0 for key in BRACKET_EVENTS})[event] += count
     totals = {key: sum(row[key] for row in daily.values()) for key, _ in ACTIVITY}
+    engagement_note = "Total across opted-in page visits; pauses after 1 minute idle. No measurements appear until visitors opt in."
+    try:
+        active = engagement.report(start, end)
+    except Exception:
+        # A counter read failure must not hide existing product activity or leak errors.
+        active = {"value": None, "daily": {}, "rows": []}
+        engagement_note = "Active time is temporarily unavailable. Product activity remains available."
     daily_rows, cumulative = [], 0
     for day, counts in daily.items():
         total = sum(counts.values())
         cumulative += total
-        daily_rows.append({"day": day, **counts, "total": total, "cumulative": cumulative})
+        daily_rows.append({"day": day, **counts, "total": total, "cumulative": cumulative,
+                           "active_time": active["daily"].get(day)})
     columns = [("day", "Day (UTC)", "text")] + [(key, label, "number") for key, label in ACTIVITY]
     columns += [("total", "All actions", "number"), ("cumulative", "Running total", "number")]
+    columns += [("active_time", "Active engagement time", "seconds")]
     day_table = table("Daily activity", columns, [])
     day_table.update(rows=daily_rows, chart="trend", series=["total", "cumulative"])
     type_columns = [("bracketType", "Bracket type", "text")] + [(key, label, "number") for key, label in ACTIVITY if key in BRACKET_EVENTS]
@@ -150,7 +160,11 @@ def custom(_config, start, end):
                       for day in daily for kind in ("nfl", "nba", "unknown")
                       if kind != "unknown" or (day, kind) in bracket_daily]
     return {"metrics": [metric(label, totals[key]) for key, label in ACTIVITY],
-            "tables": [day_table, table("Brackets by type", type_columns, type_rows), by_day],
+            "engagement": metric("Active engagement time", active["value"], "seconds",
+                                 engagement_note),
+            "tables": [day_table, table("Brackets by type", type_columns, type_rows), by_day,
+                       table("Active time by page", [("page", "Page", "text"), ("sport", "Sport", "text"),
+                                                    ("seconds", "Active time", "seconds")], active["rows"])],
             "note": "AWS · dev only. Browser-reported successful actions, not database totals or a conversion funnel. Group joins and invite joins are separate. Created brackets are built brackets. Older bracket events without a type remain historical / unknown. Deletions and type breakdowns begin with this release. GPC/DNT suppress collection."}
 
 

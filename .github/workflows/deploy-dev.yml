@@ -49,6 +49,7 @@ jobs:
           node --check frontend/leaderboard.js
           node --check frontend/monitoring.js
           node --check frontend/goatcounter.js
+          node --check frontend/engagement.js
           node --check frontend/admin-analytics.js
           node --check frontend/picks.js
           node --check frontend/scoring.js
@@ -62,7 +63,7 @@ jobs:
         run: node --test backend/test_leaderboard.cjs
 
       - name: Test cookieless analytics and privacy
-        run: node --test backend/test_product_analytics.cjs backend/test_goatcounter.cjs
+        run: node --test backend/test_product_analytics.cjs backend/test_goatcounter.cjs backend/test_engagement.cjs
 
       - name: Test private analytics navigation and rendering
         run: node --test backend/test_admin_analytics.cjs

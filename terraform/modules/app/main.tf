@@ -10,6 +10,10 @@ locals {
       source       = "${var.frontend_dir}/goatcounter.js"
       content_type = "application/javascript; charset=utf-8"
     }
+    "engagement.js" = {
+      source       = "${var.frontend_dir}/engagement.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "privacy" = {
       source       = "${var.frontend_dir}/privacy.html"
       content_type = "text/html; charset=utf-8"

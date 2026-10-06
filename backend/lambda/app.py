@@ -953,6 +953,10 @@ def record_analytics_event(event: dict) -> None:
 
     payload = parse_body(event)
     event_name = payload.get("event")
+    if event_name == "active_time":
+        from engagement import record
+        record(event, payload)
+        return
     page = payload.get("page")
     bracket_type = payload.get("bracketType")
     if not isinstance(event_name, str) or event_name not in ANALYTICS_EVENTS:
@@ -1709,6 +1713,8 @@ def handle_request(event, context):
             return response(202, {"accepted": True})
         except ValueError as error:
             return response(400, {"message": str(error)})
+        except Exception:
+            return response(503, {"message": "Analytics is temporarily unavailable"})
 
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())

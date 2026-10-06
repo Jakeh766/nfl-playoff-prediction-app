@@ -150,7 +150,7 @@ class AdminTests(unittest.TestCase):
     def test_cache_lease_prevents_concurrent_provider_requests(self):
         request = event("custom")
         params = request["queryStringParameters"]
-        self.cache.items[f"v4:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
+        self.cache.items[f"v5:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
         with patch.dict(admin.PROVIDERS, custom=Mock()) as adapter:
             result = admin.handler(request, None)
             self.assertEqual(json.loads(result["body"])["status"], "updating")
@@ -186,6 +186,25 @@ class ProviderTests(unittest.TestCase):
         environment = patch.dict(os.environ, ENV)
         environment.start()
         self.addCleanup(environment.stop)
+        active = patch.object(providers.engagement, "report", return_value={"value": None, "daily": {}, "rows": []})
+        self.active = active.start()
+        self.addCleanup(active.stop)
+
+    def test_engagement_total_daily_and_page_breakdown_and_isolated_failure(self):
+        self.active.return_value = {"value": 125, "daily": {"2026-10-02": 125},
+                                    "rows": [{"page": "Leaderboard", "sport": "NBA", "seconds": 125}]}
+        with patch.object(providers, "cloudwatch_query", return_value=[]):
+            result = providers.custom({}, self.start, self.end)
+            self.assertEqual(len(result["metrics"]), 9)
+            self.assertEqual(result["engagement"]["value"], 125)
+            self.assertEqual(result["engagement"]["format"], "seconds")
+            self.assertEqual([row["active_time"] for row in result["tables"][0]["rows"]], [None, 125, None, None])
+            self.assertEqual(result["tables"][-1]["rows"], self.active.return_value["rows"])
+            self.active.side_effect = RuntimeError("secret must not escape")
+            result = providers.custom({}, self.start, self.end)
+            self.assertEqual(len(result["metrics"]), 9)
+            self.assertIsNone(result["engagement"]["value"])
+            self.assertNotIn("secret", json.dumps(result))
 
     def test_activity_daily_totals_types_and_historical_events(self):
         rows = [{"day": "2026-10-01 00:00:00.000", "event": "bracket_created", "bracketType": "nba", "count": "2"},

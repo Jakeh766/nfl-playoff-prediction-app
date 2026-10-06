@@ -10,7 +10,7 @@ authorization. Authentication session format and storage are unchanged.
 | Section | Source and coverage | Reports |
 |---|---|---|
 | Traffic | GoatCounter public dev pages | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
-| PredictPlayoffs activity | Dev AWS CloudWatch product events | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total |
+| PredictPlayoffs activity | Dev AWS product events and aggregate active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Opt-in active time by day, page and sport |
 | Google Search | Search Console `sc-domain:predictplayoffs.com`, including subdomains | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
 
 The default is 28 completed days. Today (UTC), 7/28/90 completed days and custom
@@ -49,8 +49,12 @@ appear as GoatCounter receives views and refreshes its hourly session export.
 
 ## Collection and interpretation
 
-There are no analytics cookies, localStorage/sessionStorage identifiers, consent
-state or consent UI. A targeted public-page migration expires legacy analytics cookies and removes only the old analytics consent/visitor/session keys. It creates no new storage. Cognito sign-in storage, preferences and drafts remain.
+There are no analytics cookies, localStorage/sessionStorage identifiers or persistent
+consent state. The former GA4/Clarity banner remains removed. The optional active-time
+control holds permission only in memory for the current page. A targeted public-page
+migration expires legacy analytics cookies and removes only the old analytics
+consent/visitor/session keys. It creates no new storage. Cognito sign-in storage,
+preferences and drafts remain.
 GPC/DNT disable GoatCounter and first-party collection, including signals enabled
 after page load. The AWS endpoint honors `Sec-GPC: 1` and `DNT: 1` headers. No
 account/email/IP/browser IDs, invite codes or picks enter product analytics logs.
@@ -65,6 +69,43 @@ type are shown as historical / unknown. New deletion/type metrics cannot be
 backfilled. One bounded CloudWatch query returns daily/event/type aggregates.
 The old AWS traffic/daily visitor collector is removed; existing TTL items expire
 under their existing settings. No new tables, schedules or IAM grants are needed.
+
+### Optional active engagement time
+
+Development public-page footers offer **Allow active-time measurement for this page**
+and **Stop active-time measurement**. Collection defaults off; opt-in expires on
+pagehide, including browser-history restoration. This conservative opt-in design
+does not assume a consent exemption. GPC/DNT prevent opt-in and discard pending
+time if enabled later. There is no banner or stored choice, and Cognito is not used.
+
+Time counts while the page is visible and focused, with a trusted click, key press,
+scroll or touch within the preceding **60 seconds**. Returning focus resumes the
+estimate. No input values or coordinates are read. A five-second timer samples time;
+intervals are sent about every 30 seconds and on blur/hidden/pagehide. Withdrawal
+drops pending time. Delivery is best effort, without retries, visitor IDs,
+credentials or referrers; missing deliveries undercount.
+
+The existing `POST /api/analytics` accepts exactly `event: active_time`, an allowlisted
+public `page`, fixed `sport`, integer `milliseconds: 1..60000`, and the permission
+marker `consent: active-time-v1`. The marker is a client assertion, not an identity
+or server-verifiable consent record. Dev-only validation and privacy headers apply
+before persistence. Public browser reports can be forged; these are approximate
+product insights, not billing or security measurements.
+
+Atomic DynamoDB increments reuse the existing report-cache table and its
+GetItem/UpdateItem permissions. Monthly `engagement:v1:YYYY-MM` items contain bounded
+day/page/sport counters, expiring 367 days after the month ends. No individual
+measurements are stored or logged. Intervals are attributed to their UTC receipt
+day. Reports need at most four small reads. The
+existing 15-minute cache applies; a counter-read failure leaves product activity
+available and marks only active time unavailable.
+
+**Active engagement time** is the selected-range total across opted-in page visits,
+not an average per visitor or GoatCounter session duration. The daily chart selector
+and **Active time by page** table show hours/minutes/seconds with hover, tap and
+keyboard readouts. Missing days are unavailable, not zero. Choose **Today (UTC)**
+for new measurements; the default completed-day range excludes today. Do not
+divide this opt-in total by GoatCounter's broader audience.
 
 GoatCounter temporarily links a random cookieless session identifier in memory to
 site + IP + User-Agent for up to eight hours. It estimates short-lived sessions,

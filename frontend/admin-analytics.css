@@ -38,11 +38,13 @@ body[data-page="admin-analytics"] { background: var(--paper); --analytics-daily:
 .analytics-provider-range { margin: 4px 0 20px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .analytics-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 24px 0 0; padding-block: 20px; border-block: 1px solid var(--line); }
 .analytics-metrics[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.analytics-metrics[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
 .analytics-metrics div { min-width: 0; }
 .analytics-metrics dt { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .analytics-metrics dd { margin: 8px 0 0; font: 600 32px/1.15 var(--body); font-variant-numeric: tabular-nums; letter-spacing: -0.025em; overflow-wrap: anywhere; }
 .analytics-metrics .analytics-metric-missing { font-size: 20px; letter-spacing: 0; line-height: 1.8; }
 .analytics-metric-note { display: block; font: 400 11px/1.5 var(--body); color: var(--muted); letter-spacing: 0; margin-top: 8px; max-width: 28ch; }
+.analytics-metrics[data-count="1"] .analytics-metric-note { max-width: 75ch; }
 .analytics-metric-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; padding-block: 20px; border-block: 1px solid var(--line); margin-top: 24px; }
 .analytics-metric-group h3 { margin: 0 0 8px; font: 600 14px/1.5 var(--body); }
 .analytics-metric-group .analytics-metrics { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; margin: 0; border: 0; }

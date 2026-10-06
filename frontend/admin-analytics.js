@@ -200,7 +200,8 @@
       for (const fraction of type === "number" && maximum < 4 ? [0, 1] : [0, 0.25, 0.5, 0.75, 1]) {
         const y = top + height * (1 - fraction);
         svg.append(svgElement("line", { x1: left, x2: left + width, y1: y, y2: y, class: "analytics-gridline" }));
-        const tick = type === "number" && maximum >= 10_000 ?
+        const unit = maximum >= 3600 ? 3600 : maximum >= 60 ? 60 : 1;
+        const tick = type === "seconds" ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(maximum * fraction / unit)} ${unit === 3600 ? "hr" : unit === 60 ? "min" : "sec"}` : type === "number" && maximum >= 10_000 ?
           new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(maximum * fraction) : format(maximum * fraction, type);
         svg.append(svgElement("text", { x: left - 12, y: y + 4, "text-anchor": "end", class: "analytics-axis" }, tick));
       }
@@ -434,6 +435,7 @@
       guide.append(element("summary", "Definitions and coverage"), element("p", data.note, "analytics-provider-note"));
       section.append(guide);
     }
+    if (data.engagement) section.append(metricList([data.engagement]));
     const breakdowns = element("div", undefined, "analytics-breakdowns");
     const searchBreakdowns = [];
     for (const report of data.tables || []) {
