@@ -1,5 +1,6 @@
 """NBA parity and cross-sport isolation regressions."""
 import copy
+from datetime import datetime, timezone
 import importlib.util
 import json
 import sys
@@ -219,6 +220,40 @@ class NbaResultsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             updater.parse_games({})
         self.assertEqual(updater.parse_games({"events": [{"season": {"year": 2026, "type": 3}}]}), {})
+
+
+class NbaIngestionTests(unittest.TestCase):
+    def ingest(self, today, cursor):
+        table = Mock()
+        table.get_item.return_value = {"Item": {"syncedThrough": cursor}}
+        resource = Mock()
+        resource.Table.return_value = table
+        with patch.object(updater, "datetime") as clock, \
+                patch.object(updater.boto3, "resource", return_value=resource), \
+                patch.dict("os.environ", {"RESULTS_TABLE": "test-results"}), \
+                patch.object(updater, "fetch_json", side_effect=lambda url:
+                    standings() if url == updater.STANDINGS_URL else {"events": []}) as fetch:
+            clock.now.return_value = datetime.fromisoformat(today).replace(tzinfo=timezone.utc)
+            result = updater.handler({}, None)
+        return result, table, fetch
+
+    def test_completed_season_stops_requests_and_writes_after_correction_window(self):
+        result, table, fetch = self.ingest(f"{updater.SEASON}-07-03", f"{updater.SEASON}-06-30")
+        self.assertTrue(result["skipped"])
+        fetch.assert_not_called()
+        table.put_item.assert_not_called()
+
+    def test_completed_season_still_refreshes_last_three_days_for_corrections(self):
+        result, table, fetch = self.ingest(f"{updater.SEASON}-07-02", f"{updater.SEASON}-06-30")
+        self.assertEqual(result["syncedThrough"], f"{updater.SEASON}-06-30")
+        self.assertEqual(fetch.call_count, 4)  # Three scoreboards and standings.
+        table.put_item.assert_called_once()
+
+    def test_late_importer_can_catch_up_after_season_end_in_bounded_batches(self):
+        result, table, fetch = self.ingest(f"{updater.SEASON}-08-01", f"{updater.SEASON}-06-01")
+        self.assertEqual(result["syncedThrough"], f"{updater.SEASON}-06-12")
+        self.assertEqual(fetch.call_count, 15)  # Fourteen scoreboards and standings.
+        table.put_item.assert_called_once()
 
 
 if __name__ == "__main__":

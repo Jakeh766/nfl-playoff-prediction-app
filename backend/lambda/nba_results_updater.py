@@ -158,8 +158,13 @@ def handler(event, context):
     current = table.get_item(Key={"season": RESULTS_KEY}, ConsistentRead=True).get("Item") or {}
     # Bound requests and resume after downtime; re-read three days for corrections.
     cursor = date.fromisoformat(current.get("syncedThrough", start.isoformat()))
+    season_end = date(SEASON, 6, 30)
+    # Allow the usual correction overlap after the last day, then stop fetching
+    # a finished season. A delayed importer must still be allowed to catch up.
+    if cursor >= season_end and today > season_end + timedelta(days=2):
+        return {"sport": "nba", "skipped": True, "reason": "Season ingestion complete"}
     first = max(start, cursor - timedelta(days=2))
-    last = min(today, date(SEASON, 6, 30), first + timedelta(days=13))
+    last = min(today, season_end, first + timedelta(days=13))
     if first > last:
         return {"sport": "nba", "skipped": True, "reason": "Season ingestion complete"}
     dates = [first + timedelta(days=i) for i in range((last-first).days + 1)]

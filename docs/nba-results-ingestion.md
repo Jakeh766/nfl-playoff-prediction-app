@@ -17,7 +17,10 @@ sports are rejected. Shared groups expose separate standings for each sport.
 The updater starts April 1 of the season-ending year. ESPN daily scoreboards
 are read in batches of at most 14 days, with four concurrent requests and a
 three-day overlap. `syncedThrough` allows subsequent invocations to catch up
-after downtime. Scheduled games can establish published first-round pairings;
+after downtime. Once June 30 is synced, the importer allows corrections through
+July 2 and then stops fetching that season. An importer still catching up can
+continue after that date until it has synced June 30.
+Scheduled games can establish published first-round pairings;
 only completed games with a consistent winner and score count toward a series.
 Four wins are required to award a series winner. The importer explicitly maps
 ESPN `RD16`, `QTR`, `SEMI`, and `FINAL` rounds and excludes Play-In games.
