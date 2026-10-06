@@ -5,12 +5,13 @@ The unindexed static shell contains no reports, credentials or public tracking.
 Every report requires API Gateway-verified Cognito claims and server-side admin
 authorization. Authentication session format and storage are unchanged.
 
-## Three sections
+## Four sections
 
 | Section | Source and coverage | Reports |
 |---|---|---|
 | Traffic | GoatCounter public dev pages | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
 | PredictPlayoffs activity | Dev AWS product events and aggregate active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Active time by day, page and sport |
+| Seasons | Retained dev DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season |
 | Google Search | Search Console `sc-domain:predictplayoffs.com`, including subdomains | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
 
 The default is 28 completed days. Today (UTC), 7/28/90 completed days and custom
@@ -19,10 +20,30 @@ year. Traffic/activity dates are UTC; Search Console uses Pacific dates and fina
 web-search data, which can lag several days. Search Console measures the connected
 production domain, not the dev CloudFront hostname. This does not deploy production.
 
-Use the Traffic, Activity, and Google Search tabs to switch sections without
+Use the Traffic, Activity, Seasons, and Google Search tabs to switch sections without
 reloading reports. Activity totals are grouped by accounts/access, brackets, and
 groups. The Google Search breakdown selector switches among query, page, country,
 and device tables.
+
+The **Seasons** tab covers all retained seasons, independently of the date filter.
+NFL seasons use the regular-season start year; NBA seasons display both years
+(for example, 2026–27). A competing group has at least one member with a saved
+bracket for that sport and season. People competing counts unique members with
+brackets, including commissioners; group entries counts each person once per
+group. Average and largest group sizes use these competitors, excluding members
+without brackets. Empty groups do not compete. Completed seasons use archived
+competition entries rather than today's memberships. Both-sport groups count
+separately for NFL and NBA. Missing historical bracket totals show unavailable.
+
+Saved bracket totals count retained records, excluding unsaved builds and deleted
+brackets; they cannot reconstruct every bracket ever created. Legacy NFL records
+without season metadata belong to the configured NFL season. New saves record
+their sport and season explicitly. Historical competitions exist only where
+archives were retained. The report uses two paginated, projected table scans with
+a shared ten-second time budget and a 100-page limit per table; incomplete scans fail instead of returning partial
+totals. No additional IAM permissions or infrastructure are needed. Its private
+15-minute cache is shared across date selections. No names, account IDs, group IDs,
+passwords, invite codes or picks are included in the report.
 
 Metric selectors show the full daily range; cumulative graph views are not shown.
 Hover or tap a graph for its nearest day's exact value. Focus a graph

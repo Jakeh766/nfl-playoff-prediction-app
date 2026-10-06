@@ -1058,7 +1058,9 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
     saved_at = int(time.time() * 1000)
     return {
         "profileKey": prediction_key(user_id),
-        **({"ownerId": user_id, "sport": "nba", "season": NBA["season"]} if SPORT.get() == "nba" else {}),
+        "ownerId": user_id,
+        "sport": SPORT.get(),
+        "season": NBA["season"] if SPORT.get() == "nba" else int(PREDICTION_LOCK_AT[:4]),
         "divisionWinners": {} if SPORT.get() == "nba" else division_winners,
         "seeds": seeds,
         "picks": picks,

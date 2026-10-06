@@ -25,10 +25,10 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 async function boot(options = {}) {
   const elements = new Map(["analytics-main", "analytics-reports", "analytics-status", "analytics-access",
     "analytics-range", "analytics-start", "analytics-end", "analytics-preset", "analytics-apply", "admin-sign-out",
-    "analytics-tab-goatcounter", "analytics-tab-custom", "analytics-tab-search-console"]
+    "analytics-tab-goatcounter", "analytics-tab-custom", "analytics-tab-seasons", "analytics-tab-search-console"]
     .map(id => [id, new Element()]));
   elements.get("analytics-main").hidden = true;
-  for (const provider of ["goatcounter", "custom", "search-console"]) {
+  for (const provider of ["goatcounter", "custom", "seasons", "search-console"]) {
     const tab = elements.get(`analytics-tab-${provider}`);
     tab.dataset.provider = provider;
     const state = new Element("span"); state.className = "analytics-tab-state"; tab.append(state);
@@ -65,7 +65,7 @@ async function boot(options = {}) {
       const status = options.forbidden ? 403 : options.invalidRange && provider === "analytics" ? 400 : options.failedProvider === provider ? 503 : 200;
       return { status, ok: status === 200, json: async () => provider === "analytics" ?
         options.invalidRange ? { message: "Choose up to 93 days within the past year." } :
-        { providers: ["custom", "goatcounter", "search-console"], environment: "dev" } :
+        { providers: ["custom", "goatcounter", "seasons", "search-console"], environment: "dev" } :
         { provider, status: options.notConfigured === provider ? "not_configured" : "ok", metrics: [
           { label: provider === "custom" ? "<img onerror=secret>" : "Visits", value: 100, format: "number" },
           { label: "CTR", value: .025, format: "percent" }], tables: [{ title: "Top pages",
@@ -106,14 +106,14 @@ test("signed-out, non-admin, lookalike groups and production redirect without an
 
 test("admins verify access server-side before revealing reports and send existing Cognito bearer token", async () => {
   const app = await boot();
-  assert.equal(app.requests.length, 4);
+  assert.equal(app.requests.length, 5);
   assert.match(app.requests[0].url, /^\/api\/admin\/analytics\?start=\d{4}-\d{2}-\d{2}&end=/);
   assert.ok(app.requests.every(({ url, request }) => url.startsWith("/api/admin/analytics") &&
     request.headers.Authorization.startsWith("Bearer ") && request.cache === "no-store" &&
     request.credentials === "omit" && request.referrerPolicy === "no-referrer"));
   assert.equal(app.elements.get("analytics-main").hidden, false);
-  assert.match(app.elements.get("analytics-status").textContent, /3 of 3/);
-  assert.equal(app.elements.get("analytics-reports").children.length, 3);
+  assert.match(app.elements.get("analytics-status").textContent, /4 of 4/);
+  assert.equal(app.elements.get("analytics-reports").children.length, 4);
 });
 
 test("expired sessions refresh through the existing client and persist the compatible session format", async () => {
@@ -148,13 +148,13 @@ test("browser history restoration rechecks authorization and clears stale privat
   assert.equal(app.elements.get("analytics-reports").children.length, 0);
   await settle();
   assert.deepEqual(app.redirects, ["/"]);
-  assert.equal(app.requests.length, 4);
+  assert.equal(app.requests.length, 5);
 });
 
 test("rejected date updates remove stale reports and show an actionable error", async () => {
   const options = {};
   const app = await boot(options);
-  assert.equal(app.elements.get("analytics-reports").children.length, 3);
+  assert.equal(app.elements.get("analytics-reports").children.length, 4);
   options.invalidRange = true;
   await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
   assert.equal(app.elements.get("analytics-reports").children.length, 0);
@@ -166,7 +166,7 @@ test("rejected date updates remove stale reports and show an actionable error", 
 test("one failing provider leaves other reports readable and setup states visible", async () => {
   const app = await boot({ failedProvider: "goatcounter", notConfigured: "search-console" });
   assert.equal(app.redirects.length, 0);
-  assert.match(app.elements.get("analytics-status").textContent, /1 of 3/);
+  assert.match(app.elements.get("analytics-status").textContent, /2 of 4/);
   const reports = app.elements.get("analytics-reports").children;
   assert.match(reports.find(section => section.dataset.provider === "goatcounter").text, /Unavailable/);
   assert.match(reports.find(section => section.dataset.provider === "search-console").text, /Set up this provider/);
@@ -190,7 +190,7 @@ test("range selection updates reports without calling any public analytics endpo
   const finish = app.elements.get("analytics-end").value;
   assert.equal((new Date(finish) - new Date(begin)) / 86400000, 6);
   await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
-  assert.equal(app.requests.length, 8);
+  assert.equal(app.requests.length, 10);
   assert.ok(app.requests.at(-1).url.includes(`start=${begin}&end=${finish}`));
   assert.ok(app.requests.every(request => !request.url.includes("/api/analytics?")));
 });
@@ -250,14 +250,35 @@ test("empty provider tables show no invented chart or sample traffic", async () 
   assert.match(section.text, /No data reported for this range/);
 });
 
-test("exactly three sections appear in task order with explicit source coverage", async () => {
+test("four sections appear in task order with explicit source coverage", async () => {
   const app = await boot();
   const reports = app.elements.get("analytics-reports").children;
-  assert.deepEqual(reports.map(node => node.dataset.provider), ["goatcounter", "custom", "search-console"]);
+  assert.deepEqual(reports.map(node => node.dataset.provider), ["goatcounter", "custom", "seasons", "search-console"]);
   assert.match(reports[0].text, /Traffic.*Dev traffic.*GoatCounter/);
   assert.match(reports[1].text, /PredictPlayoffs activity.*First-party AWS/);
-  assert.match(reports[2].text, /Google Search.*Production domain/);
+  assert.match(reports[2].text, /Season activity.*Saved brackets and group competition records/);
+  assert.match(reports[3].text, /Google Search.*Production domain/);
   assert.equal(nodes(reports[0]).find(node => node.className === "analytics-provider-coverage").textContent, "GoatCounter");
+});
+
+test("season totals stay visible as a table with explicit participant definitions and missing history", async () => {
+  const app = await boot({ reports: { seasons: { metrics: [],
+    range: { window: "All retained seasons", timezone: "Season totals" },
+    tables: [{ title: "Activity by season", columns: [
+      { key: "season", label: "Season", format: "text" },
+      { key: "brackets", label: "Saved brackets", format: "number" },
+      { key: "average", label: "Avg. people / group", format: "decimal" }],
+      rows: [{ season: "NFL 2025", brackets: null, average: 2.5 }] }] } } });
+  const tab = app.elements.get("analytics-tab-seasons");
+  app.elements.get("analytics-tab-custom").listeners.keydown({ key: "ArrowRight", preventDefault() {} });
+  assert.equal(tab.focused, true);
+  assert.equal(tab["aria-selected"], "true");
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "seasons");
+  assert.equal(section.hidden, false);
+  assert.match(section.text, /All retained seasons.*Whole-season totals.*Group entries/);
+  assert.deepEqual(nodes(section).filter(node => node.tag === "td").map(node => node.textContent), ["NFL 2025", "Unavailable", "2.5"]);
+  assert.equal(nodes(section).filter(node => node.tag === "dl").length, 0);
+  assert.equal(app.requests.length, 5);
 });
 test("daily charts keep all 93 days, gaps and exact daily values without cumulative controls", async () => {
   const rows = Array.from({ length: 93 }, (_, i) => ({ day: `day-${i}`, actions: i === 2 ? null : 1 }));
@@ -356,7 +377,7 @@ test("active time has a readable total, daily hover values, compact axes and a v
   assert.match(tooltip.text, /1 hr 16 min 44 sec/);
   plot.listeners.keydown({ key: "Home", preventDefault() {} });
   assert.match(tooltip.text, /Unavailable.*No data/);
-  assert.equal(app.requests.length, 4);
+  assert.equal(app.requests.length, 5);
 });
 
 test("section tabs support clicks and arrow navigation, preserve the chosen section on refresh, and do not fetch on navigation", async () => {
@@ -368,14 +389,14 @@ test("section tabs support clicks and arrow navigation, preserve the chosen sect
   assert.equal(traffic["aria-selected"], "false");
   assert.equal(custom.tabIndex, 0);
   assert.equal(traffic.tabIndex, -1);
-  assert.deepEqual(app.elements.get("analytics-reports").children.map(node => node.hidden), [true, false, true]);
-  assert.equal(app.requests.length, 4);
-  custom.listeners.keydown({ key: "ArrowRight", preventDefault() {} });
+  assert.deepEqual(app.elements.get("analytics-reports").children.map(node => node.hidden), [true, false, true, true]);
+  assert.equal(app.requests.length, 5);
+  custom.listeners.keydown({ key: "End", preventDefault() {} });
   const search = app.elements.get("analytics-tab-search-console");
   assert.equal(search.focused, true);
   assert.equal(search["aria-selected"], "true");
   await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
-  assert.deepEqual(app.elements.get("analytics-reports").children.map(node => node.hidden), [true, true, false]);
+  assert.deepEqual(app.elements.get("analytics-reports").children.map(node => node.hidden), [true, true, true, false]);
   assert.equal(search["aria-selected"], "true");
   search.listeners.keydown({ key: "Home", preventDefault() {} });
   assert.equal(traffic["aria-selected"], "true");
@@ -465,5 +486,5 @@ test("search breakdown selector shows exactly one table and keeps all returned d
   assert.deepEqual(breakdowns.map(node => node.hidden), [true, true, true, false]);
   assert.match(breakdowns[3].text, /<device>.*7/);
   assert.equal(nodes(section).filter(node => node.tag === "tbody").length, 4);
-  assert.equal(app.requests.length, 4);
+  assert.equal(app.requests.length, 5);
 });

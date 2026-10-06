@@ -1,9 +1,10 @@
 (function initializeAdminAnalytics() {
   const sessionKey = "road-to-bowl.auth.session";
-  const names = { goatcounter: "Traffic", custom: "PredictPlayoffs activity", "search-console": "Google Search" };
+  const names = { goatcounter: "Traffic", custom: "PredictPlayoffs activity", "search-console": "Google Search", seasons: "Season activity" };
   const coverage = {
     goatcounter: ["Dev traffic", "GoatCounter"],
     custom: ["Dev activity", "First-party AWS"],
+    seasons: ["Dev seasons", "Saved brackets and group competition records"],
     "search-console": ["Production domain", "Google Search Console · predictplayoffs.com"],
   };
   const main = document.getElementById("analytics-main");
@@ -15,7 +16,7 @@
   const end = document.getElementById("analytics-end");
   const preset = document.getElementById("analytics-preset");
   const apply = document.getElementById("analytics-apply");
-  const order = ["goatcounter", "custom", "search-console"];
+  const order = ["goatcounter", "custom", "seasons", "search-console"];
   const tabs = order.map(provider => document.getElementById(`analytics-tab-${provider}`));
   const chartDisposers = new Set();
   const chartCleanup = new WeakMap();
@@ -429,7 +430,10 @@
         groups.append(group);
       }
       section.append(groups);
-    } else section.append(metricList(data.metrics || []));
+    } else if (data.metrics?.length) section.append(metricList(data.metrics));
+    if (data.provider === "seasons") {
+      section.append(element("p", "Whole-season totals. People are members with saved brackets; a person in multiple groups counts once under People competing and once per group under Group entries. Group sizes count these competitors. Historical totals use archived competitions; deleted or unsaved brackets are not included.", "analytics-provider-coverage"));
+    }
     if (data.note) {
       const guide = element("details", undefined, "analytics-explainer");
       guide.append(element("summary", "Definitions and coverage"), element("p", data.note, "analytics-provider-note"));
@@ -471,7 +475,7 @@
       }
       if (!report.rows.length) {
         const row = element("tr");
-        const cell = element("td", "No data reported for this range.");
+        const cell = element("td", report.emptyMessage || "No data reported for this range.");
         cell.colSpan = report.columns.length;
         row.append(cell);
         body.append(row);
