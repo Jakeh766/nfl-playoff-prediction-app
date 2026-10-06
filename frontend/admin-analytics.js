@@ -15,12 +15,46 @@
   const end = document.getElementById("analytics-end");
   const preset = document.getElementById("analytics-preset");
   const apply = document.getElementById("analytics-apply");
+  const order = ["goatcounter", "custom", "search-console"];
+  const tabs = order.map(provider => document.getElementById(`analytics-tab-${provider}`));
+  const chartDisposers = new Set();
+  const chartCleanup = new WeakMap();
+  const chartChoices = new Map();
+  let selectedProvider = "goatcounter";
+  let chartSequence = 0;
   let denied = false;
+
+  function clearReports() {
+    for (const dispose of chartDisposers) dispose();
+    chartDisposers.clear();
+    reports.replaceChildren();
+  }
+  function selectProvider(provider, focus = false) {
+    selectedProvider = provider;
+    for (const tab of tabs) {
+      const selected = tab.dataset.provider === provider;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && focus) tab.focus();
+    }
+    for (const section of reports.children) section.hidden = section.dataset.provider !== provider;
+  }
+  for (const [index, tab] of tabs.entries()) {
+    tab.addEventListener("click", () => selectProvider(order[index]));
+    tab.addEventListener("keydown", event => {
+      const next = { ArrowRight: (index + 1) % order.length, ArrowLeft: (index + order.length - 1) % order.length,
+        Home: 0, End: order.length - 1 }[event.key];
+      if (next === undefined) return;
+      event.preventDefault();
+      selectProvider(order[next], true);
+    });
+  }
 
   function redirect() {
     denied = true;
+    chartChoices.clear();
     main.hidden = true;
-    reports.replaceChildren();
+    clearReports();
     window.location.replace("/");
   }
   function claims(token) {
@@ -120,43 +154,134 @@
     if (!valid.length) return null;
     const figure = element("figure", undefined, "analytics-chart analytics-trend");
     figure.append(element("figcaption", title));
-    const maximum = Math.max(1, ...valid.map(row => Number(row[key])));
-    const svg = svgElement("svg", { viewBox: "0 0 540 170", role: "img", "aria-label": `${title}. Exact values are in the data table.` });
-    const left = 58, top = 12, width = 465, height = 120;
-    for (const fraction of [0, 0.5, 1]) {
-      const y = top + height * (1 - fraction);
-      svg.append(svgElement("line", { x1: left, x2: left + width, y1: y, y2: y, class: "analytics-gridline" }));
-      svg.append(svgElement("text", { x: left - 8, y: y + 4, "text-anchor": "end", class: "analytics-axis" }, format(maximum * fraction, type)));
-    }
+    const maximum = Math.max(...valid.map(row => Number(row[key]))) || 1;
     const dateKey = Object.keys(rows[0])[0];
-    for (const index of [...new Set([0, rows.length - 1])]) {
-      svg.append(svgElement("text", { x: left + (index ? width : 0), y: 158,
-        "text-anchor": index ? "end" : "start", class: "analytics-axis" }, rows[index][dateKey]));
+    const plot = element("div", undefined, "analytics-plot");
+    plot.tabIndex = 0;
+    plot.setAttribute("role", "group");
+    plot.setAttribute("aria-label", `${title} interactive chart`);
+    const hint = element("p", "Hover or tap for values. Keyboard: use arrow keys, Home or End; Escape closes the tooltip.", "analytics-chart-hint");
+    hint.id = `analytics-chart-hint-${++chartSequence}`;
+    plot.setAttribute("aria-describedby", hint.id);
+    const svg = svgElement("svg", { "aria-hidden": "true", preserveAspectRatio: "none" });
+    const tooltip = element("div", undefined, "analytics-tooltip");
+    tooltip.hidden = true;
+    tooltip.setAttribute("role", "tooltip");
+    const date = element("span", undefined, "analytics-tooltip-date");
+    const value = element("strong");
+    const metric = element("span", title, "analytics-tooltip-metric");
+    tooltip.append(date, value, metric);
+    const announcement = element("span", undefined, "analytics-sr-only");
+    announcement.setAttribute("aria-live", "polite");
+    announcement.setAttribute("aria-atomic", "true");
+    plot.append(svg, tooltip, announcement);
+    figure.append(plot, hint);
+    let viewWidth = 540, width = 462, index = rows.findLastIndex(row => numeric(row[key]));
+    const left = 62, top = 24, height = 168;
+    let crosshair, marker;
+    let focused = false, pinned = false;
+    const xFor = i => left + (rows.length > 1 ? i / (rows.length - 1) : 0.5) * width;
+    const yFor = row => top + height * (1 - Number(row[key]) / maximum);
+    function dayLabel(day, full = false) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+      return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", ...(full ? { year: "numeric" } : {}),
+        timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
     }
-    let segment = [];
-    function flush() {
-      if (!segment.length) return;
-      svg.append(svgElement("polyline", { points: segment.join(" "), class: cumulative ? "analytics-line analytics-line-total" : "analytics-line" }));
-      segment = [];
+    function hide() {
+      tooltip.hidden = true;
+      crosshair?.setAttribute("visibility", "hidden");
+      marker?.setAttribute("visibility", "hidden");
     }
-    rows.forEach((row, index) => {
-      if (!numeric(row[key])) { flush(); return; }
-      const x = left + (rows.length > 1 ? index / (rows.length - 1) : 0.5) * width;
-      const y = top + height * (1 - Number(row[key]) / maximum);
-      segment.push(`${x},${y}`);
-      const point = svgElement("circle", { cx: x, cy: y, r: 2.5, class: cumulative ? "analytics-point analytics-point-total" : "analytics-point" });
-      point.append(svgElement("title", {}, `${row[dateKey]}: ${format(row[key], type)}`));
-      svg.append(point);
+    function show(next, announce = false) {
+      index = Math.max(0, Math.min(rows.length - 1, next));
+      const row = rows[index], measured = numeric(row[key]);
+      date.textContent = dayLabel(row[dateKey], true);
+      value.textContent = measured ? format(row[key], type) : "Unavailable";
+      metric.textContent = measured ? title : "No data for this day";
+      tooltip.hidden = false;
+      const x = xFor(index);
+      crosshair.setAttribute("x1", x); crosshair.setAttribute("x2", x);
+      crosshair.setAttribute("visibility", "visible");
+      marker.setAttribute("visibility", measured ? "visible" : "hidden");
+      if (measured) { marker.setAttribute("cx", x); marker.setAttribute("cy", yFor(row)); }
+      // Keep the readout inside the chart at both edges, including narrow screens.
+      const tooltipWidth = tooltip.getBoundingClientRect().width || 180;
+      tooltip.style.left = `${Math.max(4, Math.min(viewWidth - tooltipWidth - 4, x - tooltipWidth / 2))}px`;
+      if (announce) announcement.textContent = `${row[dateKey]}. ${title}: ${value.textContent}.`;
+    }
+    function draw() {
+      const measuredWidth = plot.getBoundingClientRect().width;
+      if (measuredWidth > 0) viewWidth = Math.max(240, measuredWidth);
+      width = viewWidth - left - 16;
+      svg.setAttribute("viewBox", `0 0 ${viewWidth} 244`);
+      svg.replaceChildren();
+      for (const fraction of type === "number" && maximum < 4 ? [0, 1] : [0, 0.25, 0.5, 0.75, 1]) {
+        const y = top + height * (1 - fraction);
+        svg.append(svgElement("line", { x1: left, x2: left + width, y1: y, y2: y, class: "analytics-gridline" }));
+        const tick = type === "number" && maximum >= 10_000 ?
+          new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(maximum * fraction) : format(maximum * fraction, type);
+        svg.append(svgElement("text", { x: left - 12, y: y + 4, "text-anchor": "end", class: "analytics-axis" }, tick));
+      }
+      for (const i of [...new Set([0, ...(rows.length > 14 && viewWidth > 500 ? [Math.floor(rows.length / 2)] : []), rows.length - 1])]) {
+        svg.append(svgElement("text", { x: xFor(i), y: 224, "text-anchor": i === 0 ? "start" : i === rows.length - 1 ? "end" : "middle",
+          class: "analytics-axis" }, dayLabel(rows[i][dateKey])));
+      }
+      let segment = [];
+      function flush() {
+        if (!segment.length) return;
+        if (segment.length > 1) svg.append(svgElement("polygon", { points: `${segment[0].split(",")[0]},${top + height} ${segment.join(" ")} ${segment.at(-1).split(",")[0]},${top + height}`,
+          class: cumulative ? "analytics-area analytics-area-total" : "analytics-area" }));
+        svg.append(svgElement("polyline", { points: segment.join(" "), class: cumulative ? "analytics-line analytics-line-total" : "analytics-line" }));
+        segment = [];
+      }
+      rows.forEach((row, i) => {
+        if (!numeric(row[key])) { flush(); return; }
+        segment.push(`${xFor(i)},${yFor(row)}`);
+      });
+      flush();
+      rows.forEach((row, i) => {
+        if (numeric(row[key])) svg.append(svgElement("circle", { cx: xFor(i), cy: yFor(row), r: rows.length > 45 ? 2 : 3,
+          class: cumulative ? "analytics-point analytics-point-total" : "analytics-point" }));
+      });
+      crosshair = svgElement("line", { y1: top, y2: top + height, class: "analytics-crosshair", visibility: "hidden" });
+      marker = svgElement("circle", { r: 5, class: cumulative ? "analytics-selected analytics-selected-total" : "analytics-selected", visibility: "hidden" });
+      svg.append(crosshair, marker);
+      if (!tooltip.hidden) show(index);
+    }
+    function pointAt(event) {
+      const bounds = svg.getBoundingClientRect();
+      if (!bounds.width) return;
+      const x = (event.clientX - bounds.left) * viewWidth / bounds.width;
+      if (x < left || x > left + width) { if (!focused && !pinned) hide(); return; }
+      show(rows.length > 1 ? Math.round((x - left) / width * (rows.length - 1)) : 0);
+    }
+    plot.addEventListener("pointermove", pointAt);
+    plot.addEventListener("pointerdown", event => { pinned = event.pointerType !== "mouse"; pointAt(event); });
+    plot.addEventListener("pointerleave", () => { if (!focused && !pinned) hide(); });
+    plot.addEventListener("focus", () => { focused = true; show(index, true); });
+    plot.addEventListener("blur", () => { focused = pinned = false; hide(); });
+    plot.addEventListener("keydown", event => {
+      if (event.key === "Escape") { pinned = false; hide(); return; }
+      const next = { ArrowLeft: index - 1, ArrowRight: index + 1, Home: 0, End: rows.length - 1 }[event.key];
+      if (next === undefined) return;
+      event.preventDefault(); show(next, true);
     });
-    flush();
-    figure.append(svg);
+    draw();
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(draw);
+      observer.observe(plot);
+      const dispose = () => { observer.disconnect(); chartDisposers.delete(dispose); };
+      chartDisposers.add(dispose);
+      chartCleanup.set(figure, dispose);
+    }
     return figure;
   }
   function dailyCharts(report, provider) {
     const group = element("div", undefined, "analytics-daily");
     const options = report.columns.filter(column => column.format !== "text" && column.key !== "cumulative");
     if (!report.rows.length || !options.length) return group;
-    const label = element("label", "Daily metric", "analytics-chart-choice");
+    const controls = element("div", undefined, "analytics-chart-controls");
+    const label = element("label", "Metric", "analytics-chart-choice");
     const select = element("select");
     select.setAttribute("aria-label", `Daily metric for ${names[provider]}`);
     for (const column of options) {
@@ -164,30 +289,48 @@
       option.value = column.key;
       select.append(option);
     }
-    select.value = report.series?.[0] || options[0].key;
+    const choiceKey = `${provider}:${report.title}`;
+    const choice = chartChoices.get(choiceKey);
+    select.value = options.some(column => column.key === choice?.metric) ? choice.metric : report.series?.[0] || options[0].key;
     label.append(select);
+    const viewLabel = element("label", "View", "analytics-chart-choice");
+    const view = element("select");
+    view.setAttribute("aria-label", `Chart view for ${names[provider]}`);
+    for (const [key, text] of [["daily", "Daily"], ["cumulative", "Cumulative"]]) {
+      const option = element("option", text); option.value = key; view.append(option);
+    }
+    view.value = choice?.view || "daily";
+    viewLabel.append(view);
+    controls.append(label, viewLabel);
     const plots = element("div", undefined, "analytics-trends");
-    const note = element("p", "Full selected range; gaps mean unavailable. Running totals start at the selected start date. Today and initial collection days can be partial.", "analytics-chart-note");
+    const note = element("p", "Gaps mean unavailable. Cumulative counts start at the selected start date. Recent days may be partial.", "analytics-chart-note");
+    let currentChart;
     function draw() {
+      if (currentChart) chartCleanup.get(currentChart)?.();
       plots.replaceChildren();
       const column = options.find(item => item.key === select.value) || options[0];
-      const chart = trendChart(`Daily ${column.label.toLowerCase()}`, report.rows, column.key, column.format);
-      if (chart) plots.append(chart);
       // Unique sessions and rates are not additive. Never accumulate them.
-      if (column.format === "number" && column.key !== "sessions") {
+      const additive = column.format === "number" && column.key !== "sessions";
+      viewLabel.hidden = !additive;
+      if (!additive) view.value = "daily";
+      chartChoices.set(choiceKey, { metric: column.key, view: view.value });
+      let rows = report.rows, key = column.key;
+      const cumulative = view.value === "cumulative" && additive;
+      if (cumulative) {
         let sum = 0;
-        const rows = report.rows.map(row => {
+        rows = report.rows.map(row => {
           if (!numeric(row[column.key])) return { ...row, cumulative: null };
           sum += Number(row[column.key]);
           return { ...row, cumulative: sum };
         });
-        const running = trendChart(`Running ${column.label.toLowerCase()}`, rows, "cumulative", "number", true);
-        if (running) plots.append(running);
+        key = "cumulative";
       }
-      if (!chart) plots.append(element("p", "No measured days for this metric in the selected range.", "analytics-empty"));
+      currentChart = trendChart(`${cumulative ? "Cumulative" : "Daily"} ${column.label.toLowerCase()}`, rows, key, column.format, cumulative);
+      plots.append(currentChart || element("p", "No measured days for this metric in the selected range.", "analytics-empty"));
     }
     select.addEventListener("change", draw);
-    group.append(label, plots, note);
+    view.addEventListener("change", draw);
+    group.append(controls, plots, note);
     draw();
     return group;
   }
@@ -211,6 +354,10 @@
       unavailable: "Unavailable", updating: "Refreshing" };
     const state = element("span", states[data.status] || "Unavailable", "analytics-provider-state");
     state.dataset.state = data.status;
+    const tab = tabs[order.indexOf(data.provider)];
+    const tabState = tab.querySelector(".analytics-tab-state");
+    tabState.textContent = data.status === "ok" ? "Ready" : states[data.status] || "Unavailable";
+    tab.dataset.state = data.status;
     heading.append(state);
     section.append(heading);
     section.append(element("p", coverage[data.provider][1], "analytics-provider-coverage"));
@@ -229,21 +376,37 @@
       }
       return;
     }
-    const metrics = element("dl", undefined, "analytics-metrics");
-    for (const metric of data.metrics || []) {
-      const item = element("div");
-      const value = element("dd", format(metric.value, metric.format));
-      if (metric.note) value.append(element("span", metric.note, "analytics-metric-note"));
-      item.append(element("dt", metric.label), value);
-      metrics.append(item);
+    function metricList(items) {
+      const list = element("dl", undefined, "analytics-metrics");
+      list.dataset.count = String(items.length);
+      for (const metric of items) {
+        const item = element("div");
+        const value = element("dd", format(metric.value, metric.format));
+        if (metric.value === null || metric.value === undefined) value.className = "analytics-metric-missing";
+        if (metric.note) value.append(element("span", metric.note, "analytics-metric-note"));
+        item.append(element("dt", metric.label), value);
+        list.append(item);
+      }
+      return list;
     }
-    section.append(metrics);
+    if (data.provider === "custom" && data.metrics?.length === 9) {
+      const groups = element("div", undefined, "analytics-metric-groups");
+      for (const [heading, labels] of [["Accounts & access", ["Sign-ins", "Accounts created", "Accounts deleted"]],
+        ["Brackets", ["Brackets created", "Brackets completed", "Brackets saved"]],
+        ["Groups", ["Groups created", "Group joins", "Invite joins"]]]) {
+        const group = element("div", undefined, "analytics-metric-group");
+        group.append(element("h3", heading), metricList(data.metrics.filter(metric => labels.includes(metric.label))));
+        groups.append(group);
+      }
+      section.append(groups);
+    } else section.append(metricList(data.metrics || []));
     if (data.note) {
       const guide = element("details", undefined, "analytics-explainer");
       guide.append(element("summary", "Definitions and coverage"), element("p", data.note, "analytics-provider-note"));
       section.append(guide);
     }
     const breakdowns = element("div", undefined, "analytics-breakdowns");
+    const searchBreakdowns = [];
     for (const report of data.tables || []) {
       const breakdown = element("div", undefined, "analytics-breakdown");
       const chart = report.chart === "trend" ? dailyCharts(report, data.provider) :
@@ -252,6 +415,10 @@
       const details = element("details", undefined, "analytics-data-details");
       details.append(element("summary", `View data · ${report.title}`));
       if (report.title === "Brackets by type") details.open = true;
+      if (data.provider === "search-console" && report.chart !== "trend") {
+        details.open = true;
+        searchBreakdowns.push({ report, breakdown });
+      }
       const wrap = element("div", undefined, "analytics-table-wrap");
       wrap.setAttribute("tabindex", "0");
       wrap.setAttribute("role", "region");
@@ -286,6 +453,26 @@
       breakdown.append(details);
       breakdowns.append(breakdown);
     }
+    if (searchBreakdowns.length) {
+      const explorer = element("div", undefined, "analytics-search-explorer");
+      const label = element("label", "Break down search by", "analytics-chart-choice");
+      const select = element("select");
+      select.setAttribute("aria-label", "Search breakdown");
+      for (const [index, { report, breakdown }] of searchBreakdowns.entries()) {
+        const dimension = report.title.replace(/^Search by /, "");
+        const option = element("option", dimension.charAt(0).toUpperCase() + dimension.slice(1));
+        option.value = String(index); select.append(option);
+        breakdown.hidden = index !== 0;
+        explorer.append(breakdown);
+      }
+      select.value = "0";
+      select.addEventListener("change", () => {
+        for (const [index, { breakdown }] of searchBreakdowns.entries()) breakdown.hidden = String(index) !== select.value;
+      });
+      label.append(select);
+      explorer.prepend(label);
+      breakdowns.append(explorer);
+    }
     section.append(breakdowns);
   }
   function dates(days = 28, includeToday = false) {
@@ -304,7 +491,8 @@
     event?.preventDefault();
     if (denied) return;
     apply.disabled = true;
-    reports.replaceChildren();
+    clearReports();
+    for (const tab of tabs) { tab.dataset.state = "updating"; tab.querySelector(".analytics-tab-state").textContent = "Loading"; }
     reports.setAttribute("aria-busy", "true");
     status.textContent = "Loading reports…";
     try {
@@ -315,14 +503,18 @@
       if (denied) return;
       main.hidden = false;
       access.hidden = true;
-      reports.replaceChildren();
-      const order = ["goatcounter", "custom", "search-console"];
+      clearReports();
       const providers = order.filter(provider => session.providers.includes(provider));
       let available = 0;
       await Promise.allSettled(providers.map(async provider => {
         const section = element("section", undefined, "analytics-provider");
         section.dataset.provider = provider;
-        section.append(element("h2", names[provider]), element("p", "Loading…", "analytics-empty"));
+        section.id = `analytics-panel-${provider}`;
+        section.setAttribute("role", "tabpanel");
+        section.setAttribute("aria-labelledby", `analytics-tab-${provider}`);
+        section.tabIndex = 0;
+        section.hidden = provider !== selectedProvider;
+        section.append(element("h2", names[provider]), element("div", undefined, "analytics-skeleton"), element("p", "Loading report…", "analytics-empty"));
         reports.append(section);
         let data;
         try { data = await api(`/api/admin/analytics/${provider}?${params}`, token); }
@@ -343,7 +535,7 @@
   window.addEventListener("pageshow", event => {
     if (event.persisted) {
       main.hidden = true;
-      reports.replaceChildren();
+      clearReports();
       access.hidden = false;
       loadReports();
     }

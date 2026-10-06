@@ -8,7 +8,11 @@ The dashboard serves the developer with existing Cognito `admin` membership. Ord
 
 ## Reports and interpretation
 
-Three independently loaded sections show Traffic (GoatCounter), PredictPlayoffs activity (AWS), and Google Search (Search Console), in that order. Traffic/activity cover dev; search covers the configured production domain. Selected-range totals, daily selectors, running totals for additive counts, and expandable tables answer the main questions. Sessions and rates are not additive. Provider dates, timezone, freshness and missing coverage remain explicit.
+Three independently loaded sections show Traffic (GoatCounter), PredictPlayoffs activity (AWS), and Google Search (Search Console), in that order. A sticky tab bar displays one section at a time and indicates each provider's readiness. Traffic/activity cover dev; search covers the configured production domain. Selected-range totals, daily selectors, cumulative views for additive counts, and expandable tables answer the main questions. Sessions and rates are not additive. Provider dates, timezone, freshness and missing coverage remain explicit.
+
+Activity totals are grouped into accounts/access, brackets, and groups. Search has a selector for query, page, country, or device; each selection retains the full returned table without another API request. Tables scroll locally with sticky headers. The selected section, metric, and chart view survive date updates in memory; they are not written to browser storage.
+
+Trend graphs use native SVG and show the nearest day's exact date/value on pointer hover or touch. Each graph is one keyboard stop: Left/Right move by day, Home/End go to range boundaries, and Escape dismisses the tooltip. Focused values are announced politely for screen readers. Missing days show Unavailable, while measured zeroes show 0. Data tables remain available as an equivalent, and cumulative charts retain gaps without inventing data. Charts adapt to their visible panel width; observers are released on refresh, metric changes, and loss of access.
 
 Only aggregates reach the browser. Public tracking is cookieless, honors GPC/DNT and has no consent UI/state; authentication storage is unchanged.
 

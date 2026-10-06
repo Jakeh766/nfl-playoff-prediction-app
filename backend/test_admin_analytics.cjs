@@ -8,10 +8,14 @@ const script = fs.readFileSync(path.join(__dirname, "../frontend/admin-analytics
 class Element {
   constructor(tag = "div") { this.tag = tag; this.children = []; this.dataset = {}; this.style = {}; this.listeners = {}; this.value = ""; }
   set innerHTML(_value) { assert.fail("Provider data must never render as HTML"); }
-  append(...nodes) { this.children.push(...nodes); }
-  replaceChildren(...nodes) { this.children = [...nodes]; }
-  setAttribute(key, value) { this[key] = value; }
+  append(...nodes) { for (const node of nodes) { if (node.parent) node.parent.children = node.parent.children.filter(child => child !== node); node.parent = this; this.children.push(node); } }
+  prepend(...nodes) { this.append(...nodes); this.children = [...nodes, ...this.children.filter(node => !nodes.includes(node))]; }
+  replaceChildren(...nodes) { for (const child of this.children) child.parent = null; this.children = []; this.append(...nodes); }
+  setAttribute(key, value) { this[key] = value; if (key === "class") this.className = value; }
   addEventListener(key, value) { this.listeners[key] = value; }
+  querySelector(selector) { return nodes(this).find(node => selector.startsWith(".") && node.className?.split(" ").includes(selector.slice(1))); }
+  getBoundingClientRect() { return this.rect || { left: 0, top: 0, width: this.className === "analytics-tooltip" ? 180 : 540, height: 244 }; }
+  focus() { this.focused = true; this.listeners.focus?.(); }
   get text() { return [this.textContent || "", ...this.children.map(child => child.text)].join(" "); }
 }
 function jwt(groups = ["admin"], exp = Date.now() / 1000 + 3600) {
@@ -20,9 +24,15 @@ function jwt(groups = ["admin"], exp = Date.now() / 1000 + 3600) {
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function boot(options = {}) {
   const elements = new Map(["analytics-main", "analytics-reports", "analytics-status", "analytics-access",
-    "analytics-range", "analytics-start", "analytics-end", "analytics-preset", "analytics-apply", "admin-sign-out"]
+    "analytics-range", "analytics-start", "analytics-end", "analytics-preset", "analytics-apply", "admin-sign-out",
+    "analytics-tab-goatcounter", "analytics-tab-custom", "analytics-tab-search-console"]
     .map(id => [id, new Element()]));
   elements.get("analytics-main").hidden = true;
+  for (const provider of ["goatcounter", "custom", "search-console"]) {
+    const tab = elements.get(`analytics-tab-${provider}`);
+    tab.dataset.provider = provider;
+    const state = new Element("span"); state.className = "analytics-tab-state"; tab.append(state);
+  }
   const session = options.noSession ? null : { accessToken: jwt(options.groups, options.exp),
     refreshToken: options.noRefresh ? "" : "refresh-token", idToken: "id-token", expiresAt: Date.now() + 3600_000 };
   const store = new Map(session ? [["road-to-bowl.auth.session", JSON.stringify(session)]] : []);
@@ -32,6 +42,7 @@ async function boot(options = {}) {
   const requests = [];
   const redirects = [];
   const listeners = {};
+  const observers = [];
   const context = {
     URLSearchParams, AbortSignal, Intl, Date, Object, atob: value => Buffer.from(value, "base64").toString("utf8"),
     AUTH_CONFIG: { environment: options.environment || "dev", clientId: "same-existing-client", region: "us-east-1" },
@@ -39,6 +50,11 @@ async function boot(options = {}) {
     document: { getElementById: id => elements.get(id), createElement: tag => new Element(tag), createElementNS: (_ns, tag) => new Element(tag) },
     location: { replace: url => redirects.push(url) },
     addEventListener: (name, callback) => { listeners[name] = callback; },
+    ResizeObserver: class {
+      constructor(callback) { this.callback = callback; this.disconnected = false; observers.push(this); }
+      observe(node) { this.node = node; }
+      disconnect() { this.disconnected = true; }
+    },
     fetch: async (url, request) => {
       requests.push({ url, request });
       if (url.startsWith("https://cognito-idp.")) {
@@ -61,7 +77,7 @@ async function boot(options = {}) {
   context.window = context;
   vm.runInNewContext(script, context);
   await settle();
-  return { elements, requests, redirects, store, listeners, context };
+  return { elements, requests, redirects, store, listeners, context, observers };
 }
 
 test("Today preset selects the current UTC day without changing completed-day presets", async () => {
@@ -232,10 +248,14 @@ test("daily charts keep all 93 days, gaps, exact data and correct running totals
     columns: [{ key: "day", label: "Day", format: "text" }, { key: "actions", label: "Actions", format: "number" }], rows }] } } });
   const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
   const figures = nodes(section).filter(node => node.tag === "figure");
-  assert.equal(figures.length, 2);
-  assert.equal(nodes(figures[0]).filter(node => node.tag === "circle").length, 92);
+  assert.equal(figures.length, 1);
+  assert.equal(nodes(figures[0]).filter(node => node.className === "analytics-point").length, 92);
   assert.equal(nodes(figures[0]).filter(node => node.tag === "polyline").length, 2);
-  assert.match(figures[1].text, /day-92: 92/);
+  const view = nodes(section).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity");
+  view.value = "cumulative"; view.listeners.change();
+  const plot = nodes(section).find(node => node.className === "analytics-plot");
+  plot.listeners.keydown({ key: "End", preventDefault() {} });
+  assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /day-92.*92.*Cumulative actions/);
   assert.equal(nodes(section).find(node => node.tag === "tbody").children.length, 93);
 });
 test("daily metric controls change charts and never sum distinct sessions or rates", async () => {
@@ -245,9 +265,129 @@ test("daily metric controls change charts and never sum distinct sessions or rat
     rows: [{ day: "2026-10-01", sessions: 2, pageviews: 3 }, { day: "2026-10-02", sessions: 2, pageviews: 4 }] }] } } });
   const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "goatcounter");
   const select = nodes(section).find(node => node.tag === "select");
-  assert.equal(nodes(section).filter(node => node.tag === "figure").length, 2);
+  assert.equal(nodes(section).filter(node => node.tag === "figure").length, 1);
+  const view = nodes(section).find(node => node["aria-label"] === "Chart view for Traffic");
+  view.value = "cumulative"; view.listeners.change();
+  assert.match(section.text, /Cumulative pageviews/);
   select.value = "sessions"; select.listeners.change();
   assert.equal(nodes(section).filter(node => node.tag === "figure").length, 1);
   assert.match(section.text, /Daily distinct sessions/);
-  assert.doesNotMatch(section.text, /Running distinct sessions/);
+  assert.equal(view.value, "daily");
+  assert.equal(view.parent.hidden, true);
+  assert.doesNotMatch(section.text, /Cumulative distinct sessions/);
+});
+
+function dailyReport(rows, format = "number") {
+  return { title: "Daily activity", chart: "trend", series: ["actions"],
+    columns: [{ key: "day", label: "Day", format: "text" }, { key: "actions", label: "Actions", format }], rows };
+}
+
+test("section tabs support clicks and arrow navigation, preserve the chosen section on refresh, and do not fetch on navigation", async () => {
+  const app = await boot();
+  const custom = app.elements.get("analytics-tab-custom");
+  const traffic = app.elements.get("analytics-tab-goatcounter");
+  custom.listeners.click();
+  assert.equal(custom["aria-selected"], "true");
+  assert.equal(traffic["aria-selected"], "false");
+  assert.equal(custom.tabIndex, 0);
+  assert.equal(traffic.tabIndex, -1);
+  assert.deepEqual(app.elements.get("analytics-reports").children.map(node => node.hidden), [true, false, true]);
+  assert.equal(app.requests.length, 4);
+  custom.listeners.keydown({ key: "ArrowRight", preventDefault() {} });
+  const search = app.elements.get("analytics-tab-search-console");
+  assert.equal(search.focused, true);
+  assert.equal(search["aria-selected"], "true");
+  await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
+  assert.deepEqual(app.elements.get("analytics-reports").children.map(node => node.hidden), [true, true, false]);
+  assert.equal(search["aria-selected"], "true");
+  search.listeners.keydown({ key: "Home", preventDefault() {} });
+  assert.equal(traffic["aria-selected"], "true");
+  assert.equal(traffic.focused, true);
+});
+
+test("chart pointer, keyboard and touch readouts distinguish missing days from zero and stay within chart edges", async () => {
+  const app = await boot({ reports: { custom: { tables: [dailyReport([
+    { day: "2026-10-01", actions: 0 }, { day: "2026-10-02", actions: null }, { day: "2026-10-03", actions: 12 },
+  ])] } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
+  const plot = nodes(section).find(node => node.className === "analytics-plot");
+  const tooltip = nodes(plot).find(node => node.className === "analytics-tooltip");
+  const marker = nodes(plot).find(node => node.className === "analytics-selected");
+  plot.listeners.pointermove({ clientX: 62 });
+  assert.equal(tooltip.hidden, false);
+  assert.match(tooltip.text, /Oct 1, 2026.*0.*Daily actions/);
+  assert.equal(tooltip.style.left, "4px");
+  plot.listeners.pointerleave();
+  assert.equal(tooltip.hidden, true);
+  plot.listeners.focus();
+  plot.listeners.keydown({ key: "ArrowRight", preventDefault() {} });
+  assert.match(tooltip.text, /Oct 2, 2026.*Unavailable.*No data for this day/);
+  assert.equal(marker.visibility, "hidden");
+  plot.listeners.keydown({ key: "End", preventDefault() {} });
+  assert.match(tooltip.text, /Oct 3, 2026.*12/);
+  assert.equal(tooltip.style.left, "356px");
+  assert.equal(marker.visibility, "visible");
+  assert.match(nodes(plot).find(node => node["aria-live"] === "polite").text, /2026-10-03.*12/);
+  plot.listeners.keydown({ key: "Escape" });
+  assert.equal(tooltip.hidden, true);
+  plot.listeners.blur();
+  plot.listeners.pointerdown({ clientX: 524, pointerType: "touch" });
+  plot.listeners.pointerleave();
+  assert.equal(tooltip.hidden, false);
+  plot.listeners.blur();
+  assert.equal(tooltip.hidden, true);
+});
+
+test("charts resize with their panel, release observers on redraw and logout, and format rates without a cumulative view", async () => {
+  const app = await boot({ reports: { custom: { tables: [dailyReport([
+    { day: "2026-10-01", actions: 0.125 }, { day: "2026-10-02", actions: 0.25 },
+  ], "percent")] } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
+  const observer = app.observers[0];
+  observer.node.rect = { width: 320, left: 0 };
+  observer.callback();
+  assert.equal(nodes(section).find(node => node.tag === "svg").viewBox, "0 0 320 244");
+  observer.node.listeners.keydown({ key: "End", preventDefault() {} });
+  assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /25%/);
+  assert.ok(nodes(section).filter(node => node.className === "analytics-axis").some(node => node.textContent === "25%"));
+  assert.ok(!nodes(section).filter(node => node.className === "analytics-axis").some(node => node.textContent === "100%"));
+  const view = nodes(section).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity");
+  assert.equal(view.parent.hidden, true);
+  const select = nodes(section).find(node => node["aria-label"] === "Daily metric for PredictPlayoffs activity");
+  select.listeners.change();
+  assert.equal(observer.disconnected, true);
+  assert.equal(app.observers.filter(item => !item.disconnected).length, 1);
+  app.elements.get("admin-sign-out").listeners.click();
+  assert.ok(app.observers.every(item => item.disconnected));
+});
+
+test("date refresh retains metric and view choices in memory without writing analytics storage", async () => {
+  const app = await boot({ reports: { custom: { tables: [dailyReport([
+    { day: "2026-10-01", actions: 4 }, { day: "2026-10-02", actions: 8 },
+  ])] } } });
+  const section = () => app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
+  const view = nodes(section()).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity");
+  view.value = "cumulative"; view.listeners.change();
+  await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
+  assert.equal(nodes(section()).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity").value, "cumulative");
+  assert.match(section().text, /Cumulative actions/);
+  assert.deepEqual([...app.store.keys()], ["road-to-bowl.auth.session"]);
+});
+
+test("search breakdown selector shows exactly one table and keeps all returned data without additional requests", async () => {
+  const app = await boot({ reports: { "search-console": { tables: ["query", "page", "country", "device"].map(key => ({
+    title: `Search by ${key}`, columns: [{ key, label: key, format: "text" }, { key: "clicks", label: "Clicks", format: "number" }],
+    rows: [{ [key]: `<${key}>`, clicks: 7 }],
+  })) } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "search-console");
+  const explorer = nodes(section).find(node => node.className === "analytics-search-explorer");
+  const select = nodes(explorer).find(node => node.tag === "select");
+  const breakdowns = explorer.children.filter(node => node.className === "analytics-breakdown");
+  assert.equal(breakdowns.length, 4);
+  assert.deepEqual(breakdowns.map(node => node.hidden), [false, true, true, true]);
+  select.value = "3"; select.listeners.change();
+  assert.deepEqual(breakdowns.map(node => node.hidden), [true, true, true, false]);
+  assert.match(breakdowns[3].text, /<device>.*7/);
+  assert.equal(nodes(section).filter(node => node.tag === "tbody").length, 4);
+  assert.equal(app.requests.length, 4);
 });

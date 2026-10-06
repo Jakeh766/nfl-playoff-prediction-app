@@ -19,8 +19,17 @@ year. Traffic/activity dates are UTC; Search Console uses Pacific dates and fina
 web-search data, which can lag several days. Search Console measures the connected
 production domain, not the dev CloudFront hostname. This does not deploy production.
 
-Daily metric selectors show the full range, with a separate running-total chart
-for additive counts. Distinct sessions and rates are never accumulated. Tables
+Use the Traffic, Activity, and Google Search tabs to switch sections without
+reloading reports. Activity totals are grouped by accounts/access, brackets, and
+groups. The Google Search breakdown selector switches among query, page, country,
+and device tables.
+
+Metric selectors show the full daily range. The View selector switches additive
+counts between Daily and Cumulative; distinct sessions and rates are never
+accumulated. Hover or tap a graph for its nearest day's exact value. Focus a graph
+and use Left/Right, Home/End, or Escape to explore or dismiss the readout with a
+keyboard. The selected section, metric, and view survive date updates only in
+memory, without analytics storage or extra provider calls. Tables
 retain every selected day and every returned breakdown column. Missing values
 remain unavailable; blank days in Search Console are unreported, not zero.
 Breakdowns can omit anonymized queries and lower-ranked rows and need not sum to

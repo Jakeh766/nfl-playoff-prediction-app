@@ -19,7 +19,7 @@ colors:
 typography:
   display:
     fontFamily: '"Oswald", Impact, sans-serif'
-    fontSize: "clamp(36px, 5vw, 54px)"
+    fontSize: "36px"
     fontWeight: 600
     lineHeight: 1.1
     letterSpacing: "-0.025em"
@@ -29,10 +29,10 @@ typography:
     fontWeight: 500
     lineHeight: 1.25
   metric:
-    fontFamily: '"Oswald", Impact, sans-serif'
-    fontSize: "28px"
-    fontWeight: 500
-    lineHeight: 1.2
+    fontFamily: '"DM Sans", system-ui, sans-serif'
+    fontSize: "32px"
+    fontWeight: 600
+    lineHeight: 1.15
   body:
     fontFamily: '"DM Sans", system-ui, sans-serif'
   note:
@@ -104,21 +104,21 @@ Blue provides inherited focus treatment and selection; danger and warning text d
 **Display Font:** Oswald, with Impact and sans-serif fallbacks.
 **Body Font:** DM Sans, with system-ui and sans-serif fallbacks.
 
-The page title uses the shared uppercase treatment. Provider headings and prominent metric values use condensed Oswald; controls, explanations, and tables use DM Sans. Definitions and provider ranges are small but explicitly separate from the larger metric values. Metrics and tables use tabular numerals. Explanation text is bounded to 75 characters; metric notes to 28 characters.
+The page title uses the shared uppercase treatment and a fixed 36px Oswald size. Provider headings use condensed Oswald; metric values, controls, explanations, and tables use DM Sans. Totals use 32px semibold numbers, grouped activity totals use 20px, and unavailable values use 20px with explicit notes. Metrics and tables use tabular numerals. Explanation text is bounded to 75 characters; metric notes to 28 characters.
 
 **The Definition Beside Value Rule.** Keep short metric definitions beside values; fuller provider definitions and coverage remain available in an adjacent disclosure.
 
 ## Layout
 
-The report container caps at 1240px with 32px side gutters and a 48px top margin. Traffic, PredictPlayoffs activity and Google Search form three full-width sections separated by 48px gaps and rules. Metrics use three columns; Search uses four. Daily and running-total charts share a two-column row, with a selector for the daily metric. Bracket totals by type stay visible; daily and search breakdown tables expand on demand. Definitions and collection coverage are expandable beside the metrics.
+The report container caps at 1120px with 32px side gutters and a 36px top margin. A neutral range toolbar groups date controls and the update action. Traffic, PredictPlayoffs activity, and Google Search share a sticky, three-column tab bar; one full-width report is visible at a time. Traffic metrics use three or four columns depending on available metrics, Search uses four, and activity totals form three labelled groups. A full-width trend graph has metric and daily/cumulative controls. Bracket totals by type stay visible; daily tables expand on demand. Search breakdowns use one selector and one visible table. Definitions and collection coverage remain expandable beside the metrics.
 
-Sections remain one column. At 700px and below, daily and running-total charts stack. At 540px and below, gutters shrink to 16px, the top margin to 32px, and all metric lists use two columns. Range controls use two columns on small screens, with the preset and submit action spanning both. Tables scroll within their own wrappers. Shared navigation wraps below 760px.
+At 700px and below, gutters shrink to 16px and metrics use two columns. Activity groups stack, with each group's three totals in a row. Range controls use two columns, with preset and submit spanning both. Graphs retain a 244px height and resize their SVG coordinates to the actual panel width, keeping axis labels legible. Tables scroll within their own wrappers with sticky column headings. Shared navigation wraps below 760px.
 
 **The Provider Boundary Rule.** Preserve separate provider sections and their range/state labels at every viewport size.
 
 ## Elevation & Depth
 
-Report sections stay flat and use top borders, whitespace, and table tints for separation. The page background inherits a subtle red radial glow and a 28px grid. Shared primary buttons carry soft red shadows and a one-pixel hover lift. This surface does not use raised report cards.
+Report sections stay flat and use whitespace and table tints for separation. The page uses the shared paper surface; the toolbar and chart plot use neutral surface layers. Shared primary buttons carry soft red shadows and a one-pixel hover lift. This surface does not use raised report cards. Only chart readouts use a small soft shadow to distinguish the overlay from the plotted data.
 
 ## Shapes
 
@@ -136,7 +136,10 @@ Visible labels sit above the date/select fields. Fields have a 44px minimum heig
 The shared brand and uppercase navigation anchor the surface. Hover/current links use ink text and a red underline. Mobile navigation wraps using the existing header rules; the wordmark is hidden below 760px.
 
 ### Provider reports
-Each section pairs its heading with an explicit state, followed by actual range, timezone, and retrieval time where available. Semantic definition lists carry metric labels, values, and notes. Table captions identify reports; the first column is left aligned and may wrap, while numeric columns align right. Table rows use inherited hover tint. Loading, unavailable, and setup-needed messages occupy the same provider boundary.
+Each tab indicates provider readiness; its section pairs a heading with explicit state, actual range, timezone, and retrieval time. Semantic definition lists carry metric labels, values, and notes. Table captions identify reports; the first column is left aligned and may wrap, while numeric columns align right. Loading uses a static neutral skeleton and an announced status. Unavailable and setup-needed messages occupy the same provider boundary.
+
+### Interactive graphs
+Daily graphs use the shared blue and cumulative graphs use green, with a faint solid area under measured segments. Dark mode uses the inherited light focus blue and a lighter tint of the shared green to maintain line contrast. Missing days split the line. A dashed crosshair and a larger selected point follow the nearest day. The floating tooltip uses inverse theme colors, displays the exact date and value, stays inside the chart edges, and responds to hover, touch, and keyboard. It contains no interactive controls. A short instruction and the corresponding data table provide discoverability and an accessible alternative. Rates use their measured range; they never offer a cumulative view.
 
 ## Do's and Don'ts
 
