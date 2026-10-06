@@ -118,6 +118,29 @@ class DevSeedTests(unittest.TestCase):
 
         self.assertEqual(observed_request, requests)
 
+    def test_redeploy_preserves_existing_demo_groups_and_all_membership_changes(self):
+        with mock.patch("seed_dev.subprocess.run", return_value=SimpleNamespace(stdout='{"Item":{"groupKey":{"S":"existing"}}}')) as read, \
+             mock.patch("seed_dev.write_batch") as write:
+            seed_dev.seed_tables("profiles", "predictions", "groups", "us-east-1")
+        self.assertEqual(read.call_count, len(seed_dev.DEMO_GROUPS))
+        self.assertTrue(all("--consistent-read" in call.args[0] for call in read.call_args_list))
+        self.assertTrue(write.called)
+        self.assertTrue(all("groups" not in call.args[0] for call in write.call_args_list))
+
+    def test_first_deployment_still_seeds_new_groups_and_memberships(self):
+        with mock.patch("seed_dev.subprocess.run", return_value=SimpleNamespace(stdout='{}')), \
+             mock.patch("seed_dev.write_batch") as write:
+            seed_dev.seed_tables("profiles", "predictions", "groups", "us-east-1")
+        groups = [request for call in write.call_args_list for request in call.args[0].get("groups", [])]
+        self.assertEqual(len(groups), len(self.data["groups"]))
+
+    def test_one_existing_group_does_not_prevent_initializing_another(self):
+        with mock.patch("seed_dev.subprocess.run", side_effect=[SimpleNamespace(stdout='{"Item": {"groupKey": {"S": "existing"}}}'), SimpleNamespace(stdout='{}')]), \
+             mock.patch("seed_dev.write_batch") as write:
+            seed_dev.seed_tables("profiles", "predictions", "groups", "us-east-1")
+        items = [request["PutRequest"]["Item"] for call in write.call_args_list for request in call.args[0].get("groups", [])]
+        self.assertEqual(len({item["groupId"]["S"] for item in items}), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
