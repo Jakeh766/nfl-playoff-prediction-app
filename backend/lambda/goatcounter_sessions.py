@@ -23,24 +23,37 @@ MAX_ROWS = 100_000
 EXPORT_INTERVAL = 3605  # Shared across date ranges/containers; GoatCounter allows one/hour.
 
 
+class ExportUnavailable(ValueError):
+    """Only fixed application-authored diagnostics may reach the private UI."""
+
+
 def timestamp(value):
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        raise ValueError("Export timestamp needs timezone")
+        raise ExportUnavailable("Export timestamp has no timezone.")
     return parsed.astimezone(timezone.utc)
 
 
 def distinct_count(compressed, start, end, collected_from, expected_rows):
     """All public paths, all rows (not just FirstVisit), one set for the whole range."""
     if len(compressed) > MAX_COMPRESSED:
-        raise ValueError("Export too large")
-    with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
-        data = stream.read(MAX_DECOMPRESSED + 1)
+        raise ExportUnavailable("Export exceeds the compressed size limit.")
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+            data = stream.read(MAX_DECOMPRESSED + 1)
+    except (OSError, EOFError):
+        raise ExportUnavailable("Export compression is invalid or incomplete.") from None
     if len(data) > MAX_DECOMPRESSED:
-        raise ValueError("Export too large")
+        raise ExportUnavailable("Export exceeds the decompressed size limit.")
     reader = csv.reader(io.StringIO(data.decode("utf-8"), newline=""), strict=True)
-    if next(reader, None) != CSV_HEADER:
-        raise ValueError("Unsupported export schema")
+    header = next(reader, None)
+    # Hosted releases differ in names of unused columns (User-Agent/UserAgent).
+    # Check version and the fields we actually consume, not incidental labels.
+    required = {"2Path", "Event", "Session", "Bot", "Date"}
+    if (not header or header[0] != "2Path" or len(header) != len(CSV_HEADER)
+            or len(set(header)) != len(header) or not required.issubset(header)):
+        raise ExportUnavailable("GoatCounter CSV version or required columns are unsupported.")
+    indexes = [header.index(field) for field in ("2Path", "Event", "Session", "Bot", "Date")]
     begin = max(datetime.combine(start, datetime.min.time(), timezone.utc), collected_from)
     finish = datetime.combine(end + timedelta(days=1), datetime.min.time(), timezone.utc)
     sessions = set()
@@ -49,23 +62,29 @@ def distinct_count(compressed, start, end, collected_from, expected_rows):
         if not row:
             continue
         rows += 1
-        if rows > MAX_ROWS or len(row) != len(CSV_HEADER):
-            raise ValueError("Incomplete or oversized export")
-        path, event, session, bot, created = row[0], row[2], row[6], row[7], row[13]
-        if event not in {"true", "false"} or not re.fullmatch(r"\d+", bot):
-            raise ValueError("Invalid export row")
+        if rows > MAX_ROWS or len(row) != len(header):
+            raise ExportUnavailable("Export row count or field count is invalid.")
+        path, event, session, bot, created = [row[index] for index in indexes]
+        # SQLite-backed exports serialize booleans as 0/1; other releases use
+        # true/false. Both describe the same CSV v2 field.
+        if event not in {"true", "false", "0", "1"} or not re.fullmatch(r"\d+", bot):
+            raise ExportUnavailable("Export event or bot field is invalid.")
         # Exact allowlist: a private URL (even one with a public-looking path
         # plus query/fragment) must not contribute to the public visitor count.
-        if event != "false" or bot != "0" or path not in PUBLIC_PATHS:
+        if event not in {"false", "0"} or bot != "0" or path not in PUBLIC_PATHS:
             continue
         if not begin <= timestamp(created) < finish:
             continue
-        # GoatCounter exports Uint128 sessions as hexadecimal, not UUID strings.
-        if not re.fullmatch(r"[0-9a-fA-F]{1,32}", session) or int(session, 16) == 0:
-            raise ValueError("Session information missing")
-        sessions.add(int(session, 16))
+        # zint.Uint128.String uses two 64-bit hex halves separated by a dash.
+        # Normalize the equivalent contiguous encoding without retaining IDs.
+        if not re.fullmatch(r"(?:[0-9a-fA-F]{16}-[0-9a-fA-F]{16}|[0-9a-fA-F]{1,32})", session):
+            raise ExportUnavailable("Export session information is missing or invalid.")
+        normalized = int(session.replace("-", ""), 16)
+        if normalized == 0:
+            raise ExportUnavailable("Export session information is missing or invalid.")
+        sessions.add(normalized)
     if rows != expected_rows:
-        raise ValueError("Incomplete export")
+        raise ExportUnavailable("Export row count does not match the completed export.")
     return len(sessions)
 
 
@@ -91,7 +110,7 @@ def export_snapshot(site, request):
             result = request("export", body={"format": "csv", "start_from_hit_id": 0})
             export_id = result.get("id")
             if type(export_id) is not int or not 0 < export_id <= 2_147_483_647:
-                raise ValueError("Invalid export ID")
+                raise ExportUnavailable("GoatCounter returned an invalid export ID.")
             snapshot = datetime.fromtimestamp(now, timezone.utc).isoformat()
             table.update_item(Key=key,
                 UpdateExpression="SET exportId = :id, snapshotAt = :snapshot",
@@ -103,12 +122,12 @@ def export_snapshot(site, request):
         return None
     metadata = request(f"export/{export_id}")
     if metadata.get("error"):
-        raise ValueError("Export failed")
+        raise ExportUnavailable("GoatCounter could not finish the export.")
     if not metadata.get("finished_at"):
         return None
     if (metadata.get("format") != "csv" or metadata.get("start_from_hit_id") not in {None, 0}
             or type(metadata.get("num_rows")) is not int or not 0 <= metadata["num_rows"] <= MAX_ROWS):
-        raise ValueError("Incomplete or oversized export")
+        raise ExportUnavailable("Export metadata indicates an incomplete or oversized CSV.")
     # Construct the URL locally; never follow a returned path/download URL.
     return request(f"export/{export_id}/download", binary=True), metadata["num_rows"], timestamp(item["snapshotAt"])
 
@@ -133,7 +152,7 @@ def report(settings, start, end, request):
             return result, 30
         compressed, rows, as_of = snapshot
         if as_of < collected_from:
-            raise ValueError("Export predates collection")
+            raise ExportUnavailable("The export predates Individual pageviews collection.")
         result["value"] = distinct_count(compressed, start, end, collected_from, rows)
         result["note"] += (f" Export requested {as_of.isoformat()}; refreshed at most hourly. "
                            "New pageviews can take a few minutes to reach an export. Events and identified bots excluded.")
@@ -145,6 +164,8 @@ def report(settings, start, end, request):
     except HTTPError as error:
         # Only a fixed status number, never upstream body/URL/header or session ID.
         result["note"] += f" Session export unavailable (GoatCounter HTTP {int(error.code)}). Check Export permission; existing per-page metrics remain available."
+    except ExportUnavailable as error:
+        result["note"] += f" Session export unavailable: {error} Existing per-page metrics remain available; no partial count is shown."
     except Exception:
         result["note"] += " Session export unavailable or incomplete; existing per-page metrics remain available. No partial count is shown."
     return result, 60

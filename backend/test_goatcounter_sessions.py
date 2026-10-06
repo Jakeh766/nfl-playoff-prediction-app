@@ -24,12 +24,12 @@ START, END = date(2026, 10, 5), date(2026, 10, 6)
 COLLECTED = datetime(2026, 10, 5, tzinfo=timezone.utc)
 SETTINGS = {"site": "predictplayoffs", "sessions_started_at": COLLECTED.isoformat()}
 NOW = int(datetime(2026, 10, 6, 12, tzinfo=timezone.utc).timestamp())
-SESSION_A, SESSION_B = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"
+SESSION_A, SESSION_B = "0123456789abcdef-0123456789abcdef", "fedcba9876543210-fedcba9876543210"
 
 
 def row(path="/", session=SESSION_A, created="2026-10-05T10:00:00Z", **kwargs):
-    data = dict(zip(sessions.CSV_HEADER, [path, "Public page", "false", "", "Chrome 1", "Windows",
-                                        session, "0", "", "h", "1000,0,1", "US", "true", created]))
+    data = dict(zip(sessions.CSV_HEADER, [path, "Public page", "0", "", "Chrome 1", "Windows",
+                                        session, "0", "", "h", "1000,0,1", "US", "1", created]))
     data.update(kwargs)
     return [data[field] for field in sessions.CSV_HEADER]
 
@@ -110,17 +110,21 @@ class SessionTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.count([row(session=value)])
 
-    def test_real_v2_header_quoted_fields_and_decimal_session_normalization(self):
-        rows = [row(Title='Quoted "title", with\nnewline'), row(session=SESSION_A.upper())]
+    def test_real_v2_header_quoted_fields_boolean_and_session_normalization(self):
+        rows = [row(Title='Quoted "title", with\nnewline'), row(session=SESSION_A.upper()),
+                row(session=SESSION_A.replace("-", ""), Event="false"), row(session=SESSION_B, Event="1")]
         self.assertEqual(self.count(rows), 1)
         for header in (["3Path", *sessions.CSV_HEADER[1:]], ["2", "Path", *sessions.CSV_HEADER[1:]]):
             with self.assertRaises(ValueError):
-                sessions.distinct_count(export(rows, header), START, END, COLLECTED, 2)
+                sessions.distinct_count(export(rows, header), START, END, COLLECTED, len(rows))
+        hosted_header = sessions.CSV_HEADER.copy()
+        hosted_header[3] = "User-Agent"
+        self.assertEqual(sessions.distinct_count(export(rows, hosted_header), START, END, COLLECTED, len(rows)), 1)
 
     def test_truncated_corrupt_or_oversized_exports_never_return_partial_counts(self):
         with self.assertRaises(ValueError):
             sessions.distinct_count(export([row()]), START, END, COLLECTED, 2)
-        with self.assertRaises((EOFError, gzip.BadGzipFile)):
+        with self.assertRaises(sessions.ExportUnavailable):
             sessions.distinct_count(export([row()])[:-8], START, END, COLLECTED, 1)
         with patch.object(sessions, "MAX_DECOMPRESSED", 10), self.assertRaises(ValueError):
             self.count([row()])
