@@ -188,6 +188,61 @@ resource "aws_dynamodb_table" "groups" {
     type = "S"
   }
 
+  attribute {
+    name = "groupId"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "recordType"
+    type = "S"
+  }
+
+  # Existing attributes let DynamoDB backfill legacy records without rewriting them.
+  global_secondary_index {
+    name            = "group-records"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "groupId"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "groupKey"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "user-groups"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "userId"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "groupKey"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "record-types"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "recordType"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "groupKey"
+      key_type       = "RANGE"
+    }
+  }
+
   point_in_time_recovery {
     enabled = var.stateful_table_protection_enabled
   }
@@ -473,7 +528,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem"
         ]
         Resource = aws_dynamodb_table.predictions.arn
       },
@@ -483,7 +539,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem"
         ]
         Resource = aws_dynamodb_table.profiles.arn
       },
@@ -493,10 +550,20 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan",
-          "dynamodb:UpdateItem"
+          "dynamodb:UpdateItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:ConditionCheckItem"
         ]
         Resource = aws_dynamodb_table.groups.arn
+      },
+      {
+        Effect = "Allow"
+        Action = ["dynamodb:Query"]
+        Resource = [
+          "${aws_dynamodb_table.groups.arn}/index/group-records",
+          "${aws_dynamodb_table.groups.arn}/index/user-groups",
+          "${aws_dynamodb_table.groups.arn}/index/record-types"
+        ]
       },
       {
         Effect   = "Allow"
@@ -730,6 +797,30 @@ resource "aws_apigatewayv2_route" "group_invite_get" {
 resource "aws_apigatewayv2_route" "group_members_get" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "GET /api/groups/{groupId}/members"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_member_remove" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "DELETE /api/groups/{groupId}/members/{userId}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_invite_regenerate" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "POST /api/groups/{groupId}/invite"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_invite_revoke" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "DELETE /api/groups/{groupId}/invite"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

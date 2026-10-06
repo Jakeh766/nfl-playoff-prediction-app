@@ -23,6 +23,13 @@ SPEC.loader.exec_module(lambda_app)
 class FakeTable:
     def __init__(self, items=None):
         self.items = dict(items or {})
+        self.name = "profiles-or-predictions"
+        self.meta = types.SimpleNamespace(client=self)
+
+    def batch_get_item(self, *, RequestItems):
+        request = RequestItems[self.name]
+        return {"Responses": {self.name: [self.items[key["profileKey"]]
+                for key in request["Keys"] if key["profileKey"] in self.items]}}
 
     def get_item(self, *, Key):
         item = self.items.get(Key["profileKey"])
@@ -63,6 +70,52 @@ class FakeTable:
 class FakeGroupTable:
     def __init__(self, items=None):
         self.items = dict(items or {})
+        self.name = "groups"
+        self.meta = types.SimpleNamespace(client=self)
+
+    def batch_get_item(self, *, RequestItems):
+        return {"Responses": {self.name: [self.items[key["groupKey"]].copy()
+                for key in RequestItems[self.name]["Keys"] if key["groupKey"] in self.items]}}
+
+    def query(self, *, IndexName, KeyConditionExpression, ExpressionAttributeValues, **kwargs):
+        values = ExpressionAttributeValues
+        attribute, placeholder = {"group-records": ("groupId", ":group"),
+                                  "user-groups": ("userId", ":user"),
+                                  "record-types": ("recordType", ":type")}[IndexName]
+        return {"Items": [item.copy() for item in self.items.values()
+                if item.get(attribute) == values[placeholder]
+                and item["groupKey"].startswith(values.get(":prefix", ""))]}
+
+    @staticmethod
+    def condition_matches(item, condition, values):
+        values = values or {}
+        for attribute in re.findall(r"attribute_exists\((\w+)\)", condition):
+            if not item or attribute not in item:
+                return False
+        for attribute in re.findall(r"attribute_not_exists\((\w+)\)", condition):
+            if item and attribute in item:
+                return False
+        for attribute, placeholder in re.findall(r"(\w+) = (:\w+)", condition):
+            if not item or item.get(attribute) != values[placeholder]:
+                return False
+        return True
+
+    def transact_write_items(self, *, TransactItems):
+        for action in TransactItems:
+            operation = next(iter(action.values()))
+            key = operation.get("Key", operation.get("Item"))["groupKey"]
+            if not self.condition_matches(self.items.get(key), operation.get("ConditionExpression", ""),
+                                          operation.get("ExpressionAttributeValues")):
+                raise ConditionalCheckFailed()
+        for action in TransactItems:
+            if "Put" in action:
+                self.items[action["Put"]["Item"]["groupKey"]] = action["Put"]["Item"]
+            elif "Update" in action:
+                operation = dict(action["Update"])
+                operation.pop("TableName")
+                self.update_item(**operation)
+            elif "Delete" in action:
+                self.items.pop(action["Delete"]["Key"]["groupKey"], None)
 
     def get_item(self, *, Key, ConsistentRead=False):
         item = self.items.get(Key["groupKey"])
@@ -119,10 +172,12 @@ class FakeGroupTable:
         item = self.items[Key["groupKey"]]
         values = ExpressionAttributeValues or {}
         self.check_expression_values(values, UpdateExpression, ConditionExpression)
-        if UpdateExpression == "SET inviteCode = :inviteCode":
-            if ConditionExpression and "inviteCode" in item:
+        if UpdateExpression.startswith("SET inviteCode"):
+            if not self.condition_matches(item, ConditionExpression or "", values):
                 raise ConditionalCheckFailed()
             item["inviteCode"] = values[":inviteCode"]
+            if ":revoked" in values:
+                item["inviteRevoked"] = values[":revoked"]
         elif UpdateExpression == "SET commissionerId = :newCommissioner":
             current = values.get(":commissioner")
             if "commissionerId = :commissioner" == ConditionExpression:
@@ -134,8 +189,10 @@ class FakeGroupTable:
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
             item["commissionerId"] = values[":newCommissioner"]
-        elif UpdateExpression == "SET sports = :sports":
-            if ConditionExpression == "commissionerId = :commissioner":
+        elif UpdateExpression.startswith("SET sports = :sports"):
+            if not self.condition_matches(item, ConditionExpression or "", values):
+                raise ConditionalCheckFailed()
+            if "commissionerId = :commissioner" in ConditionExpression:
                 if item.get("commissionerId") != values[":commissioner"]:
                     raise ConditionalCheckFailed()
             elif "createdBy = :commissioner" in (ConditionExpression or ""):
@@ -144,6 +201,7 @@ class FakeGroupTable:
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
             item["sports"] = values[":sports"]
+            item["sportEligibility"] = values[":eligibility"]
         else:
             raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
         return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
@@ -469,6 +527,121 @@ class LeaderboardProfileTests(unittest.TestCase):
 
 
 class PrivateGroupTests(unittest.TestCase):
+    def test_removal_blocks_old_new_invites_password_and_private_routes(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        path = f"/api/groups/{group_id}/members/user-456"
+        self.assertEqual(lambda_app.handler(event("DELETE", user_id="user-456", path=path), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("DELETE", user_id=None, path=path), None)["statusCode"], 401)
+        self.assertEqual(lambda_app.handler(event("DELETE", path=f"/api/groups/{group_id}/members/user-123"), None)["statusCode"], 400)
+        self.assertEqual(lambda_app.handler(event("DELETE", path=path), None)["statusCode"], 200)
+        self.assertEqual(self.join_invite(group_id, code)["statusCode"], 403)
+        self.assertEqual(self.join()["statusCode"], 403)
+        new_code = lambda_app.change_group_invite(group_id, "user-123")["inviteCode"]
+        self.assertEqual(self.join_invite(group_id, new_code)["statusCode"], 403)
+        self.assertFalse(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(lambda_app.list_groups("user-456"), {"groups": []})
+        for suffix in ("leaderboard", "members", "invite"):
+            self.assertEqual(lambda_app.handler(event("GET", user_id="user-456", path=f"/api/groups/{group_id}/{suffix}"), None)["statusCode"], 403)
+        self.assertEqual(len(lambda_app.list_group_members(group_id, "user-123")["members"]), 1)
+
+    def test_invite_rotation_revocation_and_member_permissions(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        path = f"/api/groups/{group_id}/invite"
+        old = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        for method in ("POST", "DELETE"):
+            self.assertEqual(lambda_app.handler(event(method, user_id="user-456", path=path), None)["statusCode"], 403)
+            self.assertEqual(lambda_app.handler(event(method, user_id=None, path=path), None)["statusCode"], 401)
+        rotated = json.loads(lambda_app.handler(event("POST", path=path), None)["body"])["inviteCode"]
+        self.assertNotEqual(old, rotated)
+        self.assertEqual(self.join_invite(group_id, old, user_id="new-user")["statusCode"], 400)
+        self.assertEqual(self.join_invite(group_id, rotated, user_id="new-user")["statusCode"], 200)
+        self.assertEqual(lambda_app.handler(event("DELETE", path=path), None)["statusCode"], 200)
+        self.assertEqual(self.join_invite(group_id, rotated, user_id="another-user")["statusCode"], 400)
+        self.assertTrue(lambda_app.get_group_invite(group_id, "user-456")["revoked"])
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["inviteCode"])
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertTrue(lambda_app.change_group_invite(group_id, "user-123")["inviteCode"])
+
+    def test_group_reads_do_not_scan_and_include_members_without_predictions(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.predictions.items.pop("user-456")
+        lambda_app.add_group_membership(group_id, "no-profile")
+        with patch.object(self.groups, "scan", side_effect=AssertionError("Groups scan")), \
+             patch.object(self.profiles, "scan", side_effect=AssertionError("Profiles scan")), \
+             patch.object(self.predictions, "scan", side_effect=AssertionError("Predictions scan")):
+            self.assertEqual(len(lambda_app.list_groups("user-123")["groups"]), 1)
+            board = lambda_app.get_group_leaderboard(group_id, "user-123")
+            self.assertEqual(len(board["entries"]), 3)
+            missing = [entry for entry in board["entries"] if not entry["hasPrediction"]]
+            self.assertEqual(len(missing), 2)
+            self.assertTrue(all(entry["total"] is None and entry["rank"] is None for entry in missing))
+            self.assertEqual(sum(entry["isCommissioner"] for entry in board["entries"]), 1)
+            self.assertEqual(len(board["members"]), 3)
+            self.assertFalse(any("memberId" in entry for entry in board["entries"]))
+
+    def test_equal_scoring_results_share_rank_with_existing_tiebreakers(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.predictions.items["user-456"]["testScore"] = self.predictions.items["user-123"]["testScore"]
+        self.profiles.items["user#third"] = {"profileKey": "user#third", "recordType": "profile", "leaderboardName": "Third"}
+        self.predictions.items["third"] = {"profileKey": "third", "testScore": 1}
+        lambda_app.add_group_membership(group_id, "third")
+        for members in (None, {"user-123", "user-456", "third"}):
+            self.assertEqual([entry["rank"] for entry in lambda_app.build_leaderboard(members)["entries"]], [1, 1, 3])
+
+    def test_concurrent_role_change_prevents_removal_and_invite_changes(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.transact_write_items
+        def transfer(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=transfer):
+            with self.assertRaises(PermissionError):
+                lambda_app.remove_group_member(group_id, "user-123", "user-456")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+
+    def test_removed_replacement_cannot_become_commissioner_during_transfer(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.transact_write_items
+        def remove_replacement(**kwargs):
+            self.groups.items[lambda_app.membership_item_key(group_id, "user-456")]["recordType"] = "removedMembership"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=remove_replacement):
+            rejected = self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")
+        self.assertEqual(rejected["statusCode"], 400)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "user-123")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_invite_revoked_between_read_and_join_cannot_add_a_membership(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        original = self.groups.transact_write_items
+        def revoke_before_join(**kwargs):
+            self.groups.items[f"group#{group_id}"].update(inviteCode="", inviteRevoked=True)
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=revoke_before_join):
+            self.assertEqual(self.join_invite(group_id, code)["statusCode"], 403)
+        self.assertFalse(lambda_app.is_group_member(group_id, "user-456"))
+
+    def test_concurrent_invite_update_cannot_override_new_commissioner(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        old_code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        original = self.groups.update_item
+        def transfer_before_update(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "update_item", side_effect=transfer_before_update):
+            with self.assertRaises(PermissionError):
+                lambda_app.change_group_invite(group_id, "user-123")
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["inviteCode"], old_code)
+
     def setUp(self):
         self.groups = FakeGroupTable()
         self.profiles = FakeTable(
@@ -719,7 +892,7 @@ class PrivateGroupTests(unittest.TestCase):
 
     def test_join_storage_failure_is_not_treated_as_success(self):
         created = json.loads(self.create()["body"])
-        with patch.object(self.groups, "put_item", side_effect=RuntimeError("Storage unavailable")):
+        with patch.object(self.groups, "transact_write_items", side_effect=RuntimeError("Storage unavailable")):
             with self.assertRaises(RuntimeError):
                 lambda_app.add_group_membership(created["groupId"], "user-456")
 

@@ -85,3 +85,40 @@ class GroupHistoryTests(unittest.TestCase):
     def test_scheduled_handler_dispatches_archive(self):
         result = app.handler({"source": "aws.events", "detail-type": "Scheduled Event"}, None)
         self.assertEqual(result, {"archived": 2})
+
+    def test_late_sport_enable_does_not_backfill_finished_season(self):
+        cutoff = 1802217600000
+        self.group["sports"] = ["nfl"]
+        self.group["commissionerId"] = "a"
+        with patch.object(app.time, "time", return_value=(cutoff + 100000000) / 1000):
+            app.update_group_sports(self.group_id, "a", event("PATCH", body={"sports": ["nfl", "nba"]}))
+        app.archive_completed_group_seasons()
+        nba = [item for item in self.table.items.values() if item.get("recordType") == "groupSeason" and item["sport"] == "nba"]
+        self.assertEqual(nba, [])
+        self.assertEqual(len(app.get_group_history(self.group_id)["seasons"]), 1)
+
+    def test_disabled_interval_and_reenable_preserve_only_eligible_seasons(self):
+        self.group["sportEligibility"] = {"nfl": [{"enabledAt": 1, "disabledAt": 10}, {"enabledAt": 30}],
+                                          "nba": [{"enabledAt": 1}]}
+        for cutoff, eligible in ((0, False), (1, True), (9, True), (10, False), (20, False), (30, True)):
+            self.assertEqual(app.sport_eligible_at(self.group, "nfl", cutoff), eligible)
+        self.group["sports"] = ["nba"]
+        self.group["sportEligibility"]["nfl"] = [{"enabledAt": 1, "disabledAt": 9999999999999}]
+        # Removing a sport after its final cutoff must preserve that completed season.
+        app.archive_completed_group_seasons()
+        self.assertEqual(len(app.get_group_history(self.group_id)["seasons"]), 1)
+
+    def test_sports_updates_keep_open_intervals_and_close_reenable_at_actual_time(self):
+        self.group["commissionerId"] = "a"
+        with patch.object(app.time, "time", return_value=10):
+            app.update_group_sports(self.group_id, "a", event("PATCH", body={"sports": ["nfl"]}))
+        with patch.object(app.time, "time", return_value=20):
+            app.update_group_sports(self.group_id, "a", event("PATCH", body={"sports": ["nfl", "nba"]}))
+        self.assertEqual(self.group["sportEligibility"]["nba"], [{"enabledAt": 1, "disabledAt": 10000}, {"enabledAt": 20000}])
+        self.assertEqual(self.group["sportEligibility"]["nfl"], [{"enabledAt": 1}])
+
+    def test_archive_and_history_use_queries_and_tiebreaker_matches_live_ranking(self):
+        self.entries[1].update(regularSeason=9, playoffs=3.5)
+        with patch.object(self.table, "scan", side_effect=AssertionError("Full-table scan")):
+            app.archive_completed_group_seasons()
+            self.assertEqual(app.get_group_history(self.group_id)["seasons"][0]["champions"], ["A"])

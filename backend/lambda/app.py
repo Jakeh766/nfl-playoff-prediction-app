@@ -391,16 +391,52 @@ def scan_all(table) -> list[dict]:
         scan_arguments["ExclusiveStartKey"] = last_key
 
 
+def query_all(table, **arguments) -> list[dict]:
+    items = []
+    while True:
+        result = table.query(**arguments)
+        items.extend(result.get("Items", []))
+        if not result.get("LastEvaluatedKey"):
+            return items
+        arguments["ExclusiveStartKey"] = result["LastEvaluatedKey"]
+
+
+def batch_get(table, key_name: str, keys) -> list[dict]:
+    """Bound batches and retry throttled keys without returning partial rosters."""
+    keys = list(dict.fromkeys(keys))
+    items = []
+    for offset in range(0, len(keys), 100):
+        pending = {table.name: {"Keys": [{key_name: key} for key in keys[offset:offset + 100]],
+                                "ConsistentRead": True}}
+        for attempt in range(6):
+            result = table.meta.client.batch_get_item(RequestItems=pending)
+            items.extend(result.get("Responses", {}).get(table.name, []))
+            pending = result.get("UnprocessedKeys", {})
+            if not pending:
+                break
+            time.sleep(min(0.05 * 2 ** attempt, 1))
+        else:
+            raise RuntimeError("Group data is temporarily unavailable. Try again")
+    return items
+
+
+def scoring_result(entry: dict) -> tuple:
+    return (entry["total"], entry["regularSeason"], entry["playoffs"])
+
+
 def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic", *, history=False, results=None) -> dict:
     results = results if results is not None else load_season_results()
     profiles = {
         item["profileKey"].removeprefix("user#"): item
-        for item in scan_all(profiles_table())
+        for item in (scan_all(profiles_table()) if member_ids is None else
+                     batch_get(profiles_table(), "profileKey", [profile_item_key(user) for user in member_ids]))
         if item.get("recordType") == "profile"
         and item.get("profileKey", "").startswith("user#")
     }
     entries = []
-    for prediction in scan_all(predictions_table()):
+    predictions = (scan_all(predictions_table()) if member_ids is None else
+                   batch_get(predictions_table(), "profileKey", [prediction_key(user) for user in member_ids]))
+    for prediction in predictions:
         if prediction.get("sport", "nfl") != SPORT.get():
             continue
         if SPORT.get() == "nba" and prediction.get("season") != NBA["season"]:
@@ -419,7 +455,8 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
-                **({"memberId": prediction["profileKey"]} if history else {}),
+                **({"memberId": prediction["profileKey"]} if member_ids is not None else {}),
+                "hasPrediction": True,
                 "superBowl": predicted_picks.get("superBowl", ""),
                 "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total")}
                            for mode, value in scores.items()},
@@ -437,8 +474,13 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
             entry["leaderboardName"].casefold(),
         )
     )
+    previous, rank = None, None
     for position, entry in enumerate(entries, start=1):
-        entry["rank"] = position if entry["total"] > 0 else None
+        result_key = scoring_result(entry)
+        if result_key != previous:
+            rank = position
+        entry["rank"] = rank if entry["total"] > 0 else None
+        previous = result_key
 
     return {
         "season": results.get("season"),
@@ -1169,37 +1211,68 @@ def prediction_window(now_seconds: float | None = None) -> dict:
 
 
 def get_group(group_id: str) -> dict | None:
-    result = groups_table().get_item(Key={"groupKey": group_item_key(group_id)})
+    result = groups_table().get_item(Key={"groupKey": group_item_key(group_id)}, ConsistentRead=True)
     item = result.get("Item")
     return item if item and item.get("recordType") == "group" else None
 
 
 def is_group_member(group_id: str, user_id: str) -> bool:
     result = groups_table().get_item(
-        Key={"groupKey": membership_item_key(group_id, user_id)}
+        Key={"groupKey": membership_item_key(group_id, user_id)}, ConsistentRead=True
     )
-    return bool(result.get("Item"))
+    return result.get("Item", {}).get("recordType") == "membership"
+
+
+def group_records(group_id: str, prefix: str = "") -> list[dict]:
+    values = {":group": group_id}
+    condition = "groupId = :group"
+    if prefix:
+        condition += " AND begins_with(groupKey, :prefix)"
+        values[":prefix"] = prefix
+    return query_all(groups_table(), IndexName="group-records",
+                     KeyConditionExpression=condition, ExpressionAttributeValues=values)
+
+
+def group_memberships(group_id: str) -> list[dict]:
+    candidates = group_records(group_id, "membership#")
+    # GSIs are eventual. Recheck base records so kicked members cannot linger.
+    return [item for item in batch_get(groups_table(), "groupKey",
+                                      [item["groupKey"] for item in candidates])
+            if item.get("recordType") == "membership"]
+
+
+def user_memberships(user_id: str) -> list[dict]:
+    candidates = query_all(groups_table(), IndexName="user-groups",
+                           KeyConditionExpression="userId = :user",
+                           ExpressionAttributeValues={":user": user_id})
+    return [item for item in batch_get(groups_table(), "groupKey",
+                                      [item["groupKey"] for item in candidates])
+            if item.get("recordType") == "membership"]
+
+
+def sport_eligibility(group: dict) -> dict:
+    # Legacy records have no activation history. Preserve their recorded sports.
+    return group.get("sportEligibility", {
+        sport: [{"enabledAt": group["createdAt"]}] for sport in group_sports(group)
+    })
+
+
+def sport_eligible_at(group: dict, sport: str, cutoff: int) -> bool:
+    return any(period["enabledAt"] <= cutoff < period.get("disabledAt", cutoff + 1)
+               for period in sport_eligibility(group).get(sport, []))
 
 
 def list_groups(user_id: str) -> dict:
     table = groups_table()
-    items = scan_all(table)
-    memberships = [
-        item
-        for item in items
-        if item.get("recordType") == "membership" and item.get("userId") == user_id
-    ]
+    memberships = user_memberships(user_id)
     groups = []
-    for membership in memberships:
-        group = table.get_item(
-            Key={"groupKey": group_item_key(membership["groupId"])}
-        ).get("Item")
+    for group in batch_get(table, "groupKey", [group_item_key(item["groupId"]) for item in memberships]):
         if group and group.get("recordType") == "group" and SPORT.get() in group_sports(group):
             groups.append(
                 public_group(
                     group,
                     user_id,
-                    group_commissioner_id(group, items),
+                    group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group["groupId"])),
                 )
             )
     groups.sort(key=lambda group: group["groupName"].casefold())
@@ -1246,6 +1319,7 @@ def create_group(user_id: str, event: dict) -> dict:
         "commissionerId": user_id,
         "scoringOption": scoring_option,
         "sports": sports,
+        "sportEligibility": {sport: [{"enabledAt": created_at}] for sport in sports},
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
@@ -1290,17 +1364,31 @@ def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
     if not group:
         raise ValueError("Group not found")
     table = groups_table()
-    commissioner_id = group_commissioner_id(group, scan_all(table))
+    commissioner_id = group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group_id))
     if commissioner_id != user_id:
         raise PermissionError("Only the group commissioner can edit its sports")
     sports = validate_group_sports(parse_body(event).get("sports"))
     guard = commissioner_condition(group, user_id)
+    eligibility = json.loads(json.dumps(sport_eligibility(group), default=int))
+    now = int(time.time() * 1000)
+    for sport in GROUP_SPORTS:
+        if sport in sports and sport not in group_sports(group):
+            eligibility.setdefault(sport, []).append({"enabledAt": now})
+        elif sport not in sports and sport in group_sports(group):
+            eligibility[sport][-1]["disabledAt"] = now
+    # Concurrent edits must not overwrite another activation interval.
+    if "sports" in group:
+        guard["ConditionExpression"] += " AND sports = :previousSports"
+        guard.setdefault("ExpressionAttributeValues", {})[":previousSports"] = group["sports"]
+    else:
+        guard["ConditionExpression"] += " AND attribute_not_exists(sports)"
     try:
         updated = table.update_item(
             Key={"groupKey": group_item_key(group_id)},
-            UpdateExpression="SET sports = :sports",
+            UpdateExpression="SET sports = :sports, sportEligibility = :eligibility",
             ConditionExpression=guard["ConditionExpression"],
-            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}), ":sports": sports},
+            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}), ":sports": sports,
+                                       ":eligibility": eligibility},
             ReturnValues="ALL_NEW",
         )["Attributes"]
     except Exception as error:
@@ -1330,30 +1418,108 @@ def join_group(user_id: str, event: dict) -> dict:
     if not hmac.compare_digest(digest, group["passwordHash"]):
         raise ValueError("Group name or password is incorrect")
 
-    add_group_membership(group["groupId"], user_id)
+    add_group_membership(group["groupId"], user_id, {"passwordHash": group["passwordHash"]})
     return public_group(group, user_id)
 
 
-def add_group_membership(group_id: str, user_id: str) -> None:
+def add_group_membership(group_id: str, user_id: str, credentials: dict | None = None) -> None:
     if is_group_member(group_id, user_id):
         return
 
     try:
-        groups_table().put_item(
-            Item={
+        table = groups_table()
+        item = {
                 "groupKey": membership_item_key(group_id, user_id),
                 "recordType": "membership",
                 "groupId": group_id,
                 "userId": user_id,
                 "joinedAt": int(time.time() * 1000),
-            },
-            ConditionExpression="attribute_not_exists(groupKey)",
-        )
+            }
+        values = {f":{key}": value for key, value in (credentials or {}).items()}
+        condition = "attribute_exists(groupKey)" + "".join(f" AND {key} = :{key}" for key in (credentials or {}))
+        check = {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                 "ConditionExpression": condition}
+        if values:
+            check["ExpressionAttributeValues"] = values
+        table.meta.client.transact_write_items(TransactItems=[
+            {"ConditionCheck": check},
+            {"Put": {"TableName": table.name, "Item": item,
+                     "ConditionExpression": "attribute_not_exists(groupKey)"}},
+        ])
     except Exception as error:
         # A second join can win the race after the membership read. Keep its
         # original joinedAt and treat this request as an already successful join.
-        if not is_conditional_failure(error):
+        if not group_transaction_conflict(error):
             raise
+        current = groups_table().get_item(Key={"groupKey": membership_item_key(group_id, user_id)},
+                                          ConsistentRead=True).get("Item", {})
+        if current.get("recordType") != "membership":
+            raise PermissionError("You cannot join this group. Ask the commissioner for help") from error
+
+
+def group_transaction_conflict(error) -> bool:
+    if is_conditional_failure(error):
+        return True
+    response = getattr(error, "response", {})
+    return (response.get("Error", {}).get("Code") == "TransactionCanceledException"
+            and any(reason.get("Code") == "ConditionalCheckFailed"
+                    for reason in response.get("CancellationReasons", [])))
+
+
+def require_commissioner(group_id: str, user_id: str) -> dict:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    commissioner = group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group_id))
+    if commissioner != user_id or not is_group_member(group_id, user_id):
+        raise PermissionError("Only the group commissioner can manage this group")
+    return group
+
+
+def remove_group_member(group_id: str, user_id: str, member_id: str) -> dict:
+    group = require_commissioner(group_id, user_id)
+    if member_id == user_id:
+        raise ValueError("Use Leave group to transfer commissioner access before leaving")
+    if not is_group_member(group_id, member_id):
+        raise ValueError("That user is not a current group member")
+    table = groups_table()
+    try:
+        table.meta.client.transact_write_items(TransactItems=[
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": group_item_key(group_id)},
+                                **commissioner_condition(group, user_id)}},
+            {"Put": {"TableName": table.name,
+                     "Item": {"groupKey": membership_item_key(group_id, member_id),
+                              "recordType": "removedMembership", "groupId": group_id,
+                              "userId": member_id, "removedAt": int(time.time() * 1000)},
+                     "ConditionExpression": "recordType = :membership",
+                     "ExpressionAttributeValues": {":membership": "membership"}}},
+        ])
+    except Exception as error:
+        if group_transaction_conflict(error):
+            raise PermissionError("Group membership or commissioner changed. Refresh and try again") from error
+        raise
+    return {"removed": True}
+
+
+def change_group_invite(group_id: str, user_id: str, *, revoke=False) -> dict:
+    group = require_commissioner(group_id, user_id)
+    code = "" if revoke else new_group_invite_code()
+    guard = commissioner_condition(group, user_id)
+    try:
+        groups_table().update_item(
+            Key={"groupKey": group_item_key(group_id)},
+            UpdateExpression="SET inviteCode = :inviteCode, inviteRevoked = :revoked",
+            ConditionExpression=guard["ConditionExpression"],
+            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}),
+                                       ":inviteCode": code, ":revoked": revoke},
+        )
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise PermissionError("The group commissioner changed. Refresh and try again") from error
+        raise
+    return {"groupId": group_id, "groupName": group["groupName"],
+            "inviteCode": code or None, "revoked": revoke}
 
 
 def get_group_invite(group_id: str, user_id: str) -> dict:
@@ -1362,6 +1528,8 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
         raise PermissionError("Group membership required")
 
     invite_code = group.get("inviteCode")
+    if group.get("inviteRevoked"):
+        return {"groupId": group_id, "groupName": group["groupName"], "inviteCode": None, "revoked": True}
     if not isinstance(invite_code, str) or not GROUP_INVITE_CODE_PATTERN.fullmatch(
         invite_code
     ):
@@ -1370,7 +1538,7 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
             updated = groups_table().update_item(
                 Key={"groupKey": group_item_key(group_id)},
                 UpdateExpression="SET inviteCode = :inviteCode",
-                ConditionExpression="attribute_not_exists(inviteCode)",
+                ConditionExpression="attribute_exists(groupKey) AND attribute_not_exists(inviteCode) AND attribute_not_exists(inviteRevoked)",
                 ExpressionAttributeValues={":inviteCode": invite_code},
                 ReturnValues="ALL_NEW",
             )
@@ -1410,7 +1578,7 @@ def join_group_by_invite(user_id: str, event: dict) -> dict:
     ):
         raise ValueError("That group invite link is invalid")
 
-    add_group_membership(group_id, user_id)
+    add_group_membership(group_id, user_id, {"inviteCode": invite_code})
     return public_group(group, user_id)
 
 
@@ -1418,23 +1586,33 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
     group = get_group(group_id)
     if not group or not is_group_member(group_id, user_id) or SPORT.get() not in group_sports(group):
         raise PermissionError("Group membership required")
-    member_ids = {
-        item["userId"]
-        for item in scan_all(groups_table())
-        if item.get("recordType") == "membership"
-        and item.get("groupId") == group_id
-    }
+    members = list_group_members(group_id, user_id)["members"]
+    member_ids = {member["userId"] for member in members}
+    board = build_leaderboard(member_ids, group.get("scoringOption", "classic"))
+    board = {**board, "entries": [dict(entry) for entry in board["entries"]]}
+    scored = {entry["memberId"]: entry for entry in board["entries"]}
+    for member in members:
+        entry = scored.get(member["userId"])
+        member["hasPrediction"] = entry is not None
+        if entry is None:
+            entry = {"leaderboardName": member["displayName"], "hasPrediction": False,
+                     "rank": None, "superBowl": "", "regularSeason": None,
+                     "playoffs": None, "total": None}
+            board["entries"].append(entry)
+        entry["isCommissioner"] = member["isCommissioner"]
+        entry.pop("memberId", None)
     return {
-        **build_leaderboard(member_ids, group.get("scoringOption", "classic")),
+        **board,
         "groupId": group_id,
         "groupName": group["groupName"],
+        "members": members,
         "history": get_group_history(group_id),
     }
 
 
 def get_group_history(group_id: str) -> dict:
     """Only called after the caller's group membership has been verified."""
-    seasons = sorted((item for item in scan_all(groups_table())
+    seasons = sorted((item for item in group_records(group_id, f"history#{group_id}#{SPORT.get()}#")
                       if item.get("recordType") == "groupSeason"
                       and item.get("groupId") == group_id
                       and item.get("sport") == SPORT.get()),
@@ -1469,8 +1647,9 @@ def get_group_history(group_id: str) -> dict:
 def archive_completed_group_seasons() -> dict:
     """Scheduled, idempotent snapshots; never infer history from live standings."""
     table = groups_table()
-    items = scan_all(table)
-    existing = {item["groupKey"] for item in items if item.get("recordType") == "groupSeason"}
+    groups = query_all(table, IndexName="record-types",
+                       KeyConditionExpression="recordType = :type",
+                       ExpressionAttributeValues={":type": "group"})
     saved = 0
     for sport in ("nfl", "nba"):
         token = SPORT.set(sport)
@@ -1492,31 +1671,27 @@ def archive_completed_group_seasons() -> dict:
                 if not is_conditional_failure(error):
                     raise
             cutoff = table.get_item(Key={"groupKey": cutoff_key}, ConsistentRead=True)["Item"]["cutoff"]
-            boards = {}
-            for group in items:
-                if group.get("recordType") != "group" or sport not in group_sports(group):
+            for candidate in groups:
+                group = get_group(candidate["groupId"])
+                if not group or not sport_eligible_at(group, sport, cutoff):
                     continue
                 key = f"history#{group['groupId']}#{sport}#{results['season']}"
-                if key in existing or group.get("createdAt", cutoff + 1) > cutoff:
+                if table.get_item(Key={"groupKey": key}, ConsistentRead=True).get("Item") or group.get("createdAt", cutoff + 1) > cutoff:
                     continue
-                members = {item["userId"] for item in items
-                           if item.get("recordType") == "membership"
-                           and item.get("groupId") == group["groupId"]
-                           and item.get("joinedAt", cutoff + 1) <= cutoff}
+                members = {item["userId"] for item in group_memberships(group["groupId"])
+                           if item.get("joinedAt", cutoff + 1) <= cutoff}
                 mode = group.get("scoringOption", "classic")
-                if mode not in boards:
-                    all_members = {item["userId"] for item in items if item.get("recordType") == "membership"}
-                    boards[mode] = build_leaderboard(all_members, mode, history=True, results=results)["entries"]
-                entries = [entry for entry in boards[mode] if entry["memberId"] in members]
+                entries = [entry for entry in build_leaderboard(members, mode, history=True, results=results)["entries"]
+                           if entry["memberId"] in members]
                 if not entries:
                     continue
-                best = max((entry["total"], entry["regularSeason"], entry["playoffs"]) for entry in entries)
+                best = max(scoring_result(entry) for entry in entries)
                 snapshot = {
                     "groupKey": key, "recordType": "groupSeason", "groupId": group["groupId"],
                     "sport": sport, "season": results["season"], "scoringOption": mode,
                     "entries": [{"memberId": entry["memberId"], "leaderboardName": entry["leaderboardName"],
                                  "total": entry["total"], "champion": best[0] > 0 and
-                                 (entry["total"], entry["regularSeason"], entry["playoffs"]) == best}
+                                 scoring_result(entry) == best}
                                 for entry in entries],
                 }
                 try:
@@ -1539,20 +1714,22 @@ def list_group_members(group_id: str, user_id: str) -> dict:
     memberships = sorted(
         (
             item
-            for item in scan_all(groups_table())
+            for item in group_memberships(group_id)
             if item.get("recordType") == "membership"
             and item.get("groupId") == group_id
         ),
         key=lambda item: (item.get("joinedAt", 0), item.get("userId", "")),
     )
     commissioner_id = group_commissioner_id(group, memberships)
+    profiles = {item["profileKey"]: item for item in batch_get(
+        profiles_table(), "profileKey", [profile_item_key(item["userId"]) for item in memberships])}
     members = []
     unnamed_number = 0
     for membership in memberships:
         member_id = membership.get("userId")
         if not isinstance(member_id, str):
             continue
-        profile = get_profile(member_id)
+        profile = profiles.get(profile_item_key(member_id))
         if profile and profile.get("leaderboardName"):
             display_name = profile["leaderboardName"]
         else:
@@ -1574,7 +1751,7 @@ def leave_group(group_id: str, user_id: str, event: dict) -> dict:
     if not group:
         raise ValueError("Group not found")
     table = groups_table()
-    items = scan_all(table)
+    items = group_memberships(group_id)
     memberships = [
         item
         for item in items
@@ -1596,19 +1773,28 @@ def leave_group(group_id: str, user_id: str, event: dict) -> dict:
 
         guard = commissioner_condition(group, user_id)
         try:
-            table.update_item(
-                Key={"groupKey": group_item_key(group_id)},
-                UpdateExpression="SET commissionerId = :newCommissioner",
-                ConditionExpression=guard["ConditionExpression"],
-                ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}),
-                                           ":newCommissioner": new_commissioner_id},
-            )
+            table.meta.client.transact_write_items(TransactItems=[
+                {"Update": {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                            "UpdateExpression": "SET commissionerId = :newCommissioner",
+                            "ConditionExpression": guard["ConditionExpression"],
+                            "ExpressionAttributeValues": {**guard.get("ExpressionAttributeValues", {}),
+                                                          ":newCommissioner": new_commissioner_id}}},
+                {"ConditionCheck": {"TableName": table.name,
+                                    "Key": {"groupKey": membership_item_key(group_id, new_commissioner_id)},
+                                    "ConditionExpression": "recordType = :membership",
+                                    "ExpressionAttributeValues": {":membership": "membership"}}},
+                {"Delete": {"TableName": table.name,
+                            "Key": {"groupKey": membership_item_key(group_id, user_id)},
+                            "ConditionExpression": "recordType = :membership",
+                            "ExpressionAttributeValues": {":membership": "membership"}}},
+            ])
         except Exception as error:
-            if is_conditional_failure(error):
+            if group_transaction_conflict(error):
                 raise ValueError(
-                    "The group commissioner changed. Refresh and try again"
+                    "The commissioner or replacement membership changed. Refresh and try again"
                 ) from error
             raise
+        return {"left": True, "commissionerTransferred": True}
     elif new_commissioner_id is not None:
         raise ValueError("Only the current commissioner can appoint a replacement")
 
@@ -1621,7 +1807,7 @@ def delete_group(group_id: str, user_id: str) -> None:
     if not group:
         raise ValueError("Group not found")
     table = groups_table()
-    items = scan_all(table)
+    items = group_records(group_id)
     commissioner_id = group_commissioner_id(group, items)
     if commissioner_id != user_id:
         raise PermissionError("Only the group commissioner can delete this group")
@@ -1637,7 +1823,7 @@ def delete_group(group_id: str, user_id: str) -> None:
         raise
 
     for item in items:
-        if item.get("recordType") in ("membership", "groupSeason") and item.get("groupId") == group_id:
+        if item.get("recordType") in ("membership", "removedMembership", "groupSeason") and item.get("groupId") == group_id:
             table.delete_item(Key={"groupKey": item["groupKey"]})
 
     try:
@@ -1653,12 +1839,13 @@ def delete_group(group_id: str, user_id: str) -> None:
 
 def delete_group_memberships(user_id: str) -> None:
     table = groups_table()
-    items = scan_all(table)
+    items = user_memberships(user_id)
+    groups = batch_get(table, "groupKey", [group_item_key(item["groupId"]) for item in items])
     owned_groups = [
         item.get("groupName", "a group")
-        for item in items
+        for item in groups
         if item.get("recordType") == "group"
-        and group_commissioner_id(item, items) == user_id
+        and (group_commissioner_id(item) or group_commissioner_id(item, group_memberships(item["groupId"]))) == user_id
     ]
     if owned_groups:
         raise ValueError(
@@ -1742,6 +1929,7 @@ def handle_request(event, context):
     group_members_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/members", path or ""
     )
+    group_remove_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})/members/([^/]{1,128})", path or "")
     group_membership_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/membership", path or ""
     )
@@ -1757,6 +1945,7 @@ def handle_request(event, context):
             group_leaderboard_match,
             group_invite_match,
             group_members_match,
+            group_remove_match,
             group_membership_match,
             group_delete_match,
         )
@@ -1783,6 +1972,8 @@ def handle_request(event, context):
                 return response(200, join_group(user_id, event))
             except ValueError as error:
                 return response(400, {"message": str(error)})
+            except PermissionError as error:
+                return response(403, {"message": str(error)})
         return response(404, {"message": "Not found"})
 
     if path == "/api/groups/join-invite":
@@ -1791,7 +1982,20 @@ def handle_request(event, context):
                 return response(200, join_group_by_invite(user_id, event))
             except ValueError as error:
                 return response(400, {"message": str(error)})
+            except PermissionError as error:
+                return response(403, {"message": str(error)})
         return response(404, {"message": "Not found"})
+
+    if group_remove_match:
+        if method != "DELETE":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(200, remove_group_member(group_remove_match.group(1), user_id,
+                                                     unquote(group_remove_match.group(2))))
+        except ValueError as error:
+            return response(400, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
 
     if group_delete_match:
         if method == "PATCH":
@@ -1836,15 +2040,20 @@ def handle_request(event, context):
             return response(403, {"message": str(error)})
 
     if group_invite_match:
-        if method != "GET":
+        if method not in ("GET", "POST", "DELETE"):
             return response(404, {"message": "Not found"})
         try:
+            if method != "GET":
+                return response(200, change_group_invite(group_invite_match.group(1), user_id,
+                                                         revoke=method == "DELETE"))
             return response(
                 200,
                 get_group_invite(group_invite_match.group(1), user_id),
             )
         except PermissionError as error:
             return response(403, {"message": str(error)})
+        except ValueError as error:
+            return response(404, {"message": str(error)})
 
     if group_leaderboard_match:
         if method != "GET":

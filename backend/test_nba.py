@@ -99,6 +99,10 @@ class NbaTests(unittest.TestCase):
         profiles.scan.return_value = {"Items": [{"recordType": "profile", "profileKey": "user#user", "leaderboardName": "Player"}]}
         predictions = Mock()
         predictions.scan.return_value = {"Items": [nfl, nba]}
+        profiles.name = "profiles"
+        predictions.name = "predictions"
+        profiles.meta.client.batch_get_item.return_value = {"Responses": {"profiles": profiles.scan.return_value["Items"]}}
+        predictions.meta.client.batch_get_item.return_value = {"Responses": {"predictions": [nba]}}
         with patch.object(app, "profiles_table", return_value=profiles), patch.object(app, "predictions_table", return_value=predictions), patch.object(app, "load_season_results", return_value=final_results()):
             entries = app.build_leaderboard({"user"})["entries"]
             self.assertEqual(len(entries), 1)
