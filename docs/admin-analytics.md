@@ -24,11 +24,10 @@ reloading reports. Activity totals are grouped by accounts/access, brackets, and
 groups. The Google Search breakdown selector switches among query, page, country,
 and device tables.
 
-Metric selectors show the full daily range. The View selector switches additive
-counts between Daily and Cumulative; distinct sessions and rates are never
-accumulated. Hover or tap a graph for its nearest day's exact value. Focus a graph
+Metric selectors show the full daily range; cumulative graph views are not shown.
+Hover or tap a graph for its nearest day's exact value. Focus a graph
 and use Left/Right, Home/End, or Escape to explore or dismiss the readout with a
-keyboard. The selected section, metric, and view survive date updates only in
+keyboard. The selected section and metric survive date updates only in
 memory, without analytics storage or extra provider calls. Pageviews by page use a
 pie chart with exact counts and percentages in its keyboard-accessible legend;
 hovering or tapping a slice also shows its values. Percentages cover returned
@@ -40,6 +39,13 @@ remain unavailable; blank days in Search Console are unreported, not zero.
 Breakdowns can omit anonymized queries and lower-ranked rows and need not sum to
 totals. CTR and position use provider aggregates, never averages of row percentages.
 Providers measure different audiences; do not add their totals.
+
+Shared picks, leaderboard and scoring pages record a fixed sport path, such as
+`/nba/leaderboard` or `/nfl/leaderboard`, based only on the displayed sport.
+These are analytics labels, not new website routes. No raw query string is sent.
+The pie legend displays “NBA leaderboard” and “NFL leaderboard”. Older shared-page
+counts say “sport not recorded”; their sport cannot be reconstructed. New labels
+appear as GoatCounter receives views and refreshes its hourly session export.
 
 ## Collection and interpretation
 

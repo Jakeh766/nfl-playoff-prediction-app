@@ -231,7 +231,7 @@ test("pie charts use all valid returned counts, expose percentages and keep prov
   assert.doesNotMatch(section.text, /View data/);
   const readout = nodes(chart).find(node => node.className === "analytics-pie-readout");
   slices[1].listeners.pointerenter();
-  assert.equal(readout.textContent, "/picks · 5 page visits · 33.3%");
+  assert.equal(readout.textContent, "/picks (sport not recorded) · 5 page visits · 33.3%");
   assert.equal(slices[0].style.opacity, "0.45");
   slices[1].listeners.pointerleave();
   assert.equal(slices[0].style.opacity, "1");
@@ -239,7 +239,7 @@ test("pie charts use all valid returned counts, expose percentages and keep prov
   assert.match(readout.textContent, /<img onerror=secret> · 10 page visits · 66.7%/);
   keys[0].listeners.blur();
   keys[1].listeners.click();
-  assert.match(readout.textContent, /\/picks · 5 page visits · 33.3%/);
+  assert.match(readout.textContent, /\/picks \(sport not recorded\) · 5 page visits · 33.3%/);
 });
 
 test("empty provider tables show no invented chart or sample traffic", async () => {
@@ -257,8 +257,9 @@ test("exactly three sections appear in task order with explicit source coverage"
   assert.match(reports[0].text, /Traffic.*Dev traffic.*GoatCounter/);
   assert.match(reports[1].text, /PredictPlayoffs activity.*First-party AWS/);
   assert.match(reports[2].text, /Google Search.*Production domain/);
+  assert.equal(nodes(reports[0]).find(node => node.className === "analytics-provider-coverage").textContent, "GoatCounter");
 });
-test("daily charts keep all 93 days, gaps, exact data and correct running totals", async () => {
+test("daily charts keep all 93 days, gaps and exact daily values without cumulative controls", async () => {
   const rows = Array.from({ length: 93 }, (_, i) => ({ day: `day-${i}`, actions: i === 2 ? null : 1 }));
   const app = await boot({ reports: { custom: { tables: [{ title: "Daily activity", chart: "trend", series: ["actions"],
     columns: [{ key: "day", label: "Day", format: "text" }, { key: "actions", label: "Actions", format: "number" }], rows }] } } });
@@ -267,11 +268,10 @@ test("daily charts keep all 93 days, gaps, exact data and correct running totals
   assert.equal(figures.length, 1);
   assert.equal(nodes(figures[0]).filter(node => node.className === "analytics-point").length, 92);
   assert.equal(nodes(figures[0]).filter(node => node.tag === "polyline").length, 2);
-  const view = nodes(section).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity");
-  view.value = "cumulative"; view.listeners.change();
+  assert.equal(nodes(section).filter(node => node.tag === "select").length, 1);
   const plot = nodes(section).find(node => node.className === "analytics-plot");
   plot.listeners.keydown({ key: "End", preventDefault() {} });
-  assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /day-92.*92.*Cumulative actions/);
+  assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /day-92.*1.*Daily actions/);
   assert.equal(nodes(section).filter(node => node.tag === "tbody").length, 0);
 });
 test("daily metric controls change charts and never sum distinct sessions or rates", async () => {
@@ -282,15 +282,12 @@ test("daily metric controls change charts and never sum distinct sessions or rat
   const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "goatcounter");
   const select = nodes(section).find(node => node.tag === "select");
   assert.equal(nodes(section).filter(node => node.tag === "figure").length, 1);
-  const view = nodes(section).find(node => node["aria-label"] === "Chart view for Traffic");
-  view.value = "cumulative"; view.listeners.change();
-  assert.match(section.text, /Cumulative pageviews/);
+  assert.equal(nodes(section).filter(node => node.tag === "select").length, 1);
+  assert.match(section.text, /Daily pageviews/);
   select.value = "sessions"; select.listeners.change();
   assert.equal(nodes(section).filter(node => node.tag === "figure").length, 1);
   assert.match(section.text, /Daily distinct sessions/);
-  assert.equal(view.value, "daily");
-  assert.equal(view.parent.hidden, true);
-  assert.doesNotMatch(section.text, /Cumulative distinct sessions/);
+  assert.doesNotMatch(section.text, /Cumulative/);
 });
 
 test("pie charts handle a single page, zero traffic and more than five pages", async () => {
@@ -305,6 +302,15 @@ test("pie charts handle a single page, zero traffic and more than five pages", a
     if (!expected) assert.match(section.text, /No visits recorded/);
     if (expected === 12) assert.equal(nodes(section).filter(node => node.className === "analytics-pie-key").length, 12);
   }
+});
+
+test("page labels distinguish new sport counts from historical counts without assigning old views to a sport", async () => {
+  const app = await boot({ reports: { goatcounter: { tables: [{ title: "Pageviews by page",
+    columns: [{ key: "page", label: "Page", format: "text" }, { key: "views", label: "Pageviews", format: "number" }],
+    rows: [{ page: "/leaderboard", views: 3 }, { page: "/nfl/leaderboard", views: 2 }, { page: "/nba/leaderboard", views: 1 }] }] } } });
+  const keys = nodes(app.elements.get("analytics-reports").children[0]).filter(node => node.className === "analytics-pie-key");
+  assert.deepEqual(keys.map(node => node["aria-label"]), ["/leaderboard (sport not recorded) · 3 pageviews · 50%",
+    "NFL leaderboard · 2 pageviews · 33.3%", "NBA leaderboard · 1 pageviews · 16.7%"]);
 });
 
 test("durations show readable hours, minutes and seconds, keeping missing values distinct from zero", async () => {
@@ -399,8 +405,7 @@ test("charts resize with their panel, release observers on redraw and logout, an
   assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /25%/);
   assert.ok(nodes(section).filter(node => node.className === "analytics-axis").some(node => node.textContent === "25%"));
   assert.ok(!nodes(section).filter(node => node.className === "analytics-axis").some(node => node.textContent === "100%"));
-  const view = nodes(section).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity");
-  assert.equal(view.parent.hidden, true);
+  assert.equal(nodes(section).filter(node => node["aria-label"]?.startsWith("Chart view")).length, 0);
   const select = nodes(section).find(node => node["aria-label"] === "Daily metric for PredictPlayoffs activity");
   select.listeners.change();
   assert.equal(observer.disconnected, true);
@@ -409,16 +414,16 @@ test("charts resize with their panel, release observers on redraw and logout, an
   assert.ok(app.observers.every(item => item.disconnected));
 });
 
-test("date refresh retains metric and view choices in memory without writing analytics storage", async () => {
-  const app = await boot({ reports: { custom: { tables: [dailyReport([
-    { day: "2026-10-01", actions: 4 }, { day: "2026-10-02", actions: 8 },
-  ])] } } });
+test("date refresh retains the daily metric choice in memory without writing analytics storage", async () => {
+  const report = dailyReport([{ day: "2026-10-01", actions: 4, signins: 2 }, { day: "2026-10-02", actions: 8, signins: 3 }]);
+  report.columns.push({ key: "signins", label: "Sign-ins", format: "number" });
+  const app = await boot({ reports: { custom: { tables: [report] } } });
   const section = () => app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
-  const view = nodes(section()).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity");
-  view.value = "cumulative"; view.listeners.change();
+  const select = nodes(section()).find(node => node["aria-label"] === "Daily metric for PredictPlayoffs activity");
+  select.value = "signins"; select.listeners.change();
   await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
-  assert.equal(nodes(section()).find(node => node["aria-label"] === "Chart view for PredictPlayoffs activity").value, "cumulative");
-  assert.match(section().text, /Cumulative actions/);
+  assert.equal(nodes(section()).find(node => node["aria-label"] === "Daily metric for PredictPlayoffs activity").value, "signins");
+  assert.match(section().text, /Daily sign-ins/);
   assert.deepEqual([...app.store.keys()], ["road-to-bowl.auth.session"]);
 });
 

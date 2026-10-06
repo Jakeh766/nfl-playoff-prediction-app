@@ -2,9 +2,9 @@
   const sessionKey = "road-to-bowl.auth.session";
   const names = { goatcounter: "Traffic", custom: "PredictPlayoffs activity", "search-console": "Google Search" };
   const coverage = {
-    goatcounter: ["Dev traffic", "GoatCounter · public development pages. Cookieless visitors/sessions and pageviews; GPC and Do Not Track exclude collection."],
-    custom: ["Dev activity", "First-party AWS · sign-ins, accounts, brackets and groups in the development app."],
-    "search-console": ["Production domain", "Search Console · sc-domain:predictplayoffs.com, including subdomains. The development CloudFront hostname is outside this property."],
+    goatcounter: ["Dev traffic", "GoatCounter"],
+    custom: ["Dev activity", "First-party AWS"],
+    "search-console": ["Production domain", "Google Search Console · predictplayoffs.com"],
   };
   const main = document.getElementById("analytics-main");
   const reports = document.getElementById("analytics-reports");
@@ -131,7 +131,7 @@
     if (text !== undefined) node.textContent = text;
     return node;
   }
-  function trendChart(title, rows, key, type, cumulative = false) {
+  function trendChart(title, rows, key, type) {
     const valid = rows.filter(row => numeric(row[key]));
     if (!valid.length) return null;
     const figure = element("figure", undefined, "analytics-chart analytics-trend");
@@ -212,8 +212,8 @@
       function flush() {
         if (!segment.length) return;
         if (segment.length > 1) svg.append(svgElement("polygon", { points: `${segment[0].split(",")[0]},${top + height} ${segment.join(" ")} ${segment.at(-1).split(",")[0]},${top + height}`,
-          class: cumulative ? "analytics-area analytics-area-total" : "analytics-area" }));
-        svg.append(svgElement("polyline", { points: segment.join(" "), class: cumulative ? "analytics-line analytics-line-total" : "analytics-line" }));
+          class: "analytics-area" }));
+        svg.append(svgElement("polyline", { points: segment.join(" "), class: "analytics-line" }));
         segment = [];
       }
       rows.forEach((row, i) => {
@@ -223,10 +223,10 @@
       flush();
       rows.forEach((row, i) => {
         if (numeric(row[key])) svg.append(svgElement("circle", { cx: xFor(i), cy: yFor(row), r: rows.length > 45 ? 2 : 3,
-          class: cumulative ? "analytics-point analytics-point-total" : "analytics-point" }));
+          class: "analytics-point" }));
       });
       crosshair = svgElement("line", { y1: top, y2: top + height, class: "analytics-crosshair", visibility: "hidden" });
-      marker = svgElement("circle", { r: 5, class: cumulative ? "analytics-selected analytics-selected-total" : "analytics-selected", visibility: "hidden" });
+      marker = svgElement("circle", { r: 5, class: "analytics-selected", visibility: "hidden" });
       svg.append(crosshair, marker);
       if (!tooltip.hidden) show(index);
     }
@@ -275,43 +275,19 @@
     const choice = chartChoices.get(choiceKey);
     select.value = options.some(column => column.key === choice?.metric) ? choice.metric : report.series?.[0] || options[0].key;
     label.append(select);
-    const viewLabel = element("label", "View", "analytics-chart-choice");
-    const view = element("select");
-    view.setAttribute("aria-label", `Chart view for ${names[provider]}`);
-    for (const [key, text] of [["daily", "Daily"], ["cumulative", "Cumulative"]]) {
-      const option = element("option", text); option.value = key; view.append(option);
-    }
-    view.value = choice?.view || "daily";
-    viewLabel.append(view);
-    controls.append(label, viewLabel);
+    controls.append(label);
     const plots = element("div", undefined, "analytics-trends");
-    const note = element("p", "Gaps mean unavailable. Cumulative counts start at the selected start date. Recent days may be partial.", "analytics-chart-note");
+    const note = element("p", "Gaps mean unavailable. Recent days may be partial.", "analytics-chart-note");
     let currentChart;
     function draw() {
       if (currentChart) chartCleanup.get(currentChart)?.();
       plots.replaceChildren();
       const column = options.find(item => item.key === select.value) || options[0];
-      // Unique sessions and rates are not additive. Never accumulate them.
-      const additive = column.format === "number" && column.key !== "sessions";
-      viewLabel.hidden = !additive;
-      if (!additive) view.value = "daily";
-      chartChoices.set(choiceKey, { metric: column.key, view: view.value });
-      let rows = report.rows, key = column.key;
-      const cumulative = view.value === "cumulative" && additive;
-      if (cumulative) {
-        let sum = 0;
-        rows = report.rows.map(row => {
-          if (!numeric(row[column.key])) return { ...row, cumulative: null };
-          sum += Number(row[column.key]);
-          return { ...row, cumulative: sum };
-        });
-        key = "cumulative";
-      }
-      currentChart = trendChart(`${cumulative ? "Cumulative" : "Daily"} ${column.label.toLowerCase()}`, rows, key, column.format, cumulative);
+      chartChoices.set(choiceKey, { metric: column.key });
+      currentChart = trendChart(`Daily ${column.label.toLowerCase()}`, report.rows, column.key, column.format);
       plots.append(currentChart || element("p", "No measured days for this metric in the selected range.", "analytics-empty"));
     }
     select.addEventListener("change", draw);
-    view.addEventListener("change", draw);
     group.append(controls, plots, note);
     draw();
     return group;
@@ -340,11 +316,18 @@
       "#8a5e9b", "#568e99", "#c78348", "#8b7f67", "#ab6281", "#7589ad", "#82994e", "#777777"];
     const slices = [];
     let angle = -Math.PI / 2;
+    const pageName = path => {
+      const specific = /^\/(nfl|nba)\/(picks|leaderboard|scoring)$/.exec(path);
+      if (specific) return `${specific[1].toUpperCase()} ${specific[2]}`;
+      if (/^\/(picks|leaderboard|scoring)(\.html)?$/.test(path)) return `${path} (sport not recorded)`;
+      return path;
+    };
     for (const [index, row] of rows.entries()) {
       const value = Number(row[count.key]);
       const share = value / total;
       const color = colors[index % colors.length];
-      const description = `${row[label.key]} · ${format(value)} ${count.label.toLowerCase()} · ${format(share, "percent")}`;
+      const page = pageName(row[label.key]);
+      const description = `${page} · ${format(value)} ${count.label.toLowerCase()} · ${format(share, "percent")}`;
       let slice;
       if (share > 0) {
         const finish = angle + share * Math.PI * 2;
@@ -375,7 +358,7 @@
       const swatch = element("span", undefined, "analytics-pie-swatch");
       swatch.style.background = color;
       swatch.setAttribute("aria-hidden", "true");
-      button.append(swatch, element("span", row[label.key], "analytics-pie-page"),
+      button.append(swatch, element("span", page, "analytics-pie-page"),
         element("strong", format(value)), element("span", format(share, "percent"), "analytics-pie-share"));
       button.addEventListener("focus", show);
       button.addEventListener("blur", reset);

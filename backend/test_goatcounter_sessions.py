@@ -117,6 +117,18 @@ class SessionTests(unittest.TestCase):
                 row(session="dd", Bot="1")]
         self.assertEqual(self.count(rows), 1)
 
+    def test_sport_paths_preserve_separate_counts_and_reject_extra_private_data(self):
+        rows = [row(path="/leaderboard"), row(path="/nfl/leaderboard"), row(path="/nba/leaderboard"),
+                row(path="/nba/leaderboard", FirstVisit="0"),
+                row(path="/nba/leaderboard?invite=PRIVATE", session=SESSION_B),
+                row(path="/nba/leaderboard#PRIVATE", session=SESSION_B),
+                row(path="/other/leaderboard", session=SESSION_B)]
+        result = sessions.traffic_counts(export(rows), START, END, COLLECTED, len(rows))
+        self.assertEqual(result["pages"], {"/leaderboard": 1, "/nfl/leaderboard": 1, "/nba/leaderboard": 2})
+        self.assertEqual(result["pageviews"], 4)
+        self.assertEqual(result["sessions"], 1)
+        self.assertNotIn("PRIVATE", json.dumps(result))
+
     def test_activation_time_excludes_earlier_rows_on_initial_day(self):
         self.assertEqual(self.count([row(), row(session=SESSION_B, created="2026-10-05T12:00:00Z")],
                                    collected=sessions.timestamp("2026-10-05T11:00:00Z")), 1)

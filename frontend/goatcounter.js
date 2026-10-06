@@ -7,7 +7,16 @@
       pages.has(window.location.pathname) && window.location.hash !== "#toggle-goatcounter";
     if (!permitted()) return;
 
-    const page = window.location.pathname;
+    // Shared pages select a sport in the URL. Emit only a fixed virtual path,
+    // never the query itself or any invite/account information alongside it.
+    const route = window.location.pathname.replace(/\.html$/, "");
+    const sport = new URL(window.location.href).searchParams.get("sport") === "nba" ? "nba" : "nfl";
+    const sportPages = {
+      "/picks": { nfl: "/nfl/picks", nba: "/nba/picks" },
+      "/leaderboard": { nfl: "/nfl/leaderboard", nba: "/nba/leaderboard" },
+      "/scoring": { nfl: "/nfl/scoring", nba: "/nba/scoring" },
+    };
+    const page = sportPages[route]?.[sport] || window.location.pathname;
     const title = `Predict Playoffs — ${page === "/" ? "home" : page.slice(1).replace(/\.html$/, "")}`;
     let referrer = "";
     try {

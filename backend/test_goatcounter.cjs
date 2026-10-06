@@ -97,7 +97,7 @@ test("GoatCounter starts without browser storage", () => {
     assert.equal(app.context.goatcounter.no_events, true);
     assert.deepEqual(app.storageReads, []);
     app.load();
-    assertSafeRequest(app, "/picks");
+    assertSafeRequest(app, "/nfl/picks");
     assert.equal(new URL(app.requests[0].url).searchParams.get("r"), "https://dev.example.com");
     assert.deepEqual(app.storageReads, []);
   }
@@ -108,7 +108,20 @@ test("all public routes discard invite codes, queries, fragments, and private do
     "/leaderboard", "/leaderboard.html", "/scoring", "/scoring.html", "/privacy", "/privacy.html"]) {
     const app = boot({ url: `https://dev.example.com${route}?invite=secret&sport=nba#private` });
     app.load();
-    assertSafeRequest(app, route);
+    const shared = route.replace(/\.html$/, "");
+    assertSafeRequest(app, ["/picks", "/leaderboard", "/scoring"].includes(shared) ? `/nba${shared}` : route);
+  }
+});
+
+test("shared pages record only the displayed NFL or NBA sport, including aliases and untrusted queries", () => {
+  for (const route of ["/leaderboard", "/picks", "/scoring", "/leaderboard.html"]) {
+    for (const [query, sport] of [["", "nfl"], ["sport=nba", "nba"], ["sport=nfl", "nfl"],
+      ["sport=secret", "nfl"], ["sport=NBA", "nfl"], ["sport=nba&sport=secret&invite=secret", "nba"]]) {
+      const app = boot({ url: `https://dev.example.com${route}?${query}#private` });
+      app.load();
+      assertSafeRequest(app, `/${sport}${route.replace(/\.html$/, "")}`);
+      assert.deepEqual(app.storageReads, []);
+    }
   }
 });
 
@@ -121,7 +134,7 @@ test("referrers are restricted to HTTP(S) origins, without credentials, paths, q
   ]) {
     const app = boot({ referrer });
     app.load();
-    assertSafeRequest(app, "/picks");
+    assertSafeRequest(app, "/nfl/picks");
     assert.equal(new URL(app.requests[0].url).searchParams.get("r"), expected);
   }
 });
@@ -154,7 +167,7 @@ test("privacy signals arriving while the asynchronous script loads prevent any p
 test("manual provider calls and new provider fields cannot bypass URL sanitization", () => {
   const app = boot();
   app.load(provider.replace("q: location.search,", "q: location.search, future: location.href,"));
-  assertSafeRequest(app, "/picks");
+  assertSafeRequest(app, "/nfl/picks");
   const overrides = { path: "/private?invite=secret#private", title: "private@example.org",
     referrer: "https://example.org/private?token=secret#private", event: true };
   assert.doesNotMatch(decodeURIComponent(app.context.goatcounter.url(overrides)), /secret|private|invite|token/);
@@ -175,7 +188,7 @@ test("hidden pages wait for visibility and count once with sanitized URLs", () =
   assert.equal(app.requests.length, 0);
   app.context.document.visibilityState = "visible";
   onVisibility();
-  assertSafeRequest(app, "/picks");
+  assertSafeRequest(app, "/nfl/picks");
   assert.equal(app.listeners.has("visibilitychange"), false);
 });
 
@@ -186,7 +199,7 @@ test("provider failures and blocked network requests do not interrupt the app", 
   const app = boot({ networkFailure: true });
   assert.doesNotThrow(() => app.load());
   await new Promise(resolve => setImmediate(resolve));
-  assertSafeRequest(app, "/picks");
+  assertSafeRequest(app, "/nfl/picks");
 });
 
 test("every public HTML page loads the guarded integration after its environment configuration", () => {

@@ -14,7 +14,9 @@ import boto3
 
 PUBLIC_PATHS = frozenset({"/", "/index.html", "/nba", "/nba.html", "/picks", "/picks.html",
                          "/leaderboard", "/leaderboard.html", "/scoring", "/scoring.html",
-                         "/privacy", "/privacy.html"})
+                         "/privacy", "/privacy.html",
+                         "/nfl/picks", "/nba/picks", "/nfl/leaderboard", "/nba/leaderboard",
+                         "/nfl/scoring", "/nba/scoring"})
 CSV_HEADER = ["2Path", "Title", "Event", "UserAgent", "Browser", "System", "Session", "Bot",
               "Referrer", "Referrer scheme", "Screen size", "Location", "FirstVisit", "Date"]
 MAX_COMPRESSED = 2_000_000
