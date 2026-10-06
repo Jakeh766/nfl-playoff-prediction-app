@@ -28,7 +28,7 @@ function boot(options = {}) {
     localStorage: {
       getItem(key) {
         storageReads.push(key);
-        return key === "pp_analytics_consent_v1" ? options.consent || null : null;
+        return null;
       },
       setItem() { assert.fail("GoatCounter must not create browser identifiers"); },
     },
@@ -85,9 +85,9 @@ function assertSafeRequest(app, expectedPath) {
   assert.equal(app.images.length, 0);
 }
 
-test("GoatCounter starts independently of unanswered, granted, or denied optional consent", () => {
-  for (const consent of [undefined, "granted", "denied"]) {
-    const app = boot({ consent });
+test("GoatCounter starts without browser storage", () => {
+  for (const environment of ["dev"]) {
+    const app = boot({ environment });
     assert.equal(app.scripts.length, 1);
     assert.equal(app.scripts[0].dataset.goatcounter, "https://predictplayoffs.goatcounter.com/count");
     assert.equal(app.scripts[0].src, "//gc.zgo.at/count.js");
@@ -99,7 +99,7 @@ test("GoatCounter starts independently of unanswered, granted, or denied optiona
     app.load();
     assertSafeRequest(app, "/picks");
     assert.equal(new URL(app.requests[0].url).searchParams.get("r"), "https://dev.example.com");
-    assert.ok(!app.storageReads.includes("pp_analytics_consent_v1"));
+    assert.deepEqual(app.storageReads, []);
   }
 });
 
@@ -135,7 +135,7 @@ test("production, absent/unknown configuration, private paths, GPC, and DNT neve
     { url: "https://dev.example.com/picks%3Finvite=secret" },
     { gpc: true }, { dnt: "1" },
   ]) {
-    const app = boot({ consent: "granted", ...options });
+    const app = boot(options);
     assert.equal(app.scripts.length, 0);
     assert.equal(app.requests.length, 0);
     assert.equal(app.context.goatcounter, undefined);
@@ -196,4 +196,10 @@ test("every public HTML page loads the guarded integration after its environment
     assert.ok(head.indexOf("/auth-config.js") < head.indexOf("/goatcounter.js"), name);
     assert.doesNotMatch(head, /gc\.zgo\.at\/count\.js|data-goatcounter=/, "No unguarded tracking snippet");
   }
+});
+
+test("provider storage-toggle URLs never load the remote script", () => {
+  const app = boot({ url: "https://dev.example.com/#toggle-goatcounter" });
+  assert.equal(app.scripts.length, 0);
+  assert.deepEqual(app.storageReads, []);
 });

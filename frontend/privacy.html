@@ -29,18 +29,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=56" />
+    <link rel="stylesheet" href="/styles.css?v=59" />
     <script src="/sports.js?v=4" defer></script>
     <script src="/shell.js?v=19" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/goatcounter.js?v=1" defer></script>
-    <script src="/analytics.js?v=7" defer></script>
-    <script src="/monitoring.js?v=3" defer></script>
+    <script src="/monitoring.js?v=7" defer></script>
     <script src="/app.js?v=35" defer></script>
     <script src="/bootstrap.js?v=10" defer></script>
 
   </head>
-  <body data-clarity-mask="true" data-page="privacy">
+  <body data-page="privacy">
     <header id="site-header"></header>
     <main class="privacy-policy" data-no-sport-copy>
       <h1>Privacy policy</h1>
@@ -51,19 +50,19 @@
       <h2>How we use information</h2>
       <p>We use information to operate accounts, sign you in and help recover your account, save predictions, run leaderboards and groups, send account-related emails, secure and maintain the service, and improve Predict Playoffs.</p>
       <p>We do not sell your personal information.</p>
-      <h2>Analytics, cookies, and browser storage</h2>
-      <p>We use essential browser storage to keep you signed in and remember your preferences. Optional analytics use cookies and similar technologies only after you choose <strong>Allow analytics</strong>. If you do nothing, optional analytics stay off.</p>
-      <p>You can choose <strong>Decline analytics</strong> and still use the site. Change your choice through <strong>Cookie preferences</strong> in the footer. When you decline, we turn off optional analytics and remove their cookies and stored visitor/session identifiers.</p>
-      <p>We may collect limited aggregate usage counts without optional cookies, including when you decline. These measurements are not designed to identify individual visitors. We honor supported Global Privacy Control and Do Not Track signals by disabling optional analytics, our own usage measurements, and GoatCounter.</p>
-      <p>On our development site only, we estimate distinct visitors per UTC day across public pages, including when you decline optional analytics. Our server combines the request IP address and browser User-Agent with a random secret that changes each day to produce a temporary hash. We do not store the raw IP address or User-Agent for this measurement, write a visitor identifier to your device, or include page URLs, invite codes, account details, or query strings in the hash. The hash and daily secret are scheduled to expire at 01:00 UTC the following day; database expiration cleanup is asynchronous. We retain daily aggregate counts for up to 400 days. These estimates cannot recognize a returning visitor across days; shared networks and matching browsers can merge visitors, while network or browser changes can count someone twice. Global Privacy Control and Do Not Track disable this measurement.</p>
-      <p>Our analytics are configured not to send email addresses, account identifiers, invite codes, and individual bracket selections. Google advertising personalization is disabled.</p>
+      <h2>Analytics and essential browser storage</h2>
+      <p>We do not use Google Analytics 4 (GA4), Microsoft Clarity, analytics cookies, or analytics localStorage/sessionStorage. There is no analytics consent banner or stored analytics consent choice.</p>
+      <p>Amazon Cognito uses essential browser storage for your sign-in session, including tokens needed to keep you signed in and refresh your session. This authentication storage is unchanged. The app may also store your preferences and draft bracket to support its features; these are not analytics identifiers.</p>
+      <p>We honor supported Global Privacy Control (GPC) and Do Not Track (DNT) signals by disabling GoatCounter and our first-party product analytics collection. These signals do not disable essential authentication or security operations. Search Console reports aggregate Google Search results rather than collecting visits in your browser.</p>
+      <h2>Cookieless traffic analytics</h2>
+      <p>Our development site uses GoatCounter for traffic measurement. It receives an allowlisted public page path, a fixed title, the referring site's origin when available, screen width, and bot indicators. Query strings, URL fragments, invite codes, account details, and bracket selections are excluded. GoatCounter also receives the IP address and browser headers needed to process its network request and can derive browser, operating system, approximate location, and language statistics.</p>
+      <p>GoatCounter does not set analytics cookies or store visitor identifiers on your device. Its <a href="https://www.goatcounter.com/help/sessions" rel="noreferrer">cookieless session model</a> temporarily maps the site, IP address, and browser User-Agent to a random session identifier in memory for up to eight hours. IP addresses and full User-Agent headers are not stored in its analytics database. The session estimate is not a permanent person identifier; shared networks and matching browsers can merge visitors, while network or browser changes can count someone again.</p>
+      <p>With Individual pageviews enabled, GoatCounter retains pageview records with random session identifiers according to the site's retention settings. The eight-hour limit applies to the temporary identifying link, not deletion of historical pageviews. Our private dashboard processes exports in server memory to calculate distinct sessions, pageviews, daily trends, page totals, and estimated elapsed session duration. Raw session identifiers are never sent to the dashboard browser or written to our logs or report cache. Time after the last recorded pageview cannot be measured. Learn more in <a href="https://www.goatcounter.com/help/privacy" rel="noreferrer">GoatCounter's privacy policy</a>.</p>
+      <h2>First-party product analytics and Google Search</h2>
+      <p>We use AWS to count sign-ins, accounts created and deleted, brackets created, completed and saved by type (NFL or NBA), groups created, and group joins including invite joins. Only fixed event names, allowlisted public page paths, environment, and bracket type are retained for these measurements. We do not attach account IDs, emails, IP addresses, browser identifiers, invite codes, or individual picks. The dashboard shows aggregate daily counts and totals. These are browser-reported actions and may undercount because of privacy signals, blockers, or network failures; they are not authoritative account database totals.</p>
+      <p>Google Search Console supplies aggregate clicks, impressions, click-through rate, average position, daily history, and breakdowns by search query, page, country, and device for the connected predictplayoffs.com property. We read these performance reports on the server; no Google tracking script, analytics cookie, or localStorage is added to the site. Google may omit anonymized queries and delay recent reports.</p>
       <h2>Service providers</h2>
-      <p>We use third-party service providers for hosting, data storage, authentication, email delivery, security, and monitoring.</p>
-      <p>With your permission, Google Analytics 4 measures site traffic and actions, and Microsoft Clarity provides heatmaps and masked session recordings. These analytics services receive basic information about your browser and visit.</p>
-      <p>Learn how <a href="https://policies.google.com/technologies/partner-sites" rel="noreferrer">Google uses information from sites that use its services</a> and read the <a href="https://privacy.microsoft.com/privacystatement" rel="noreferrer">Microsoft Privacy Statement</a>.</p>
-      <p>On our development site only, we use GoatCounter to measure page visits independently of the optional analytics cookie choice, including when you decline. GoatCounter receives the public page path, a fixed page title, the referring site's origin when available, and screen width and bot indicators. We exclude query strings, URL fragments, invite codes, account details, and bracket selections from these measurements. GoatCounter also receives the IP address and browser request headers needed to handle the request and can derive browser and operating system, approximate location, and language statistics.</p>
-      <p>GoatCounter does not set analytics cookies or store visitor identifiers on your device. According to its <a href="https://www.goatcounter.com/help/privacy" rel="noreferrer">privacy policy</a>, it temporarily uses IP address and browser information in memory for up to eight hours to distinguish repeat visits, without storing IP addresses or full User-Agent headers in its analytics database. Enable Global Privacy Control or Do Not Track in your browser to disable GoatCounter on our development site.</p>
-      <p>With Individual pageviews enabled, GoatCounter stores individual pageview records with random session identifiers. The temporary link to IP and browser information lasts up to eight hours; historical records can retain the random identifier under the site's data retention settings. It is not a permanent person identifier. Our private development dashboard reads exports on the server to estimate distinct sessions across public pages. Raw session identifiers are processed in memory, never displayed or written to our logs or report cache; the dashboard receives only aggregate counts. Historical counts before individual pageview collection began are unavailable.</p>
+      <p>We use AWS and other providers for hosting, data storage, authentication, email delivery, security, and monitoring, alongside GoatCounter and Google Search Console for the measurements described above.</p>
       <h2>Public and group information</h2>
       <p>Your leaderboard name, scores, and saved brackets may be publicly visible where applicable. Private group information, including standings and past results, is visible to group members. Avoid putting personal information in leaderboard or group names.</p>
       <h2>Data retention and account deletion</h2>
@@ -83,7 +82,6 @@
       <nav class="footer-links" aria-label="Privacy and contact">
         <a href="/privacy">Privacy policy</a>
         <a href="mailto:contact@predictplayoffs.com">Contact</a>
-        <button class="cookie-preferences" type="button">Cookie preferences</button>
       </nav>
       <p>Predict Playoffs is an independent playoff prediction and bracket competition app. Not affiliated with the NFL or NBA.</p>
     </footer>

@@ -36,7 +36,7 @@ async function boot(options = {}) {
     URLSearchParams, AbortSignal, Intl, Date, Object, atob: value => Buffer.from(value, "base64").toString("utf8"),
     AUTH_CONFIG: { environment: options.environment || "dev", clientId: "same-existing-client", region: "us-east-1" },
     localStorage: storage(store), sessionStorage: storage(sessionStore),
-    document: { getElementById: id => elements.get(id), createElement: tag => new Element(tag) },
+    document: { getElementById: id => elements.get(id), createElement: tag => new Element(tag), createElementNS: (_ns, tag) => new Element(tag) },
     location: { replace: url => redirects.push(url) },
     addEventListener: (name, callback) => { listeners[name] = callback; },
     fetch: async (url, request) => {
@@ -49,10 +49,10 @@ async function boot(options = {}) {
       const status = options.forbidden ? 403 : options.invalidRange && provider === "analytics" ? 400 : options.failedProvider === provider ? 503 : 200;
       return { status, ok: status === 200, json: async () => provider === "analytics" ?
         options.invalidRange ? { message: "Choose up to 93 days within the past year." } :
-        { providers: ["custom", "goatcounter", "ga4", "search-console", "clarity"], environment: "dev" } :
+        { providers: ["custom", "goatcounter", "search-console"], environment: "dev" } :
         { provider, status: options.notConfigured === provider ? "not_configured" : "ok", metrics: [
           { label: provider === "custom" ? "<img onerror=secret>" : "Visits", value: 100, format: "number" },
-          { label: "Rage clicks", value: 2.5, format: "percent100" }], tables: [{ title: "Top pages",
+          { label: "CTR", value: .025, format: "percent" }], tables: [{ title: "Top pages",
           columns: [{ key: "page", label: "Page", format: "text" }], rows: [{ page: "<script>alert('private')</script>" }] }],
           range: { start: "2026-09-01", end: "2026-09-28", timezone: "UTC" },
           message: "Connect this provider using the setup guide.", ...options.reports?.[provider] } };
@@ -63,46 +63,6 @@ async function boot(options = {}) {
   await settle();
   return { elements, requests, redirects, store, listeners, context };
 }
-
-test("first-party daily visitors have an explicit source and keep UTC chronology", async () => {
-  const rows = Array.from({ length: 20 }, (_, index) => ({ day: `2026-09-${String(index + 1).padStart(2, "0")}`,
-    visitors: index === 6 ? null : 20 - index }));
-  const app = await boot({ reports: { custom: { metrics: [{ label: "First-party distinct visitors (last day)", value: 1,
-    note: "2026-09-20 UTC. Cookie-free estimate." }], tables: [{ title: "Daily distinct visitors", chart: "daily",
-    columns: [{ key: "day", label: "Day (UTC)", format: "text" }, { key: "visitors", label: "Distinct visitors", format: "number" }], rows }] } } });
-  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
-  const breakdown = section.children.find(node => node.className === "analytics-breakdowns").children[0];
-  const chart = breakdown.children.find(node => node.tag === "figure");
-  const bars = chart.children.find(node => node.tag === "ul").children;
-  assert.equal(bars.length, 13);
-  assert.match(bars[0].text, /2026-09-08/);
-  assert.match(bars.at(-1).text, /2026-09-20/);
-  assert.doesNotMatch(chart.text, /2026-09-07/);
-  assert.match(chart.text, /adding days does not give distinct visitors for the entire range/);
-  assert.match(breakdown.children.find(node => node.tag === "details").text, /2026-09-01/);
-  assert.match(section.text, /Dev only/);
-  assert.match(section.text, /First-party analytics \(AWS\)/);
-  assert.ok(app.requests.every(({ url }) => !url.startsWith("/api/analytics")));
-});
-
-test("GoatCounter unique visits use its own daily data and explain per-page deduplication", async () => {
-  const app = await boot({ reports: { goatcounter: { metrics: [
-    { label: "Unique visits (per page)", value: 3, note: "GoatCounter estimate." }], tables: [
-    { title: "Daily unique visits", chart: "goatcounter-daily", columns: [
-      { key: "day", label: "Day", format: "text" }, { key: "visits", label: "Unique visits", format: "number" }],
-      rows: [{ day: "2026-10-01", visits: 2 }, { day: "2026-10-02", visits: 1 }] }] } } });
-  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "goatcounter");
-  assert.match(section.text, /Unique visits \(per page\)/);
-  assert.match(section.text, /up to eight hours/);
-  assert.match(section.text, /not a unique person across the whole site/);
-  assert.match(section.text, /separate daily estimate from our own counter.*not the GoatCounter session metric/);
-  const chart = section.children.find(node => node.className === "analytics-breakdowns").children[0].children[0];
-  const bars = chart.children.find(node => node.tag === "ul").children;
-  assert.match(bars[0].text, /2026-10-01.*2/);
-  assert.match(bars[1].text, /2026-10-02.*1/);
-  assert.match(chart.text, /GoatCounter account timezone/);
-  assert.doesNotMatch(chart.text, /UTC|Each day deduplicates separately/);
-});
 
 test("Today preset selects the current UTC day without changing completed-day presets", async () => {
   const app = await boot();
@@ -130,14 +90,14 @@ test("signed-out, non-admin, lookalike groups and production redirect without an
 
 test("admins verify access server-side before revealing reports and send existing Cognito bearer token", async () => {
   const app = await boot();
-  assert.equal(app.requests.length, 6);
+  assert.equal(app.requests.length, 4);
   assert.match(app.requests[0].url, /^\/api\/admin\/analytics\?start=\d{4}-\d{2}-\d{2}&end=/);
   assert.ok(app.requests.every(({ url, request }) => url.startsWith("/api/admin/analytics") &&
     request.headers.Authorization.startsWith("Bearer ") && request.cache === "no-store" &&
     request.credentials === "omit" && request.referrerPolicy === "no-referrer"));
   assert.equal(app.elements.get("analytics-main").hidden, false);
-  assert.match(app.elements.get("analytics-status").textContent, /5 of 5/);
-  assert.equal(app.elements.get("analytics-reports").children.length, 5);
+  assert.match(app.elements.get("analytics-status").textContent, /3 of 3/);
+  assert.equal(app.elements.get("analytics-reports").children.length, 3);
 });
 
 test("expired sessions refresh through the existing client and persist the compatible session format", async () => {
@@ -172,13 +132,13 @@ test("browser history restoration rechecks authorization and clears stale privat
   assert.equal(app.elements.get("analytics-reports").children.length, 0);
   await settle();
   assert.deepEqual(app.redirects, ["/"]);
-  assert.equal(app.requests.length, 6);
+  assert.equal(app.requests.length, 4);
 });
 
 test("rejected date updates remove stale reports and show an actionable error", async () => {
   const options = {};
   const app = await boot(options);
-  assert.equal(app.elements.get("analytics-reports").children.length, 5);
+  assert.equal(app.elements.get("analytics-reports").children.length, 3);
   options.invalidRange = true;
   await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
   assert.equal(app.elements.get("analytics-reports").children.length, 0);
@@ -188,16 +148,16 @@ test("rejected date updates remove stale reports and show an actionable error", 
 });
 
 test("one failing provider leaves other reports readable and setup states visible", async () => {
-  const app = await boot({ failedProvider: "ga4", notConfigured: "clarity" });
+  const app = await boot({ failedProvider: "goatcounter", notConfigured: "search-console" });
   assert.equal(app.redirects.length, 0);
-  assert.match(app.elements.get("analytics-status").textContent, /3 of 5/);
+  assert.match(app.elements.get("analytics-status").textContent, /1 of 3/);
   const reports = app.elements.get("analytics-reports").children;
-  assert.match(reports.find(section => section.dataset.provider === "ga4").text, /Unavailable/);
-  assert.match(reports.find(section => section.dataset.provider === "clarity").text, /Set up this provider/);
+  assert.match(reports.find(section => section.dataset.provider === "goatcounter").text, /Unavailable/);
+  assert.match(reports.find(section => section.dataset.provider === "search-console").text, /Set up this provider/);
   assert.match(reports.find(section => section.dataset.provider === "custom").text, /100/);
 });
 
-test("provider strings render only as text and Clarity percentages keep their 0–100 scale", async () => {
+test("provider strings render only as text and percentages are formatted accurately", async () => {
   const app = await boot();
   const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "custom");
   assert.match(section.text, /<img onerror=secret>/);
@@ -214,7 +174,7 @@ test("range selection updates reports without calling any public analytics endpo
   const finish = app.elements.get("analytics-end").value;
   assert.equal((new Date(finish) - new Date(begin)) / 86400000, 6);
   await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
-  assert.equal(app.requests.length, 12);
+  assert.equal(app.requests.length, 8);
   assert.ok(app.requests.at(-1).url.includes(`start=${begin}&end=${finish}`));
   assert.ok(app.requests.every(request => !request.url.includes("/api/analytics?")));
 });
@@ -233,33 +193,6 @@ test("sign-out and session removal in another tab clear private data", async () 
 
 function nodes(node) { return [node, ...node.children.flatMap(nodes)]; }
 
-test("GoatCounter site-wide sessions and per-page visits retain distinct definitions", async () => {
-  const app = await boot({ reports: { goatcounter: { metrics: [
-    { label: "Distinct visitors (GoatCounter sessions)", value: 2, note: "Cookieless short-lived session estimate; initial day is partial." },
-    { label: "Unique visits (per page)", value: 7, note: "Repeat visits to a page count once." },
-  ], tables: [] } } });
-  const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
-  assert.match(section.text, /Distinct visitors \(GoatCounter sessions\).*2/);
-  assert.match(section.text, /Unique visits \(per page\).*7/);
-  assert.match(section.text, /cookieless short-lived session estimate, not a permanent person ID/i);
-  assert.match(section.text, /all public pages and all selected UTC dates/);
-  assert.match(section.text, /never displayed.*at most hourly/);
-  assert.match(section.text, /before Individual pageviews was enabled are unavailable/);
-});
-
-test("every provider explains data coverage rather than assuming the dev dashboard means dev data", async () => {
-  const app = await boot();
-  const reports = app.elements.get("analytics-reports").children;
-  const provider = name => reports.find(section => section.dataset.provider === name);
-  assert.match(provider("custom").text, /Dev only.*not production totals/);
-  assert.match(provider("goatcounter").text, /Dev only.*either consent choice/);
-  assert.match(provider("search-console").text, /Production domain.*sc-domain:predictplayoffs.com/);
-  assert.match(provider("ga4").text, /Property wide.*without a hostname filter/);
-  assert.match(provider("clarity").text, /Project wide.*browser dashboard filters do not apply/);
-  assert.match(provider("goatcounter").text, /not a unique person across the whole site/);
-  assert.match(provider("goatcounter").text, /can't|cannot isolate visitors who declined/);
-});
-
 test("ranked charts use returned counts, retain table data, and keep provider strings inert", async () => {
   const rows = [
     { page: "<img onerror=secret>", visits: 10 }, { page: "/picks", visits: 5 },
@@ -277,29 +210,44 @@ test("ranked charts use returned counts, retain table data, and keep provider st
   assert.match(section.text, /View data · Top pages/);
 });
 
-test("engagement charts normalize percentage scales, clamp bars and never turn missing data into zero", async () => {
-  const app = await boot({ reports: { ga4: { metrics: [
-    { label: "Engagement rate", value: 0.25, format: "percent" },
-    { label: "Missing rate", value: null, format: "percent" },
-    { label: "Unavailable rate", value: "", format: "percent" },
-  ], tables: [] }, clarity: { metrics: [
-    { label: "Rage clicks", value: 2.5, format: "percent100" },
-    { label: "Out of range", value: 120, format: "percent100" },
-  ], tables: [] } } });
-  const reports = app.elements.get("analytics-reports").children;
-  const ga = nodes(reports.find(section => section.dataset.provider === "ga4")).find(node => node.className === "analytics-chart");
-  assert.match(ga.text, /0–100%.*Engagement rate.*25%/);
-  assert.doesNotMatch(ga.text, /Missing rate|Unavailable rate/);
-  assert.equal(nodes(ga).find(node => node.className === "analytics-bar-fill").style.width, "25%");
-  const clarity = reports.find(section => section.dataset.provider === "clarity");
-  assert.deepEqual(nodes(clarity).filter(node => node.className === "analytics-bar-fill").map(node => node.style.width), ["2.5%", "100%"]);
-  assert.match(clarity.text, /120%/);
-});
-
 test("empty provider tables show no invented chart or sample traffic", async () => {
   const app = await boot({ reports: { goatcounter: { tables: [{ title: "Top pages",
     columns: [{ key: "page", label: "Page", format: "text" }, { key: "visits", label: "Page visits", format: "number" }], rows: [] }] } } });
   const section = app.elements.get("analytics-reports").children.find(section => section.dataset.provider === "goatcounter");
   assert.equal(nodes(section).filter(node => node.className === "analytics-chart").length, 0);
   assert.match(section.text, /No data reported for this range/);
+});
+
+test("exactly three sections appear in task order with explicit source coverage", async () => {
+  const app = await boot();
+  const reports = app.elements.get("analytics-reports").children;
+  assert.deepEqual(reports.map(node => node.dataset.provider), ["goatcounter", "custom", "search-console"]);
+  assert.match(reports[0].text, /Traffic.*Dev traffic.*GoatCounter/);
+  assert.match(reports[1].text, /PredictPlayoffs activity.*First-party AWS/);
+  assert.match(reports[2].text, /Google Search.*Production domain/);
+});
+test("daily charts keep all 93 days, gaps, exact data and correct running totals", async () => {
+  const rows = Array.from({ length: 93 }, (_, i) => ({ day: `day-${i}`, actions: i === 2 ? null : 1 }));
+  const app = await boot({ reports: { custom: { tables: [{ title: "Daily activity", chart: "trend", series: ["actions"],
+    columns: [{ key: "day", label: "Day", format: "text" }, { key: "actions", label: "Actions", format: "number" }], rows }] } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "custom");
+  const figures = nodes(section).filter(node => node.tag === "figure");
+  assert.equal(figures.length, 2);
+  assert.equal(nodes(figures[0]).filter(node => node.tag === "circle").length, 92);
+  assert.equal(nodes(figures[0]).filter(node => node.tag === "polyline").length, 2);
+  assert.match(figures[1].text, /day-92: 92/);
+  assert.equal(nodes(section).find(node => node.tag === "tbody").children.length, 93);
+});
+test("daily metric controls change charts and never sum distinct sessions or rates", async () => {
+  const app = await boot({ reports: { goatcounter: { tables: [{ title: "Daily traffic", chart: "trend", series: ["pageviews"],
+    columns: [{ key: "day", label: "Day", format: "text" }, { key: "sessions", label: "Distinct sessions", format: "number" },
+      { key: "pageviews", label: "Pageviews", format: "number" }],
+    rows: [{ day: "2026-10-01", sessions: 2, pageviews: 3 }, { day: "2026-10-02", sessions: 2, pageviews: 4 }] }] } } });
+  const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "goatcounter");
+  const select = nodes(section).find(node => node.tag === "select");
+  assert.equal(nodes(section).filter(node => node.tag === "figure").length, 2);
+  select.value = "sessions"; select.listeners.change();
+  assert.equal(nodes(section).filter(node => node.tag === "figure").length, 1);
+  assert.match(section.text, /Daily distinct sessions/);
+  assert.doesNotMatch(section.text, /Running distinct sessions/);
 });

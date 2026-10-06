@@ -307,7 +307,7 @@ function buildBracket() {
 
   if (!state.bracketBuilt) {
     state.picks = createEmptyPicks();
-    window.siteAnalytics?.track("bracket_started");
+    window.siteAnalytics?.track("bracket_created", { bracketType: SPORT });
   }
   state.bracketBuilt = true;
   state.savedAt = null;
@@ -534,7 +534,7 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   renderBracket();
 
   if (!wasComplete && allGamesPicked()) {
-    window.siteAnalytics?.track("bracket_completed");
+    window.siteAnalytics?.track("bracket_completed", { bracketType: SPORT });
   }
 
   const hasBothFinalists = Boolean(
@@ -630,7 +630,7 @@ async function savePrediction() {
     });
     state.savedAt = saved.savedAt;
     state.savedPrediction = saved;
-    window.siteAnalytics?.track("prediction_saved");
+    window.siteAnalytics?.track("prediction_saved", { bracketType: SPORT });
     updateSaveState(true);
     renderSavedPrediction();
     if (elements.leaderboardBody) await loadLeaderboard();

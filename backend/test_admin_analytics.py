@@ -147,25 +147,10 @@ class AdminTests(unittest.TestCase):
             self.assertEqual(admin.handler(event("custom"), None)["statusCode"], 200)
             self.assertEqual(json.loads(admin.handler(event("goatcounter"), None)["body"])["cached"], True)
 
-    def test_clarity_uses_one_shared_six_hour_cache_even_when_dates_change_or_api_fails(self):
-        for error in (False, True):
-            self.cache.items.clear()
-            fake = Mock(side_effect=RuntimeError("token") if error else None,
-                        return_value={"metrics": [], "tables": []})
-            with patch.object(admin, "settings", return_value={}), patch.dict(admin.PROVIDERS, clarity=fake):
-                first = event("clarity")
-                self.assertEqual(admin.handler(first, None)["statusCode"], 200)
-                second = event("clarity")
-                second["queryStringParameters"]["start"] = str(date.today() - timedelta(days=28))
-                self.assertTrue(json.loads(admin.handler(second, None)["body"])["cached"])
-                self.assertEqual(fake.call_count, 1)
-                cached = next(iter(self.cache.items.values()))
-                self.assertGreater(cached["freshUntil"] - int(time.time()), 21500)
-
     def test_cache_lease_prevents_concurrent_provider_requests(self):
         request = event("custom")
         params = request["queryStringParameters"]
-        self.cache.items[f"v3:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
+        self.cache.items[f"v4:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
         with patch.dict(admin.PROVIDERS, custom=Mock()) as adapter:
             result = admin.handler(request, None)
             self.assertEqual(json.loads(result["body"])["status"], "updating")
@@ -173,12 +158,12 @@ class AdminTests(unittest.TestCase):
 
     def test_cache_expiry_and_missing_configuration(self):
         with patch.object(admin, "settings", return_value={}), patch.dict(admin.PROVIDERS,
-             ga4=Mock(side_effect=providers.NotConfigured)):
-            result = admin.handler(event("ga4"), None)
+             goatcounter=Mock(side_effect=providers.NotConfigured)):
+            result = admin.handler(event("goatcounter"), None)
             self.assertEqual(json.loads(result["body"])["status"], "not_configured")
             next(iter(self.cache.items.values()))["freshUntil"] = 0
-            admin.handler(event("ga4"), None)
-            self.assertEqual(admin.PROVIDERS["ga4"].call_count, 2)
+            admin.handler(event("goatcounter"), None)
+            self.assertEqual(admin.PROVIDERS["goatcounter"].call_count, 2)
 
     def test_pending_goatcounter_export_short_cache_hint_is_internal_and_admin_only(self):
         adapter = Mock(return_value={"metrics": [{"label": "Distinct visitors (GoatCounter sessions)",
@@ -202,183 +187,57 @@ class ProviderTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
 
-    def test_custom_totals_keep_consent_ids_separate_and_combine_join_events(self):
-        def results(query, _start, _end):
-            if "by event" in query:
-                return [{"event": "page_view", "count": "15", "visitors": "3", "visits": "5"},
-                        {"event": "group_joined", "count": "2"}, {"event": "group_invite_joined", "count": "4"}]
-            return [{"page": "/picks?invite=secret#private", "pageviews": "10"}]
-        with patch.object(providers, "cloudwatch_query", side_effect=results), \
-             patch.object(providers.daily_visitors, "report", return_value=[{"day": str(self.end), "visitors": 9}]):
+    def test_activity_daily_totals_types_and_historical_events(self):
+        rows = [{"day": "2026-10-01 00:00:00.000", "event": "bracket_created", "bracketType": "nba", "count": "2"},
+                {"day": "2026-10-02 00:00:00.000", "event": "bracket_started", "bracketType": "unknown", "count": "3"},
+                {"day": "2026-10-02 00:00:00.000", "event": "account_deleted", "count": "1"},
+                {"day": "2026-10-01", "event": "group_invite_joined", "count": "4"},
+                {"day": "2026-10-01", "event": "page_view", "count": "900"}]
+        with patch.object(providers, "cloudwatch_query", return_value=rows) as query:
             result = providers.custom({}, self.start, self.end)
-        counts = {item["label"]: item["value"] for item in result["metrics"]}
-        self.assertEqual(counts["Pageviews"], 15)
-        self.assertEqual(counts["Visitors with consent"], 3)
-        self.assertEqual(counts["Groups joined"], 6)
-        self.assertEqual(counts["First-party distinct visitors (last day)"], 9)
-        self.assertEqual(result["tables"][0]["chart"], "daily")
-        self.assertNotIn("secret", json.dumps(result))
-
-    def test_daily_counter_read_failure_does_not_break_cloudwatch_or_leak_error(self):
-        with patch.object(providers, "cloudwatch_query", return_value=[]), \
-             patch.object(providers.daily_visitors, "report", side_effect=RuntimeError("SECRET-IP")):
-            result = providers.custom({}, self.start, self.end)
-        self.assertIsNone(result["metrics"][0]["value"])
-        self.assertEqual(result["metrics"][1]["value"], 0)
-        self.assertNotIn("SECRET", json.dumps(result))
-
-    def test_goatcounter_unique_visits_are_provider_counts_with_per_page_scope(self):
-        def answer(url, token):
-            self.assertEqual(token, "server-secret")
-            query = parse_qs(urlsplit(url).query)
-            self.assertEqual(query["start"], ["2026-10-01T00:00:00Z"])
-            self.assertEqual(query["end"], ["2026-10-04T23:00:00Z"])
-            if "/total?" in url:
-                # GoatCounter rejects unknown query parameters with HTTP 400.
-                self.assertEqual(set(query), {"start", "end"})
-                return {"total": 14, "total_events": 2, "stats": [
-                    {"day": "2026-10-04", "daily": 9}, {"day": "2026-10-01", "daily": 5}]}
-            if "/hits?" in url:
-                self.assertEqual(query["limit"], ["10"])
-                return {"hits": [{"path_id": 1, "path": "/picks?invite=secret", "count": 12}]}
-            self.assertEqual(urlsplit(url).path, "/api/v0/stats/hits/1")
-            self.assertEqual(query["limit"], ["20"])
-            return {"refs": [{"name": "https://example.org/private?invite=secret", "count": 10}]}
-        with patch.object(providers, "http_json", side_effect=answer):
-            result = providers.goatcounter({"goatcounter": {"token": "server-secret"}}, self.start, self.end)
-        self.assertEqual(result["metrics"][0]["value"], 12)
-        self.assertEqual(result["metrics"][0]["label"], "Unique visits (per page)")
-        self.assertIn("not a site-wide count of distinct people", result["note"])
-        self.assertEqual(result["tables"][0]["rows"], [
-            {"day": "2026-10-01", "visits": 5}, {"day": "2026-10-04", "visits": 9}])
-        self.assertIn("including events", result["tables"][0]["title"])
-        self.assertEqual(result["tables"][2]["rows"][0]["source"], "https://example.org")
-        self.assertNotIn("server-secret", json.dumps(result))
-        self.assertNotIn("invite=secret", json.dumps(result))
-        with patch.object(providers, "http_json") as http:
-            with self.assertRaises(ValueError):
-                providers.goatcounter({"goatcounter": {"token": "secret", "site": "evil.example/"}}, self.start, self.end)
-            http.assert_not_called()
-
-    def test_goatcounter_empty_site_returns_zero_without_requesting_referrers(self):
-        def answer(url, _token):
-            query = parse_qs(urlsplit(url).query)
-            if urlsplit(url).path.endswith("/total"):
-                self.assertEqual(set(query), {"start", "end"})
-                return {"total": 0, "total_events": 0}
-            self.assertEqual(urlsplit(url).path, "/api/v0/stats/hits")
-            self.assertEqual(query["limit"], ["10"])
-            return {"hits": None}
-        with patch.object(providers, "http_json", side_effect=answer) as http:
-            result = providers.goatcounter({"goatcounter": {"token": "server-secret"}}, self.start, self.end)
-        self.assertEqual(http.call_count, 2)
-        self.assertEqual(result["metrics"][0]["value"], 0)
-        self.assertTrue(all(not item["rows"] for item in result["tables"]))
-
-    def test_goatcounter_null_referrers_do_not_hide_unique_visits(self):
-        def answer(url, _token):
-            if "/total?" in url:
-                return {"total": 1, "total_events": 0}
-            if "/hits?" in url:
-                return {"hits": [{"path_id": 1, "path": "/", "count": 1}]}
-            return {"refs": None}
-        with patch.object(providers, "http_json", side_effect=answer):
-            result = providers.goatcounter({"goatcounter": {"token": "private"}}, self.start, self.end)
-        self.assertEqual(result["metrics"][0]["value"], 1)
-        self.assertEqual(result["tables"][1]["rows"], [])
-
-    def test_goatcounter_populated_report_respects_four_requests_per_second(self):
-        clock = [0.0]
-        requests = []
-        def answer(url, _token):
-            requests.append(clock[0])
-            if "/total?" in url:
-                return {"total": 3, "total_events": 0}
-            if "/hits?" in url:
-                return {"hits": [{"path_id": i, "path": f"/{i}", "count": 1} for i in range(3)]}
-            return {"refs": []}
-        with patch.object(providers, "http_json", side_effect=answer), \
-             patch.object(providers.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(providers.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
-            result = providers.goatcounter({"goatcounter": {"token": "private"}}, self.start, self.end)
-        self.assertEqual(len(requests), 5)
-        self.assertGreaterEqual(requests[-1] - requests[0], 1.05)
-        self.assertEqual(result["metrics"][0]["value"], 3)
-
-    def test_goatcounter_retries_rate_limit_once_and_keeps_optional_failures_private(self):
-        calls = {}
-        def answer(url, _token):
-            path = urlsplit(url).path
-            calls[path] = calls.get(path, 0) + 1
-            if path.endswith("/total"):
-                if calls[path] == 1:
-                    raise HTTPError(url, 429, "private-provider-body", {}, None)
-                return {"total": 4, "total_events": 0}
-            if path.endswith("/hits"):
-                return {"hits": [{"path_id": 1, "path": "/", "count": 4}]}
-            raise HTTPError(url, 403, "private-provider-body", {}, None)
-        with patch.object(providers, "http_json", side_effect=answer), patch.object(providers.time, "sleep"):
-            result = providers.goatcounter({"goatcounter": {"token": "private-token"}}, self.start, self.end)
-        self.assertEqual(calls["/api/v0/stats/total"], 2)
-        self.assertEqual(calls["/api/v0/stats/hits/1"], 1)
-        self.assertEqual(result["metrics"][0]["value"], 4)
-        self.assertIn("Referrers are temporarily unavailable", result["note"])
-        self.assertEqual(result["tables"][1]["rows"], [])
-        self.assertNotIn("private", json.dumps(result))
-
-    def test_goatcounter_required_stats_failure_is_not_reported_as_zero(self):
-        def answer(url, _token):
-            raise HTTPError(url, 403, "private-provider-body", {}, None)
-        with patch.object(providers, "http_json", side_effect=answer) as http:
-            with self.assertRaises(HTTPError):
-                providers.goatcounter({"goatcounter": {"token": "private"}}, self.start, self.end)
-        # The executor may cancel the second request when the first fails.
-        self.assertIn(http.call_count, [1, 2])
-        self.assertEqual(len({urlsplit(call.args[0]).path for call in http.call_args_list}), http.call_count)
-
-    def test_ga4_uses_batch_reports_with_read_only_metrics_and_server_token(self):
-        def report(names, values, dimension=None):
-            return {"metricHeaders": [{"name": name} for name in names],
-                    "dimensionHeaders": [{"name": dimension}] if dimension else [],
-                    "rows": [{"metricValues": [{"value": str(value)} for value in values],
-                              "dimensionValues": [{"value": "/picks?invite=secret"}] if dimension else []}]}
-        reports = [report(["sessions", "keyEvents", "engagementRate"], [10, 2, .6]),
-                   report(["screenPageViews"], [20], "pagePath"), report(["sessions"], [10], "sessionSourceMedium")]
-        with patch.object(providers, "google_token", return_value="server-token"), patch.object(providers, "http_json", return_value={"reports": reports}) as http:
-            result = providers.ga4({"ga4": {"property_id": "12345"}}, self.start, self.end)
-        request_url, token, body = http.call_args.args
-        self.assertTrue(request_url.endswith("properties/12345:batchRunReports"))
-        self.assertEqual(token, "server-token")
-        self.assertEqual(len(body["requests"]), 3)
-        self.assertEqual(result["tables"][0]["rows"][0]["page"], "/picks")
-        self.assertNotIn("server-token", json.dumps(result))
-
-    def test_search_console_uses_aggregate_ctr_position_instead_of_averaging_page_rows(self):
-        responses = [{"rows": [{"clicks": 10, "impressions": 200, "ctr": .05, "position": 3.2}]},
-                     {"rows": [{"keys": ["https://example.org/picks?invite=secret"], "clicks": 8,
-                                "impressions": 100, "ctr": .08, "position": 2.1}]}]
-        with patch.object(providers, "google_token", return_value="token"), patch.object(providers, "http_json", side_effect=responses) as http:
-            result = providers.search_console({"search_console": {"site_url": "sc-domain:example.org"}}, self.start, self.end)
-        self.assertIn("sc-domain%3Aexample.org", http.call_args_list[0].args[0])
+        self.assertEqual(query.call_count, 1)
         metrics = {item["label"]: item["value"] for item in result["metrics"]}
-        self.assertEqual(metrics["Average position"], 3.2)
-        self.assertEqual(metrics["Click-through rate"], .05)
-        self.assertNotIn("invite=secret", json.dumps(result))
+        self.assertEqual(metrics["Brackets created"], 5)
+        self.assertEqual(metrics["Accounts deleted"], 1)
+        self.assertEqual(metrics["Invite joins"], 4)
+        days = result["tables"][0]["rows"]
+        self.assertEqual(len(days), 4)
+        self.assertEqual([row["total"] for row in days], [6, 4, 0, 0])
+        self.assertEqual(days[-1]["cumulative"], 10)
+        kinds = {row["bracketType"]: row for row in result["tables"][1]["rows"]}
+        self.assertEqual(kinds["NBA"]["bracket_created"], 2)
+        self.assertEqual(kinds["Historical / unknown"]["bracket_created"], 3)
 
-    def test_clarity_reports_only_supported_aggregate_fields_and_percentage_units(self):
-        body = [{"metricName": "Traffic", "information": [{"totalSessionCount": "100", "distinctUserCount": "70"}]},
-                {"metricName": "RageClickCount", "information": [{"sessionsWithMetricPercentage": 2.5}]},
-                {"metricName": "DeadClickCount", "information": [{"sessionsWithMetricPercentage": 12}]},
-                {"metricName": "EngagementTime", "information": [{"activeTime": "80"}]}]
-        with patch.object(providers, "http_json", return_value=body) as http:
-            result = providers.clarity({"clarity": {"token": "secret"}}, self.start, self.end)
-        self.assertIn("numOfDays=3", http.call_args.args[0])
-        self.assertNotIn("dimension1", http.call_args.args[0])
-        metrics = {item["label"]: item for item in result["metrics"]}
-        self.assertEqual(metrics["Visits with rage clicks"]["format"], "percent100")
-        self.assertEqual(metrics["Visits with rage clicks"]["value"], 2.5)
-        self.assertNotIn("Total engagement time", metrics)
-        self.assertEqual(result["range"]["window"], "Latest 72 hours at retrieval")
+    def test_search_totals_daily_and_all_breakdowns(self):
+        def answer(url, token, body):
+            self.assertEqual(token, "SERVER-SECRET")
+            self.assertEqual(body["dataState"], "final")
+            dimension = (body.get("dimensions") or [None])[0]
+            entry = {"clicks": 10, "impressions": 200, "ctr": .05, "position": 3.2}
+            if dimension is not None:
+                entry["keys"] = [{"date": "2026-10-01", "page": "https://example.org/picks?invite=PRIVATE"}.get(dimension, "test")]
+            return {"rows": [entry]}
+        with patch.object(providers, "google_token", return_value="SERVER-SECRET"), patch.object(providers, "http_json", side_effect=answer) as http:
+            result = providers.search_console({"search_console": {"site_url": "sc-domain:example.org"}}, self.start, self.end)
+        self.assertEqual(http.call_count, 6)
+        self.assertEqual({tuple(call.args[2].get("dimensions", [])) for call in http.call_args_list},
+                         {(), ("date",), ("query",), ("page",), ("country",), ("device",)})
+        self.assertEqual(result["metrics"][2]["value"], .05)
+        self.assertEqual(result["metrics"][3]["value"], 3.2)
+        self.assertEqual(result["tables"][0]["rows"][0]["cumulative"], 10)
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        self.assertNotIn("SERVER-SECRET", json.dumps(result))
+
+    def test_goatcounter_fallback_is_not_mislabeled_pageviews(self):
+        def answer(url, token):
+            return {"total": 5, "total_events": 1} if "/total?" in url else {"hits": [{"path": "/", "count": 4}, {"path": "/private?secret", "count": 100}]}
+        with patch.object(providers, "http_json", side_effect=answer):
+            report = providers.goatcounter({"goatcounter": {"token": "secret"}}, self.start, self.end)
+        values = {item["label"]: item["value"] for item in report["metrics"]}
+        self.assertEqual(values["Unique visits per page"], 4)
+        self.assertIsNone(values["Pageviews"])
+        self.assertIsNone(values["Distinct visitors / sessions"])
+        self.assertNotIn("private", json.dumps(report))
 
     def test_google_service_account_uses_only_readonly_scopes_and_fixed_token_endpoint(self):
         # Exercise the real Google library's constructor contract, no network.
@@ -398,7 +257,7 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(providers.google_token(), "server-only")
         info = constructor.call_args.args[0]
         self.assertEqual(info["token_uri"], "https://oauth2.googleapis.com/token")
-        self.assertTrue(all(scope.endswith(".readonly") for scope in constructor.call_args.kwargs["scopes"]))
+        self.assertEqual(constructor.call_args.kwargs["scopes"], ["https://www.googleapis.com/auth/webmasters.readonly"])
         self.assertTrue(parameter.get_parameter.call_args.kwargs["WithDecryption"])
         fake.refresh.assert_called_once()
 

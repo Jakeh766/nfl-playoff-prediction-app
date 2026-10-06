@@ -19,7 +19,7 @@ class BrowserSecurityTests(unittest.TestCase):
     def setUpClass(cls):
         assets = re.search(r'  frontend_files = merge\(\{.*?\n  \} : \{\}\)', CONFIG, re.S)[0]
         rendering = re.search(r'locals \{\n  # One content-derived release version.*?\n\}', CONFIG, re.S)[0]
-        security = re.search(r'locals \{\n  # Bare host sources.*?\n\}', CONFIG, re.S)[0]
+        security = re.search(r'locals \{\n  analytics_connections.*?\n\}', CONFIG, re.S)[0]
         fixture = 'variable "frontend_dir" { default = ' + json.dumps((ROOT / "frontend").as_posix()) + ' }\n'
         fixture += 'variable "environment" { default = "dev" }\nvariable "aws_region" { default = "us-east-1" }\n'
         fixture += 'locals {\n' + assets + '\n}\n' + rendering + '\n' + security
@@ -65,14 +65,9 @@ class BrowserSecurityTests(unittest.TestCase):
             self.assertIn("https://cognito-idp.us-east-1.amazonaws.com", directives["connect-src"])
             self.assertIn("'self'", directives["connect-src"])
             self.assertIn("https://a.espncdn.com", directives["img-src"])
-            for domain in ("https://www.googletagmanager.com", "https://www.clarity.ms", "https://scripts.clarity.ms"):
-                self.assertIn(domain, directives["script-src"])
-            for domain in ("https://www.google-analytics.com", "https://region1.google-analytics.com",
-                           "https://analytics.google.com", "https://www.google.com", "https://c.bing.com"):
-                self.assertIn(domain, directives["connect-src"])
-            for letter in "abcdefghijklmnopqrstuvwxyz":
-                for directive in ("connect-src", "img-src"):
-                    self.assertIn(f"{letter}.clarity.ms", directives[directive])
+            self.assertEqual(directives["img-src"], {"'self'", "https://a.espncdn.com"})
+            self.assertEqual(directives["connect-src"], {"'self'", "https://cognito-idp.us-east-1.amazonaws.com"} |
+                             ({"https://predictplayoffs.goatcounter.com"} if env == "dev" else set()))
             self.assertEqual("https://gc.zgo.at" in directives["script-src"], env == "dev")
             self.assertEqual("https://predictplayoffs.goatcounter.com" in directives["connect-src"], env == "dev")
 

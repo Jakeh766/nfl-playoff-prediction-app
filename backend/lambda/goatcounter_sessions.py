@@ -34,7 +34,7 @@ def timestamp(value):
     return parsed.astimezone(timezone.utc)
 
 
-def distinct_count(compressed, start, end, collected_from, expected_rows):
+def traffic_counts(compressed, start, end, collected_from, expected_rows):
     """All public paths, all rows (not just FirstVisit), one set for the whole range."""
     if len(compressed) > MAX_COMPRESSED:
         raise ExportUnavailable("Export exceeds the compressed size limit.")
@@ -56,7 +56,7 @@ def distinct_count(compressed, start, end, collected_from, expected_rows):
     indexes = [header.index(field) for field in ("2Path", "Event", "Session", "Bot", "Date")]
     begin = max(datetime.combine(start, datetime.min.time(), timezone.utc), collected_from)
     finish = datetime.combine(end + timedelta(days=1), datetime.min.time(), timezone.utc)
-    sessions = set()
+    sessions, days, pages = {}, {}, {}
     rows = 0
     for row in reader:
         if not row:
@@ -73,7 +73,8 @@ def distinct_count(compressed, start, end, collected_from, expected_rows):
         # plus query/fragment) must not contribute to the public visitor count.
         if event not in {"false", "0"} or bot != "0" or path not in PUBLIC_PATHS:
             continue
-        if not begin <= timestamp(created) < finish:
+        created_at = timestamp(created)
+        if not begin <= created_at < finish:
             continue
         # zint.Uint128.String uses two 64-bit hex halves separated by a dash.
         # Normalize the equivalent contiguous encoding without retaining IDs.
@@ -82,10 +83,22 @@ def distinct_count(compressed, start, end, collected_from, expected_rows):
         normalized = int(session.replace("-", ""), 16)
         if normalized == 0:
             raise ExportUnavailable("Export session information is missing or invalid.")
-        sessions.add(normalized)
+        day = created_at.date().isoformat()
+        days.setdefault(day, {"sessions": set(), "pageviews": 0})
+        days[day]["sessions"].add(normalized)
+        days[day]["pageviews"] += 1
+        pages[path] = pages.get(path, 0) + 1
+        first, last = sessions.get(normalized, (created_at, created_at))
+        sessions[normalized] = (min(first, created_at), max(last, created_at))
     if rows != expected_rows:
         raise ExportUnavailable("Export row count does not match the completed export.")
-    return len(sessions)
+    return {"sessions": len(sessions), "pageviews": sum(pages.values()), "pages": pages,
+            "duration": sum((last - first).total_seconds() for first, last in sessions.values()) / len(sessions) if sessions else None,
+            "daily": {day: {"sessions": len(counts["sessions"]), "pageviews": counts["pageviews"]} for day, counts in days.items()}}
+
+
+def distinct_count(compressed, start, end, collected_from, expected_rows):
+    return traffic_counts(compressed, start, end, collected_from, expected_rows)["sessions"]
 
 
 def export_snapshot(site, request):
@@ -132,35 +145,42 @@ def export_snapshot(site, request):
     return request(f"export/{export_id}/download", binary=True), metadata["num_rows"], timestamp(item["snapshotAt"])
 
 
-def report(settings, start, end, request):
+def report(settings, start, end, request, *, include_traffic=False):
     label = "Distinct visitors (GoatCounter sessions)"
     definition = ("Cookieless short-lived session estimate across all public pages for the selected UTC dates; "
                   "not a permanent person ID. The same session counts once across pages and days. "
                   "Returning after the eight-hour identification window can count again.")
     result = {"label": label, "value": None, "format": "number", "note": definition}
+    traffic = None
+    def finish(ttl):
+        return (result, ttl, traffic) if include_traffic else (result, ttl)
     if not settings.get("sessions_started_at"):
         result["note"] += " Enable Individual pageviews and Sessions, grant Export permission, and record sessions_started_at in dev configuration."
-        return result, 900
+        return finish(900)
     try:
         collected_from = timestamp(settings["sessions_started_at"])
-        if start < collected_from.date():
+        covered = start >= collected_from.date()
+        if not covered:
             result["note"] += f" Individual pageviews collection began {collected_from.isoformat()}; choose dates from {collected_from.date()} onward. Earlier site-wide counts cannot be reconstructed."
-            return result, 900
+            if not include_traffic:
+                return finish(900)
         snapshot = export_snapshot(settings.get("site", "predictplayoffs"), request)
         if snapshot is None:
             result["note"] += " The shared hourly export is preparing. Try again in 30 seconds."
-            return result, 30
+            return finish(30)
         compressed, rows, as_of = snapshot
         if as_of < collected_from:
             raise ExportUnavailable("The export predates Individual pageviews collection.")
-        result["value"] = distinct_count(compressed, start, end, collected_from, rows)
+        traffic = traffic_counts(compressed, start, end, collected_from, rows)
+        traffic.update(covered=covered, collectedFrom=collected_from.isoformat(), asOf=as_of.isoformat())
+        result["value"] = traffic["sessions"] if covered else None
         result["note"] += (f" Export requested {as_of.isoformat()}; refreshed at most hourly. "
                            "New pageviews can take a few minutes to reach an export. Events and identified bots excluded.")
         if start == collected_from.date():
             result["note"] += f" Initial collection day is partial, starting {collected_from.isoformat()}."
         if end >= as_of.date():
             result["note"] += " Current-day data is incomplete."
-        return result, 900
+        return finish(900)
     except HTTPError as error:
         # Only a fixed status number, never upstream body/URL/header or session ID.
         result["note"] += f" Session export unavailable (GoatCounter HTTP {int(error.code)}). Check Export permission; existing per-page metrics remain available."
@@ -168,4 +188,4 @@ def report(settings, start, end, request):
         result["note"] += f" Session export unavailable: {error} Existing per-page metrics remain available; no partial count is shown."
     except Exception:
         result["note"] += " Session export unavailable or incomplete; existing per-page metrics remain available. No partial count is shown."
-    return result, 60
+    return finish(60)

@@ -173,7 +173,7 @@ class SeoTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     [attrs for tag, attrs in controls if tag == "button"],
-                    [{"class": "cookie-preferences", "type": "button"}],
+                    [],
                 )
                 navigation = re.search(r'<nav class="footer-links".*?</nav>', footer, re.S)[0]
                 self.assertIn('class="footer-brand"', footer)
@@ -182,7 +182,7 @@ class SeoTests(unittest.TestCase):
                 self.assertIn("Call the season.", footer)
                 self.assertIn("Not affiliated with the NFL or NBA.", footer)
                 self.assertEqual(unescape(re.sub(r"<[^>]+>", " ", navigation)).split(),
-                                 ["Privacy", "policy", "Contact", "Cookie", "preferences"])
+                                 ["Privacy", "policy", "Contact"])
                 self.assertNotIn("about-predict-playoffs", page.html)
         self.assertTrue(Page("scoring.html").select("h2", id="scoring-reference"))
         self.assertTrue(Page("leaderboard.html").select("h2", id="standings-guide"))

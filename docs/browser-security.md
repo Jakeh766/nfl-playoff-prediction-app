@@ -56,14 +56,10 @@ Fonts; fonts come from self and fonts.gstatic.com. There is no `unsafe-inline`,
 `unsafe-eval`, or hostname wildcard. Existing dynamic visual styles use individual
 DOM style properties, which work with this policy.
 
-Resource sources are first-party assets/API, the regional Cognito API,
-a.espncdn.com team logos, Google Fonts, Google Analytics' explicitly listed
-non-advertising endpoints, and Microsoft's Clarity script/collection endpoints.
-The 26 Clarity collector hosts are listed individually without a scheme: host
-sources inherit HTTPS from the document, which CloudFront enforces. This keeps
-the policy within CloudFront's 1783-character limit without a wildcard. GoatCounter
-script and collection endpoints are allowed only on dev. The policy does not
-enable advertising, tag-manager preview, or arbitrary third-party scripts.
+Resource sources are first-party assets/API, regional Cognito, a.espncdn.com
+team logos and Google Fonts. Only dev additionally permits GoatCounter's script
+and collection endpoints. Removed optional analytics hosts are no longer allowed.
+There are no wildcards and the policy stays below CloudFront's size limit.
 
 Other headers are `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, and Permissions-Policy denying camera, microphone,
@@ -71,15 +67,12 @@ geolocation, payment, and USB. HSTS with max-age 31536000 is configured only for
 production custom domain, without includeSubDomains or preload. No production
 deployment is part of this change.
 
-GA4 and Clarity retain the existing explicit-consent, DNT, and GPC behavior.
-First-party events are allowlisted; optional identifiers are random and created
-only after consent. GA4 receives sanitized page URLs/referrers and fixed event
-fields, without account or bracket data. Clarity masks the page and skips URLs
-or referrers with fragments or unapproved query parameters. GoatCounter remains
-independent of optional consent on dev, respects DNT/GPC, and sends only sanitized
-aggregate page data. No error-reporting SDK is present. Provider JavaScript still
-has the origin's privileges: masking and sanitized events are not an isolation
-boundary against a compromised provider.
+First-party product events are allowlisted coarse counts without browser identifiers.
+GPC/DNT suppress product and GoatCounter collection. GoatCounter sends allowlisted
+public page data without query strings/fragments, cookies or authentication.
+No consent UI or analytics storage remains. Search Console is server-only.
+Provider JavaScript still has origin privileges; sanitized data is not an
+isolation boundary against compromise. No error-reporting SDK is present.
 
 ## Residual architectural risk
 
@@ -96,17 +89,12 @@ therefore remain usable at the API until its one-hour expiry, even after Cognito
 revocation. Immediate API revocation would require additional server-side checks
 or a different authorizer. See [AWS token revocation documentation](https://docs.aws.amazon.com/cognito/latest/developerguide/token-revocation.html).
 
-The domain allowlist follows [Google's non-advertising CSP guidance](https://developers.google.com/tag-platform/security/guides/csp)
-and [Microsoft's Clarity collector guidance](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-csp).
-Recheck it if either provider changes resource hosts or if advertising features
-are deliberately enabled in the future.
-
 ## Verification
 
 Run `scripts/check.ps1 -Scope All`. The tests exercise manipulated submissions
 without writes, valid NFL/NBA saves and reopen, all NFL Wild Card outcomes with
 reseeding, token persistence/refresh/revocation, token-sensitive errors, existing
-analytics consent, and real Terraform-rendered CSP hashes/domain lists for both
+cookieless analytics privacy, and real Terraform-rendered CSP hashes/domain lists for both
 environments. Terraform format/validate cover bootstrap, dev, and prod without
 applying infrastructure. Dev's GitHub Actions OIDC workflow supplies the live
 Terraform plan/apply; never run a local apply or broaden the audit role for it.

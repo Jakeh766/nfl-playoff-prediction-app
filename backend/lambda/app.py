@@ -31,19 +31,14 @@ PREDICTION_LOCK_AT = os.environ.get(
 )
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._'’-]*[A-Za-z0-9]")
-ANALYTICS_ID_PATTERN = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
-    re.IGNORECASE,
-)
 ANALYTICS_EVENTS = {
     "account_created",
-    "bracket_started",
+    "account_deleted",
+    "bracket_created",
     "bracket_completed",
-    "leaderboard_viewed",
     "group_created",
     "group_invite_joined",
     "group_joined",
-    "page_view",
     "prediction_saved",
     "sign_in",
 }
@@ -959,43 +954,21 @@ def record_analytics_event(event: dict) -> None:
     payload = parse_body(event)
     event_name = payload.get("event")
     page = payload.get("page")
-    session_id = payload.get("sessionId")
-    visitor_id = payload.get("visitorId")
-
+    bracket_type = payload.get("bracketType")
     if not isinstance(event_name, str) or event_name not in ANALYTICS_EVENTS:
         raise ValueError("Unknown analytics event")
     if not isinstance(page, str) or page not in ANALYTICS_PAGES:
         raise ValueError("Unknown analytics page")
-    if "sessionId" in payload and (
-        not isinstance(session_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(session_id)
-    ):
-        raise ValueError("Invalid analytics session")
-    if "visitorId" in payload and (
-        not isinstance(visitor_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(visitor_id)
-    ):
-        raise ValueError("Invalid analytics visitor")
-
-    if event_name == "page_view" and os.environ.get("ENVIRONMENT") == "dev":
-        # Optional daily counting must never interrupt public app requests.
-        try:
-            from daily_visitors import record
-            record(event)
-        except Exception:
-            print('{"type":"daily_visitors_unavailable","environment":"dev"}')
-
-    print(
-        json.dumps(
-            {
-                "type": "site_analytics",
-                "environment": os.environ.get("ENVIRONMENT"),
-                "event": event_name,
-                "page": page,
-                **({"sessionId": session_id} if session_id is not None else {}),
-                **({"visitorId": visitor_id} if visitor_id is not None else {}),
-            },
-            separators=(",", ":"),
-        )
-    )
+    bracket_event = event_name in {"bracket_created", "bracket_completed", "prediction_saved"}
+    if bracket_event and (not isinstance(bracket_type, str) or bracket_type not in {"nfl", "nba"}):
+        raise ValueError("Unknown bracket type")
+    headers = {key.lower(): value for key, value in (event.get("headers") or {}).items()}
+    if headers.get("sec-gpc") == "1" or headers.get("dnt") == "1":
+        return
+    # Only fixed coarse fields reach logs. Never retain browser/account identifiers.
+    print(json.dumps({"type": "site_analytics", "environment": os.environ.get("ENVIRONMENT"),
+                      "event": event_name, "page": page,
+                      **({"bracketType": bracket_type} if bracket_event else {})}, separators=(",", ":")))
 
 
 def validate_prediction(user_id: str, prediction: dict) -> dict:

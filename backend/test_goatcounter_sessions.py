@@ -71,6 +71,23 @@ class ExportCache:
 
 
 class SessionTests(unittest.TestCase):
+    def test_traffic_preserves_repeat_views_range_uniques_daily_uniques_and_elapsed_duration(self):
+        rows = [row(created="2026-10-05T23:50:00Z"),
+                row(path="/picks", created="2026-10-06T00:10:00Z", FirstVisit="0"),
+                row(path="/", created="2026-10-06T00:20:00Z", FirstVisit="0"),
+                row(session=SESSION_B, created="2026-10-06T10:00:00Z"),
+                row(path="/private", created="2026-10-06T11:00:00Z"),
+                row(Event="1"), row(Bot="1")]
+        result = sessions.traffic_counts(export(rows), START, END, COLLECTED, len(rows))
+        self.assertEqual(result["sessions"], 2)
+        self.assertEqual(result["pageviews"], 4)
+        self.assertEqual(result["pages"], {"/": 3, "/picks": 1})
+        self.assertEqual(result["duration"], 900)
+        self.assertEqual(result["daily"]["2026-10-05"], {"sessions": 1, "pageviews": 1})
+        self.assertEqual(result["daily"]["2026-10-06"], {"sessions": 2, "pageviews": 3})
+        for identifier in (SESSION_A, SESSION_B):
+            self.assertNotIn(identifier, json.dumps(result))
+
     def count(self, rows, start=START, end=END, collected=COLLECTED):
         return sessions.distinct_count(export(rows), start, end, collected, len(rows))
 
@@ -225,8 +242,8 @@ class SessionTests(unittest.TestCase):
             raise HTTPError(url, 403, "PRIVATE-TOKEN", {}, None)
         with patch.object(providers, "http_json", side_effect=stats):
             report = providers.goatcounter({"goatcounter": {**SETTINGS, "token": "PRIVATE-TOKEN"}}, START, END)
-        self.assertEqual(report["metrics"][0]["value"], 3)
-        self.assertIsNone(report["metrics"][1]["value"])
+        self.assertEqual(report["metrics"][-1]["value"], 3)
+        self.assertIsNone(report["metrics"][0]["value"])
         self.assertNotIn("PRIVATE-TOKEN", json.dumps(report))
 
     def test_public_path_allowlist_stays_aligned_with_tracking_loader(self):

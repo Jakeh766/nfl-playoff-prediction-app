@@ -10,10 +10,6 @@ locals {
       source       = "${var.frontend_dir}/goatcounter.js"
       content_type = "application/javascript; charset=utf-8"
     }
-    "analytics.js" = {
-      source       = "${var.frontend_dir}/analytics.js"
-      content_type = "application/javascript; charset=utf-8"
-    }
     "privacy" = {
       source       = "${var.frontend_dir}/privacy.html"
       content_type = "text/html; charset=utf-8"
@@ -766,190 +762,19 @@ resource "aws_cloudwatch_dashboard" "analytics" {
   count = contains(["dev", "prod"], var.environment) ? 1 : 0
 
   dashboard_name = "${local.resource_prefix}-analytics"
-  dashboard_body = jsonencode({
-    start          = "-P7D"
-    periodOverride = "inherit"
-    widgets = [
-      {
-        type   = "text"
-        x      = 0
-        y      = 0
-        width  = 24
-        height = 2
-        properties = {
-          markdown = "# Predict Playoffs — ${title(var.environment)} Analytics\nAggregate event totals include cookieless traffic. Visitor and session metrics include only events with consented IDs. GPC/DNT visits are excluded. Adjust the dashboard time range to explore a different window. Managed by Terraform."
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Unique visitors with IDs"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(visitorId)\n| stats count_distinct(visitorId) as uniqueVisitors"
-        }
-      },
-      {
-        type   = "log"
-        x      = 6
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Sessions with IDs"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(sessionId)\n| stats count_distinct(sessionId) as sessions"
-        }
-      },
-      {
-        type   = "log"
-        x      = 12
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Page views"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews"
-        }
-      },
-      {
-        type   = "log"
-        x      = 18
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Predictions saved"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"prediction_saved\"\n| stats count(*) as predictionsSaved"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 6
-        width  = 16
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Traffic over time"
-          view   = "timeSeries"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews by bin(1h)"
-        }
-      },
-      {
-        type   = "log"
-        x      = 16
-        y      = 6
-        width  = 8
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Popular pages"
-          view   = "pie"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as views by page\n| sort views desc"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 13
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Visitor conversion with IDs"
-          view   = "bar"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"account_created\", \"prediction_saved\"] and ispresent(visitorId)\n| stats count_distinct(visitorId) as visitors by event\n| sort visitors desc"
-        }
-      },
-      {
-        type   = "log"
-        x      = 12
-        y      = 13
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Engagement events"
-          view   = "bar"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\"\n| stats count(*) as events by event\n| sort events desc"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 20
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Recent sessions with IDs"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(sessionId)\n| stats count(*) as pageViews, count_distinct(page) as pages, min(@timestamp) as started, max(@timestamp) as lastSeen by sessionId\n| sort lastSeen desc\n| limit 20"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 27
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Sessions with IDs over time"
-          view   = "timeSeries"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\" and ispresent(sessionId)\n| stats count_distinct(sessionId) as sessions by bin(1h)"
-        }
-      },
-      {
-        type   = "log"
-        x      = 12
-        y      = 27
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Aggregate funnel events"
-          view   = "bar"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"bracket_started\", \"bracket_completed\", \"account_created\", \"prediction_saved\"]\n| stats count(*) as events by event\n| sort events desc"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 20
-        width  = 12
-        height = 7
-        properties = {
-          region  = var.aws_region
-          title   = "Backend health"
-          view    = "timeSeries"
-          period  = 300
-          stat    = "Sum"
-          stacked = false
-          metrics = [
-            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.backend.function_name],
-            [".", "Errors", ".", "."],
-          ]
-          yAxis = {
-            left = {
-              min       = 0
-              showUnits = false
-            }
-          }
-        }
-      },
-    ]
-  })
+  dashboard_body = jsonencode({ widgets = [
+    { type = "text", x = 0, y = 0, width = 24, height = 2, properties = {
+      markdown = "# Predict Playoffs — ${title(var.environment)} activity\nCookieless product event counts. GPC/DNT excluded. Traffic is reported by GoatCounter in the private dev admin dashboard."
+    } },
+    { type = "log", x = 0, y = 2, width = 24, height = 8, properties = {
+      region = var.aws_region, title = "Product activity totals", view = "table",
+      query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\" and event != \"leaderboard_viewed\"\n| stats count(*) as events by event, bracketType | sort events desc"
+    } },
+    { type = "log", x = 0, y = 10, width = 24, height = 8, properties = {
+      region = var.aws_region, title = "Daily product activity", view = "timeSeries",
+      query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\" and event != \"leaderboard_viewed\"\n| stats count(*) as events by bin(1d), event"
+    } }
+  ] })
 }
 
 resource "aws_lambda_permission" "api_gateway" {
@@ -1035,10 +860,6 @@ locals {
     environment = var.environment
     clientId    = aws_cognito_user_pool_client.browser.id
     region      = var.aws_region
-    analytics = {
-      ga4MeasurementId = var.ga4_measurement_id
-      clarityProjectId = var.clarity_project_id
-    }
   })};\n"
 }
 
@@ -1097,16 +918,7 @@ moved {
 }
 
 locals {
-  # Bare host sources inherit HTTPS from the document. Listing Clarity's 26
-  # load-balanced hosts explicitly keeps the CSP below CloudFront's size limit.
-  clarity_collectors = [for letter in split("", "abcdefghijklmnopqrstuvwxyz") : "${letter}.clarity.ms"]
-  analytics_connections = concat(
-    ["https://www.googletagmanager.com", "https://www.google-analytics.com",
-      "https://region1.google-analytics.com", "https://analytics.google.com",
-    "https://www.google.com", "https://www.clarity.ms", "https://c.bing.com"],
-    local.clarity_collectors,
-    var.environment == "dev" ? ["https://predictplayoffs.goatcounter.com"] : []
-  )
+  analytics_connections = var.environment == "dev" ? ["https://predictplayoffs.goatcounter.com"] : []
   structured_data_hashes = distinct(flatten([
     for html in values(local.frontend_pages) : [
       for block in regexall("(?s)<script type=\"application/ld\\+json\">(.*?)</script>", html) :
@@ -1115,12 +927,12 @@ locals {
   ]))
   content_security_policy = join("; ", [
     "default-src 'self'",
-    "script-src 'self' ${join(" ", local.structured_data_hashes)} https://www.googletagmanager.com https://www.clarity.ms https://scripts.clarity.ms${var.environment == "dev" ? " https://gc.zgo.at" : ""}",
+    "script-src 'self' ${join(" ", local.structured_data_hashes)}${var.environment == "dev" ? " https://gc.zgo.at" : ""}",
     "script-src-attr 'none'",
     "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "connect-src 'self' https://cognito-idp.${var.aws_region}.amazonaws.com ${join(" ", local.analytics_connections)}",
-    "img-src 'self' https://a.espncdn.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com https://www.clarity.ms https://c.bing.com ${join(" ", local.clarity_collectors)}",
+    "img-src 'self' https://a.espncdn.com",
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

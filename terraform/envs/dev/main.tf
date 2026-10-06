@@ -37,8 +37,6 @@ module "nfl_app" {
 
   aws_region                 = var.aws_region
   environment                = "dev"
-  ga4_measurement_id         = var.ga4_measurement_id
-  clarity_project_id         = var.clarity_project_id
   project_name               = var.project_name
   prediction_lock_at         = var.prediction_lock_at
   cache_ttl_seconds          = var.cache_ttl_seconds

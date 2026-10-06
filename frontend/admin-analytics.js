@@ -1,13 +1,10 @@
 (function initializeAdminAnalytics() {
   const sessionKey = "road-to-bowl.auth.session";
-  const names = { custom: "First-party analytics (AWS)", goatcounter: "GoatCounter",
-    ga4: "Google Analytics 4", "search-console": "Google Search Console", clarity: "Microsoft Clarity" };
+  const names = { goatcounter: "Traffic", custom: "PredictPlayoffs activity", "search-console": "Google Search" };
   const coverage = {
-    custom: ["Dev only", "Our daily cookie-free visitor estimates (DynamoDB) and development app events (CloudWatch). Accounts, sign-ins, brackets and groups are browser-reported activity, not production totals."],
-    goatcounter: ["Dev only", "Public development pages · predictplayoffs.goatcounter.com. Tracking runs with either consent choice, unless GPC or Do Not Track is enabled."],
-    ga4: ["Property wide", "Dev tracking is connected. This report reads the entire configured GA4 property without a hostname filter; any production traffic collected there is included too."],
-    "search-console": ["Production domain", "Google Search performance for sc-domain:predictplayoffs.com, including subdomains. The development CloudFront hostname is outside this property."],
-    clarity: ["Project wide", "Dev tracking is connected. This report reads the entire Clarity project; any production traffic collected there is included too. Clarity's browser dashboard filters do not apply here."],
+    goatcounter: ["Dev traffic", "GoatCounter · public development pages. Cookieless visitors/sessions and pageviews; GPC and Do Not Track exclude collection."],
+    custom: ["Dev activity", "First-party AWS · sign-ins, accounts, brackets and groups in the development app."],
+    "search-console": ["Production domain", "Search Console · sc-domain:predictplayoffs.com, including subdomains. The development CloudFront hostname is outside this property."],
   };
   const main = document.getElementById("analytics-main");
   const reports = document.getElementById("analytics-reports");
@@ -112,38 +109,97 @@
     if (note) figure.append(element("p", note, "analytics-chart-note"));
     return figure;
   }
+  function svgElement(tag, attributes, text) {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function trendChart(title, rows, key, type, cumulative = false) {
+    const valid = rows.filter(row => numeric(row[key]));
+    if (!valid.length) return null;
+    const figure = element("figure", undefined, "analytics-chart analytics-trend");
+    figure.append(element("figcaption", title));
+    const maximum = Math.max(1, ...valid.map(row => Number(row[key])));
+    const svg = svgElement("svg", { viewBox: "0 0 540 170", role: "img", "aria-label": `${title}. Exact values are in the data table.` });
+    const left = 58, top = 12, width = 465, height = 120;
+    for (const fraction of [0, 0.5, 1]) {
+      const y = top + height * (1 - fraction);
+      svg.append(svgElement("line", { x1: left, x2: left + width, y1: y, y2: y, class: "analytics-gridline" }));
+      svg.append(svgElement("text", { x: left - 8, y: y + 4, "text-anchor": "end", class: "analytics-axis" }, format(maximum * fraction, type)));
+    }
+    const dateKey = Object.keys(rows[0])[0];
+    for (const index of [...new Set([0, rows.length - 1])]) {
+      svg.append(svgElement("text", { x: left + (index ? width : 0), y: 158,
+        "text-anchor": index ? "end" : "start", class: "analytics-axis" }, rows[index][dateKey]));
+    }
+    let segment = [];
+    function flush() {
+      if (!segment.length) return;
+      svg.append(svgElement("polyline", { points: segment.join(" "), class: cumulative ? "analytics-line analytics-line-total" : "analytics-line" }));
+      segment = [];
+    }
+    rows.forEach((row, index) => {
+      if (!numeric(row[key])) { flush(); return; }
+      const x = left + (rows.length > 1 ? index / (rows.length - 1) : 0.5) * width;
+      const y = top + height * (1 - Number(row[key]) / maximum);
+      segment.push(`${x},${y}`);
+      const point = svgElement("circle", { cx: x, cy: y, r: 2.5, class: cumulative ? "analytics-point analytics-point-total" : "analytics-point" });
+      point.append(svgElement("title", {}, `${row[dateKey]}: ${format(row[key], type)}`));
+      svg.append(point);
+    });
+    flush();
+    figure.append(svg);
+    return figure;
+  }
+  function dailyCharts(report, provider) {
+    const group = element("div", undefined, "analytics-daily");
+    const options = report.columns.filter(column => column.format !== "text" && column.key !== "cumulative");
+    if (!report.rows.length || !options.length) return group;
+    const label = element("label", "Daily metric", "analytics-chart-choice");
+    const select = element("select");
+    select.setAttribute("aria-label", `Daily metric for ${names[provider]}`);
+    for (const column of options) {
+      const option = element("option", column.label);
+      option.value = column.key;
+      select.append(option);
+    }
+    select.value = report.series?.[0] || options[0].key;
+    label.append(select);
+    const plots = element("div", undefined, "analytics-trends");
+    const note = element("p", "Full selected range; gaps mean unavailable. Running totals start at the selected start date. Today and initial collection days can be partial.", "analytics-chart-note");
+    function draw() {
+      plots.replaceChildren();
+      const column = options.find(item => item.key === select.value) || options[0];
+      const chart = trendChart(`Daily ${column.label.toLowerCase()}`, report.rows, column.key, column.format);
+      if (chart) plots.append(chart);
+      // Unique sessions and rates are not additive. Never accumulate them.
+      if (column.format === "number" && column.key !== "sessions") {
+        let sum = 0;
+        const rows = report.rows.map(row => {
+          if (!numeric(row[column.key])) return { ...row, cumulative: null };
+          sum += Number(row[column.key]);
+          return { ...row, cumulative: sum };
+        });
+        const running = trendChart(`Running ${column.label.toLowerCase()}`, rows, "cumulative", "number", true);
+        if (running) plots.append(running);
+      }
+      if (!chart) plots.append(element("p", "No measured days for this metric in the selected range.", "analytics-empty"));
+    }
+    select.addEventListener("change", draw);
+    group.append(label, plots, note);
+    draw();
+    return group;
+  }
   function tableChart(report) {
     const label = report.columns.find(column => column.format === "text");
     const count = report.columns.find(column => column.format === "number");
-    if (!label || !count) return null;
-    if (report.chart === "goatcounter-daily") {
-      const days = report.rows.slice(-14).map(row => ({ label: row[label.key], value: row[count.key] }));
-      return barChart(report.title, days, { note: "GoatCounter's own daily counts, latest 14 selected days in chronological order. Days follow the GoatCounter account timezone; today is incomplete. Visits are unique per page within a session, not distinct people across the site. View data for the full range." });
-    }
-    if (report.chart === "daily") {
-      const days = report.rows.slice(-14).map(row => ({ label: row[label.key], value: row[count.key] }));
-      return barChart(report.title, days, { note: "Up to 14 selected days in chronological order (UTC). Unmeasured days are omitted; today and the initial collection day are incomplete. Each day deduplicates separately, so adding days does not give distinct visitors for the entire range. View data for the full range." });
-    }
+    if (!label || !count || report.title === "Brackets by day and type") return null;
     const rows = report.rows.filter(row => numeric(row[count.key]) && Number(row[count.key]) >= 0)
       .sort((a, b) => Number(b[count.key]) - Number(a[count.key]));
     return barChart(`${report.title} · ${count.label.toLowerCase()}`, rows.slice(0, 5).map(row => ({
       label: row[label.key], value: row[count.key],
-    })), { note: `Top ${Math.min(rows.length, 5)} of ${rows.length} returned rows. Bar lengths compare counts within this chart.` });
-  }
-  function goatCounterGuide(section) {
-    const guide = element("details", undefined, "analytics-explainer");
-    guide.append(element("summary", "How does GoatCounter count unique visits?"));
-    guide.append(element("p", "Unique visits (per page) estimates cookie-free visits to each page, not a unique person across the whole site. With GoatCounter's Sessions setting enabled, reloading or returning to the same page within its session counts once; visiting a different page adds another unique visit."));
-    guide.append(element("p", "Example: one visitor opens home three times and the leaderboard once within the same session → 2 unique visits. Turning off Sessions in GoatCounter makes every page load count."));
-    guide.append(element("p", "GoatCounter temporarily maps site + IP address + browser User-Agent to a random session ID in memory for up to eight hours. It does not store an IP hash as a persistent visitor ID or set analytics cookies. These are estimates, not exact counts of people."));
-    guide.append(element("p", "Distinct visitors (GoatCounter sessions) counts each recorded session once across all public pages and all selected UTC dates. The example above counts as 1 distinct session. This is a cookieless short-lived session estimate, not a permanent person ID; returning after the identification window can count again. Session IDs are processed only on the server and never displayed. Exports refresh at most hourly; the metric notes show collection coverage and freshness. Dates before Individual pageviews was enabled are unavailable."));
-    guide.append(element("p", "For distinct visitors per UTC day, First-party analytics (AWS) keeps its separate daily estimate from our own counter. It is not the GoatCounter session metric. Both include either consent choice, unless GPC or Do Not Track is enabled; shared IP/browser combinations can merge people and network/browser changes can count someone twice."));
-    guide.append(element("p", "It runs for both accepted and declined optional analytics on dev. It cannot isolate visitors who declined because we don't send the consent choice. GPC, Do Not Track and blockers can prevent counting."));
-    const link = element("a", "GoatCounter: sessions and visitors");
-    link.href = "https://www.goatcounter.com/help/sessions";
-    link.rel = "noreferrer";
-    guide.append(link);
-    section.append(guide);
+    })), { note: `Top ${Math.min(rows.length, 5)} of ${rows.length} returned rows.` });
   }
   function renderProvider(section, data) {
     section.replaceChildren();
@@ -182,27 +238,24 @@
       metrics.append(item);
     }
     section.append(metrics);
-    if (data.note) section.append(element("p", data.note, "analytics-provider-note"));
-    if (data.provider === "goatcounter") goatCounterGuide(section);
-    if (data.provider === "custom") {
-      const activity = (data.metrics || []).filter(metric => /^(Accounts created|Sign-ins|Brackets |Groups )/.test(metric.label));
-      const chart = barChart("Prediction and account activity", activity, { note: "Independent event counts, not a conversion funnel. A visitor can trigger an action more than once." });
-      if (chart) section.append(chart);
-    }
-    const percentages = (data.metrics || []).filter(metric => ["percent", "percent100"].includes(metric.format) && numeric(metric.value))
-      .map(metric => ({ label: metric.label, value: Number(metric.value) * (metric.format === "percent" ? 100 : 1) }));
-    if (["ga4", "clarity"].includes(data.provider) && percentages.length) {
-      const chart = barChart("Engagement summary", percentages, { percent: true, note: "Each metric has its own definition; percentages do not add up to 100%." });
-      if (chart) section.append(chart);
+    if (data.note) {
+      const guide = element("details", undefined, "analytics-explainer");
+      guide.append(element("summary", "Definitions and coverage"), element("p", data.note, "analytics-provider-note"));
+      section.append(guide);
     }
     const breakdowns = element("div", undefined, "analytics-breakdowns");
     for (const report of data.tables || []) {
       const breakdown = element("div", undefined, "analytics-breakdown");
-      const chart = tableChart(report);
+      const chart = report.chart === "trend" ? dailyCharts(report, data.provider) :
+        data.provider === "goatcounter" ? tableChart(report) : null;
       if (chart) breakdown.append(chart);
       const details = element("details", undefined, "analytics-data-details");
       details.append(element("summary", `View data · ${report.title}`));
+      if (report.title === "Brackets by type") details.open = true;
       const wrap = element("div", undefined, "analytics-table-wrap");
+      wrap.setAttribute("tabindex", "0");
+      wrap.setAttribute("role", "region");
+      wrap.setAttribute("aria-label", report.title);
       const table = element("table", undefined, "analytics-table");
       table.append(element("caption", report.title));
       const head = element("thead");
@@ -263,7 +316,7 @@
       main.hidden = false;
       access.hidden = true;
       reports.replaceChildren();
-      const order = ["goatcounter", "ga4", "custom", "search-console", "clarity"];
+      const order = ["goatcounter", "custom", "search-console"];
       const providers = order.filter(provider => session.providers.includes(provider));
       let available = 0;
       await Promise.allSettled(providers.map(async provider => {

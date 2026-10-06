@@ -1,75 +1,28 @@
 (function initializeSiteAnalytics() {
   try {
     const config = window.AUTH_CONFIG || {};
-    if (
-      !["dev", "prod"].includes(config.environment) ||
-      navigator.doNotTrack === "1" ||
-      navigator.globalPrivacyControl
-    ) {
-      return;
-    }
-
-    function getOrCreateId(storage, key) {
-      try {
-        const existing = storage.getItem(key);
-        if (existing) return existing;
-        const value = crypto.randomUUID();
-        storage.setItem(key, value);
-        return value;
-      } catch (_error) {
-        return crypto.randomUUID();
-      }
-    }
-
-    let visitorId;
-    let sessionId;
-    const firstPartyEvents = new Set([
-      "page_view", "account_created", "sign_in", "prediction_saved",
-      "group_created", "group_joined", "group_invite_joined",
-      "bracket_started", "bracket_completed", "leaderboard_viewed",
-    ]);
     const page = window.location.pathname === "/index.html" ? "/" :
       window.location.pathname.replace(/\.html$/, "");
-    if (!["/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"].includes(page)) return;
-
-    function track(event) {
+    const pages = new Set(["/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"]);
+    const permitted = () => ["dev", "prod"].includes(config.environment) && pages.has(page) &&
+      navigator.doNotTrack !== "1" && !navigator.globalPrivacyControl;
+    const events = new Set(["account_created", "account_deleted", "sign_in", "prediction_saved",
+      "group_created", "group_joined", "group_invite_joined", "bracket_created", "bracket_completed"]);
+    const bracketEvents = new Set(["bracket_created", "bracket_completed", "prediction_saved"]);
+    function track(event, details = {}) {
       try {
-        window.productAnalytics?.track(event);
-        if (window.productAnalytics && !window.productAnalytics.aggregateAllowed()) return;
-        if (!firstPartyEvents.has(event)) return;
+        if (!permitted() || !events.has(event)) return;
         const payload = { event, page };
-        if (window.productAnalytics?.allowed() && window.crypto?.randomUUID) {
-          visitorId ||= getOrCreateId(localStorage, "rtb_visitor_id");
-          sessionId ||= getOrCreateId(sessionStorage, "rtb_session_id");
-          Object.assign(payload, { sessionId, visitorId });
-        } else {
-          visitorId = sessionId = undefined;
+        if (bracketEvents.has(event)) {
+          if (!["nfl", "nba"].includes(details.bracketType)) return;
+          payload.bracketType = details.bracketType;
         }
         fetch("/api/analytics", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          credentials: "omit",
-          referrerPolicy: "no-referrer",
-          keepalive: true,
-        }).catch(() => {
-          // Monitoring must never interrupt the application experience.
-        });
-      } catch (_error) {
-        // Tracking must also survive synchronous storage or network failures.
-      }
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload), credentials: "omit", referrerPolicy: "no-referrer", keepalive: true,
+        }).catch(() => {});
+      } catch (_error) { /* Analytics must never interrupt the application. */ }
     }
-
     window.siteAnalytics = { track };
-    track("page_view");
-    if (document.body.dataset.page === "leaderboard") track("leaderboard_viewed");
-    window.addEventListener("analytics-consent-declined", () => { visitorId = sessionId = undefined; });
-    window.addEventListener("analytics-consent-granted", () => {
-      // This visit was already counted by first-party analytics before consent.
-      window.productAnalytics?.track("page_view");
-      if (document.body.dataset.page === "leaderboard") window.productAnalytics?.track("leaderboard_viewed");
-    });
-  } catch (_error) {
-    // Storage and privacy restrictions should disable analytics silently.
-  }
+  } catch (_error) { /* Fail closed without touching authentication storage. */ }
 })();

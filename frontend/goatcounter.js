@@ -4,7 +4,7 @@
       "/leaderboard", "/leaderboard.html", "/scoring", "/scoring.html", "/privacy", "/privacy.html"]);
     const permitted = () => window.AUTH_CONFIG?.environment === "dev" &&
       navigator.doNotTrack !== "1" && !navigator.globalPrivacyControl &&
-      pages.has(window.location.pathname);
+      pages.has(window.location.pathname) && window.location.hash !== "#toggle-goatcounter";
     if (!permitted()) return;
 
     const page = window.location.pathname;
@@ -27,6 +27,13 @@
       try {
         const counter = window.goatcounter;
         const getData = counter.get_data;
+        // Retain local/frame/prerender protection without reading a storage toggle.
+        counter.filter = () => {
+          if (document.visibilityState === "prerender") return true;
+          if (window.location !== window.parent.location) return true;
+          return window.location.protocol === "file:" ||
+            /(localhost$|^127\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.|^192\.168\.|^0\.0\.0\.0$)/.test(window.location.hostname);
+        };
         counter.get_data = () => {
           const data = getData();
           // Ignore caller overrides, query strings, and any new provider fields.

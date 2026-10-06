@@ -106,13 +106,13 @@ Blue provides inherited focus treatment and selection; danger and warning text d
 
 The page title uses the shared uppercase treatment. Provider headings and prominent metric values use condensed Oswald; controls, explanations, and tables use DM Sans. Definitions and provider ranges are small but explicitly separate from the larger metric values. Metrics and tables use tabular numerals. Explanation text is bounded to 75 characters; metric notes to 28 characters.
 
-**The Definition Beside Value Rule.** Keep metric definitions and provider notes adjacent to the values they qualify.
+**The Definition Beside Value Rule.** Keep short metric definitions beside values; fuller provider definitions and coverage remain available in an adjacent disclosure.
 
 ## Layout
 
-The report container caps at 1200px with 32px side gutters and a 48px top margin. Reports form two equal desktop columns with 48px row and 40px column gaps. Custom analytics and Search Console span both columns. Standard metrics use three columns; custom metrics use five.
+The report container caps at 1240px with 32px side gutters and a 48px top margin. Traffic, PredictPlayoffs activity and Google Search form three full-width sections separated by 48px gaps and rules. Metrics use three columns; Search uses four. Daily and running-total charts share a two-column row, with a selector for the daily metric. Bracket totals by type stay visible; daily and search breakdown tables expand on demand. Definitions and collection coverage are expandable beside the metrics.
 
-At 850px and below, reports become one column and custom metrics become three columns. At 540px and below, gutters shrink to 16px, the top margin to 32px, and all metric lists use two columns. Range controls use two columns on small screens, with the preset and submit action spanning both. Tables scroll within their own wrappers. Shared navigation wraps below 760px.
+Sections remain one column. At 700px and below, daily and running-total charts stack. At 540px and below, gutters shrink to 16px, the top margin to 32px, and all metric lists use two columns. Range controls use two columns on small screens, with the preset and submit action spanning both. Tables scroll within their own wrappers. Shared navigation wraps below 760px.
 
 **The Provider Boundary Rule.** Preserve separate provider sections and their range/state labels at every viewport size.
 

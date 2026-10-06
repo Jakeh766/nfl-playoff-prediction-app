@@ -1232,6 +1232,7 @@ async function submitDeleteAccount(event) {
     await apiRequest("/api/prediction", { method: "DELETE" });
     await apiRequest("/api/profile", { method: "DELETE" });
     await requestCognito("DeleteUser", { AccessToken: accessToken });
+    window.siteAnalytics?.track("account_deleted");
 
     clearAuthSession();
     state.savedPrediction = null;

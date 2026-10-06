@@ -1,30 +1,71 @@
-# Private analytics dashboard (dev)
+# Admin analytics
 
-Sign in through the existing Predict Playoffs Account dialog, then open `/admin/analytics` on the development deployment. Only members of the dev Cognito pool's `admin` group can read reports. Sign out and back in after a membership change to obtain fresh group claims. Non-admin visitors redirect to `/`; authenticated non-admin API callers receive `403`, and missing/invalid tokens receive `401`.
+Open `/admin/analytics` on dev with an existing Cognito user in the `admin` group.
+The unindexed static shell contains no reports, credentials or public tracking.
+Every report requires API Gateway-verified Cognito claims and server-side admin
+authorization. Authentication session format and storage are unchanged.
 
-The unindexed static page is only a shell: it contains no report data or provider credentials. It does not load public tracking scripts. Existing public analytics, consent and privacy behavior remain unchanged.
+## Three sections
 
-## Reading the reports
+| Section | Source and coverage | Reports |
+|---|---|---|
+| Traffic | GoatCounter public dev pages | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
+| PredictPlayoffs activity | Dev AWS CloudWatch product events | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total |
+| Google Search | Search Console `sc-domain:predictplayoffs.com`, including subdomains | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
 
-The dashboard is hosted on dev, but that does not determine every report's audience:
+The default is 28 completed days. Today (UTC), 7/28/90 completed days and custom
+ranges are available; the server accepts up to 93 inclusive days within the last
+year. Traffic/activity dates are UTC; Search Console uses Pacific dates and final
+web-search data, which can lag several days. Search Console measures the connected
+production domain, not the dev CloudFront hostname. This does not deploy production.
 
-| Report | Coverage |
-|---|---|
-| First-party analytics (AWS) | Dev only: development logs filtered to development events. Account, sign-in, bracket and group counts are browser-reported dev activity, not production database totals. |
-| GoatCounter | Dev only: the public-page loader requires the dev environment. The connected site is `predictplayoffs`. |
-| Google Analytics 4 | Entire connected property. Dev tracking is configured; any production or other-host traffic collected in that property is also included. No hostname filter is applied. |
-| Google Search Console | `sc-domain:predictplayoffs.com`: the production domain and its subdomains. The dev CloudFront hostname is outside that property. These are Google Search impressions/clicks, not app visits. |
-| Microsoft Clarity | Entire connected project. Dev tracking is configured; any production or other-host traffic collected there is also included. Saved filters in Clarity's browser dashboard do not filter Data Export reports. |
+Daily metric selectors show the full range, with a separate running-total chart
+for additive counts. Distinct sessions and rates are never accumulated. Tables
+retain every selected day and every returned breakdown column. Missing values
+remain unavailable; blank days in Search Console are unreported, not zero.
+Breakdowns can omit anonymized queries and lower-ranked rows and need not sum to
+totals. CTR and position use provider aggregates, never averages of row percentages.
+Providers measure different audiences; do not add their totals.
 
-Charts visualize the existing report responses without additional provider requests. Ranked charts show up to five returned rows; expand **View data** for all returned rows and columns. Bar lengths compare counts within one chart. Engagement percentages use a fixed 0–100% scale and have separate denominators. Activity bars are independent event counts, not a conversion funnel. The selected dates apply to ordinary reports; Clarity always uses its latest 72-hour window. Missing values remain unavailable and empty reports contain no sample traffic.
+## Collection and interpretation
 
-**GoatCounter unique visits (per page):** with Sessions enabled in GoatCounter, the same session visiting the same page repeatedly counts once; visiting another page increments the total again. One visitor loading home three times and the leaderboard once in a session yields two page visits, not one site-wide unique visitor or four raw pageviews. Turning off Sessions makes each load count. GoatCounter temporarily maps site + IP + User-Agent to a random session ID in memory for up to eight hours; it does not persist an IP hash as a visitor identifier. See [Sessions and visitors](https://www.goatcounter.com/help/sessions).
+There are no analytics cookies, localStorage/sessionStorage identifiers, consent
+state or consent UI. Cognito sign-in storage, preferences and drafts remain.
+GPC/DNT disable GoatCounter and first-party collection, including signals enabled
+after page load. The AWS endpoint honors `Sec-GPC: 1` and `DNT: 1` headers. No
+account/email/IP/browser IDs, invite codes or picks enter product analytics logs.
 
-**Distinct visitors (GoatCounter sessions):** the server reads the individual-pageview CSV export and counts each unique GoatCounter session ID once across **all allowlisted public pages and the whole selected UTC date range**, including repeat rows whose `FirstVisit` is false. A session crossing midnight counts once across that range; this is not a sum of daily uniques or per-page visits. Events, private/unknown paths, paths with query strings/fragments, and identified bots are excluded. It is a cookieless short-lived session estimate, **not a permanent person ID**. Returning after GoatCounter's up-to-eight-hour identification window can count again; shared IP/browser combinations can merge people and changes can overcount.
+First-party events are browser-reported successful actions, not database totals.
+`bracket_created` means the first valid bracket build; completion is transition
+to all winners selected; saves are successful save operations, including repeats.
+Bracket events carry only `bracketType: nfl|nba`. Deletions are reported after
+Cognito deletion succeeds. Direct group joins and invite joins are separate.
+Historical `bracket_started` is counted as created; historical events without a
+type are shown as historical / unknown. New deletion/type metrics cannot be
+backfilled. One bounded CloudWatch query returns daily/event/type aggregates.
+The old AWS traffic/daily visitor collector is removed; existing TTL items expire
+under their existing settings. No new tables, schedules or IAM grants are needed.
 
-Individual pageviews was enabled for the dev-connected `predictplayoffs` site on **2026-10-05 at 23:41 UTC**. The metric is unavailable for ranges including earlier UTC dates, since those sessions cannot be reconstructed. Choose **Today (UTC)** initially; the first collection day and current day are partial. Each successful count labels its hourly export request time and collection coverage. Export snapshots can lag newly recorded visits by several minutes.
+GoatCounter temporarily links a random cookieless session identifier in memory to
+site + IP + User-Agent for up to eight hours. It estimates short-lived sessions,
+not exact people or returning users. Shared networks/browser combinations can
+merge people; network/browser changes can overcount. **Distinct visitors / sessions**
+is one metric: each session counts once across all public pages and selected UTC
+dates. Daily sessions deduplicate per day; they must not be summed for range uniques.
 
-Our dev loader runs regardless of whether optional analytics are accepted or declined, while honoring GPC and Do Not Track. It sends neither the consent choice nor a visitor ID, so these reports cannot isolate visitors who declined. Existing per-page unique-visit totals and graphs remain available independently of export availability. Production tracking is unchanged.
+Raw pageviews include repeat page loads, unlike standard unique visits per page.
+Session duration is mean elapsed time between first and last recorded public
+pageview within selected dates, including single-page sessions as zero. It is
+not engagement time: time after the last pageview is unknown and sessions at date
+boundaries are clipped.
+
+Enable **Sessions** and **Individual pageviews** in GoatCounter Settings > Data
+collection. Record the actual uninterrupted collection start in `sessions_started_at`
+(timezone-aware ISO 8601 UTC). If records are purged or collection disabled, update
+this timestamp for the next uninterrupted start. Earlier historical ranges show
+unavailable totals; measured days remain visible. First day and today are partial.
+When exports are unavailable, standard per-page unique visits remain available
+with an explicit fallback label; they are not raw pageviews.
 
 ## One-time AWS setup
 
@@ -35,66 +76,56 @@ Our dev loader runs regardless of whether optional analytics are accepted or dec
 
 The existing dev group is adopted by the declarative import in `terraform/envs/dev/imports.tf`, using `us-east-1_aoY8qzW0r/admin`. GitHub Actions plans and applies the import with the existing dev OIDC role and remote dev state; no local apply is needed. The import preserves group membership and permissions. Its first plan may update the group's description in place, but must not create, replace, or delete the group. After applying, rerun the dev deployment and verify its plan refreshes the group from state without creating it. Keep the idempotent import block as a record of the adoption; it has no effect once the group is in state.
 
+## Server-side configuration
+
+Use the existing Standard SecureString parameters in us-east-1:
+
 | Parameter | Contents |
 |---|---|
-| `/nfl-playoff-predictor-dev/admin-analytics/config` | Provider configuration JSON, including GoatCounter and Clarity tokens |
+| `/nfl-playoff-predictor-dev/admin-analytics/config` | GoatCounter and Search Console settings |
 | `/nfl-playoff-predictor-dev/admin-analytics/google-service-account` | Complete Google service account JSON key |
 
-These parameters are intentionally not Terraform resources: secret values cannot enter Terraform state or be overwritten during deployment. Each must fit the Standard tier's 4 KB limit. For a different resource prefix, use the dev outputs `admin_analytics_config_parameter` and `admin_google_credentials_parameter`. A customer-managed KMS key requires an additional scoped decrypt permission; the default setup uses `aws/ssm`.
-
-Example configuration **shape**; replace placeholders privately in Parameter Store:
+Configuration example (enter real credentials privately, never in Git or chat):
 
 ```json
 {
   "goatcounter": {
     "site": "predictplayoffs",
     "token": "REPLACE_PRIVATELY",
-    "sessions_started_at": "2026-10-05T23:41:00Z"
+    "sessions_started_at": "REPLACE_WITH_ACTUAL_COLLECTION_START_UTC"
   },
-  "ga4": { "property_id": "123456789" },
-  "search_console": { "site_url": "sc-domain:predictplayoffs.com" },
-  "clarity": { "token": "REPLACE_PRIVATELY" }
+  "search_console": { "site_url": "sc-domain:predictplayoffs.com" }
 }
 ```
 
-Omit providers you have not connected. They show “Setup needed” while other reports continue working. Choose external properties/projects containing the intended traffic; an external property can contain production traffic even though this dashboard runs only in dev. Reading it does not deploy or change that site.
+GoatCounter's token needs **Read statistics** and **Export**, restricted to the
+connected site, without record/site/user management permissions. Google uses
+`google-auth` with only `webmasters.readonly`. Enable Search Console API and add
+the service account to the already verified property with performance-report
+read access (Restricted is sufficient). No domain delegation or project Editor
+role is needed. Obsolete provider settings are ignored and can be removed
+privately from the dev parameter. No secret rotation or AWS mutation is needed
+for this code deployment.
 
-## Provider credentials and permissions
+The existing DynamoDB cache lasts 15 minutes, with five-minute error/setup
+cooldowns and conditional refresh leases. Config reloads after five minutes.
+Traffic export preparation retries after 30 seconds; failed exports use 60 seconds.
+An hourly export reservation is shared across ranges and Lambda containers,
+including uncertain failed creation. Four requests/second and one bounded GET
+retry handle GoatCounter quotas; export creation is never retried.
+Exports are bounded to 2 MB compressed, 10 MB decompressed and 100,000 rows;
+version, fields, row count and completion are validated. Malformed or oversized
+exports never show partial counts. Raw exports/session IDs stay in server memory;
+only aggregates and the export ID/request time are cached. GoatCounter's
+eight-hour identifying link does not delete historical random session IDs;
+review its pageview retention settings separately.
 
-**First-party analytics (AWS):** no provider credential is needed. The runtime reads its existing development log group using two bounded Logs Insights queries. It returns aggregate counts, never raw events, visitor IDs, IP addresses, email addresses or brackets. Account and bracket actions are browser-reported event counts, not authoritative database totals. Visitors/visits with consent are approximate distinct IDs from consented events; cookieless pageviews are counted separately.
+Redirects are blocked, errors sanitized, responses private and no-store, and no
+provider tokens reach the browser. Existing dev OIDC deployment, authorization
+and narrowly scoped runtime permissions remain. Run `scripts/check.ps1 -Scope All`,
+then push dev for GitHub Actions deployment. Do not apply locally or promote prod.
 
-**Daily distinct visitors (dev only):** validated public `page_view` requests also feed a first-party daily counter, independently of optional analytics consent. An HMAC of the UTC date, canonical viewer IP and User-Agent uses a random server-side secret shared across Lambdas for that day. It counts the same IP/browser combination once across all public pages per UTC day, including visitors who decline cookies. GPC/DNT suppress it, and no raw IP/UA, URL, account ID, cookie or browser identifier is stored for this counter. CloudFront viewer addresses exclude source ports; forwarded IP handling ignores spoofable leftmost entries. This is an estimate of visitors, not exact people: shared IP/browser combinations can merge users and network/browser changes can overcount. It cannot deduplicate people across days.
-
-The existing dev admin cache table stores short-lived HMAC markers and daily secrets (TTL at 01:00 UTC the following day; DynamoDB cleanup is asynchronous), daily aggregate counts (400-day TTL), and a collection start date. Conditional transactions atomically create a marker and increment its day, so concurrent pageviews/retries count once. Only aggregate counts reach the authenticated admin API. No new table, scheduled task, credential, IAM permission or production resource is needed. Collection failure does not interrupt the public app; a fixed diagnostic contains no request metadata. The daily chart preserves UTC order, shows the latest 14 selected days, and its data table covers the full range. The headline is the final selected day, not a sum of days. Historical dates before collection began display unavailable; they cannot be backfilled from GoatCounter. Counts are cached for 15 minutes with the custom report; today is incomplete. Bots or synthetic requests may also affect estimates.
-
-**GoatCounter:** in Settings → Data collection, enable **Sessions** and **Individual pageviews** for the dev-connected site. Individual pageviews is off by default and only records data from activation onward. Record its actual activation timestamp as `goatcounter.sessions_started_at` (timezone-aware ISO 8601 UTC) in the dev SecureString configuration. If collection is later disabled or records purged, update the coverage timestamp to the next uninterrupted collection start; the API must not claim full historical coverage. Existing aggregate per-page metrics work without Individual pageviews.
-
-Open your user settings → API at `predictplayoffs.goatcounter.com`. The dashboard token needs **Read statistics** and **Export**, restricted to the `predictplayoffs.goatcounter.com` site. It needs no Record pageviews, site management or user management permission. Replace `goatcounter.token` privately in the existing dev SecureString, preserving other provider settings. Export permission allows the backend to read individual records containing random session IDs; no token or records are sent to the frontend. Review the configured GoatCounter retention separately: the eight-hour limit is for the in-memory identifying link, not automatic deletion of historical random session IDs in pageview records.
-
-The adapter retains totals, top paths and referrers for the top three returned paths. **Unique visits (per page)** excludes events. The daily graph uses the totals endpoint's own daily counts, including tracked events when present (labelled explicitly). GoatCounter groups these daily counts in the account timezone; the site-wide session export is filtered to UTC dates. All statistics, export polling and downloads share a four-requests-per-second limiter; GET HTTP 429 receives one bounded retry. Export creation is never retried automatically. A failed referrer breakdown or session export leaves other metrics available. Null arrays are empty. See the [API guide](https://www.goatcounter.com/help/api), [CSV export documentation](https://www.goatcounter.com/help/export) and [schemas](https://www.goatcounter.com/api.json).
-
-**Google authentication:** create a Google Cloud service account and enable the **Google Analytics Data API** and **Google Search Console API**. Generate a JSON service account key and save the complete key only in the Google SecureString parameter. The server uses Google's maintained `google-auth` library with `analytics.readonly` and `webmasters.readonly` scopes. No domain-wide delegation or broad project Editor role is needed. Rotate exposed keys and delete superseded keys after updating the parameter. See Google's [service account quickstart](https://developers.google.com/analytics/devguides/reporting/data/v1/quickstart).
-
-**GA4:** add the service account email as **Viewer** in the relevant property's Access Management. Set the numeric property ID in `ga4.property_id`; the `G-...` measurement ID is different. Mark desired existing events as **key events** in GA4 to populate conversions, such as `sign_up`, `bracket_completed` or `bracket_saved`. Reporting access adds no tracking. The [Data API schema](https://developers.google.com/analytics/devguides/reporting/data/v1/api-schema) defines the visitor, session, pageview, engagement and key-event metrics.
-
-**Search Console:** an owner must already have verified the property. Add the service account email under Settings → Users and permissions with performance-report read access (Restricted access is sufficient; Full access also works). Use the exact property identifier: `sc-domain:predictplayoffs.com` or the full `https://.../` URL-prefix property. The adapter reads final web-search performance and top pages through [Search Analytics](https://developers.google.com/webmaster-tools/v1/searchanalytics/query). Final data can lag several days, and an unindexed development property may have no results. Aggregate CTR and position come from the provider's totals, not averages of page percentages.
-
-**Clarity:** a project administrator generates a token in Settings → Data Export. Put it in `clarity.token`. The [Data Export API](https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api) permits ten requests per project per day and only the latest 24–72 hours. This dashboard always requests and labels **latest 72 hours at retrieval**, independently of selected dates. Supported traffic, engagement, scroll-depth, rage-click and dead-click percentages are displayed without breakdown dimensions. Missing fields are omitted rather than reported as zero. Visits include reported bots; no recordings or unsupported historical exports are requested.
-
-## Security, caching and cost
-
-`GET /api/admin/analytics` and `GET /api/admin/analytics/{provider}` both use the existing API Gateway Cognito JWT authorizer, which verifies signature, issuer, audience/client and token times. Lambda accepts only verified authorizer claims, rechecks the expected dev issuer/client and token times, and requires an exact `admin` group match **before** cache/config/provider access. Raw headers and decoded browser JWTs are not trusted for authorization. No function URL bypass is created.
-
-Responses use `Cache-Control: private, no-store` and `Vary: Authorization`. Existing `/api/*` CloudFront behavior disables caching and forwards Authorization. Server-side HTTP redirects are rejected to protect provider tokens. Errors expose no upstream bodies or exception details. Provider strings render as text, and URLs are reduced to paths/origins. Signing out or clearing the session in another tab clears rendered private reports.
-
-Default dates cover the last 28 completed days; presets offer Today (UTC) or 7, 28 or 90 completed days, plus up to 93 custom days within the past year. Current-day and initial collection-day data can be incomplete. CloudWatch/GoatCounter use UTC; GA4 uses its property's timezone; Search Console uses Pacific dates; Clarity has its own recent window. Providers measure different audiences: compare counts, do not add them together.
-
-The shared DynamoDB cache lasts 15 minutes for ordinary reports and six hours for Clarity. Ordinary errors/unconfigured providers have a five-minute cooldown; Clarity API failures also have a six-hour cooldown. Conditional leases prevent simultaneous refreshes, and clients cannot bypass the cache. Items expire using DynamoDB TTL after two days. Configuration reloads after five minutes; report caches can delay visible credential changes, especially Clarity's six-hour cache.
-
-GoatCounter permits **one CSV export per site per hour**. A separate conditional reservation in the same dev cache table shares one export across all date ranges and Lambda containers. Only its numeric export ID and request time are stored; raw pageviews/session IDs are downloaded, validated and deduplicated in server memory, never persisted to AWS, logged or returned. Different uncached date ranges reuse the same export snapshot. Pending exports retry after a 30-second report cache; failed session reads use 60 seconds while existing statistics remain usable. Failed/uncertain export creation still reserves the hour to avoid repeated exports. Manual exports in GoatCounter share this quota. Downloads are bounded to 2 MB compressed / 10 MB decompressed / 100,000 rows, with schema, row-count and completion checks. Oversized, malformed, missing-session or incomplete exports show unavailable, never a truncated visitor count. No IAM expansion or extra infrastructure is needed.
-
-The CSV v2 reader accepts both numeric (`0`/`1`) and textual booleans, and normalizes GoatCounter's two-hexadecimal-half session encoding into an in-memory integer for deduplication. The hosted dev export was verified to use numeric booleans and the split session encoding. Tests use synthetic identifiers in that actual format. Required columns and the version remain validated; incidental names of unused fields can differ by release. Fixed application-authored diagnostics help identify format failures without revealing provider response bodies, paths, timestamps of individual visits or session IDs.
-
-No scheduled polling, provisioned capacity, extra Lambda functions, NAT gateway, or paid Secrets Manager secret is added. Reports run only when an admin visits/updates the page. At current traffic, on-demand cache operations, small Logs Insights scans and existing Lambda execution should have incidental cost. Actual charges depend on scanned bytes and free-tier eligibility; date bounds and caching limit repeat scans.
-
-Run `scripts/setup.ps1` and `scripts/check.ps1 -Scope All`. Dev deployment packages Linux/Python 3.12-compatible Google dependencies into the existing Lambda ZIP. After configuration, verify non-admin API requests return `403`, admins load reports, and a revoked external token affects only its provider. Tests use fixtures/mocks and do not call live provider accounts.
+References: [GoatCounter sessions](https://www.goatcounter.com/help/sessions),
+[CSV exports](https://www.goatcounter.com/help/export),
+[API schema](https://www.goatcounter.com/api.json),
+[Search Analytics](https://developers.google.com/webmaster-tools/v1/searchanalytics/query).

@@ -27,7 +27,7 @@ scores are separate for each sport.
 ## Architecture
 
 The development-only private dashboard at `/admin/analytics` combines custom,
-GoatCounter, GA4, Search Console and Clarity reports. See
+GoatCounter traffic, first-party AWS activity and Google Search Console reports. See
 [admin analytics setup](docs/admin-analytics.md) for the deployment permission
 prerequisite, Cognito admin membership, and server-only provider credentials.
 
@@ -127,37 +127,25 @@ name dialog, open `http://localhost:8000/?preview=leaderboard-name`.
 
 ## Product analytics
 
-The dev Terraform configuration supplies the public GA4 measurement ID and
-Microsoft Clarity project ID through `AUTH_CONFIG.analytics`. The shared module
-defaults both IDs to empty, so production and local static previews do not load
-either provider until explicitly configured. These IDs are public, not secrets.
+Traffic comes from cookieless GoatCounter on dev, product activity from first-party
+AWS aggregate events, and search performance from Google Search Console. The
+private dev dashboard at `/admin/analytics` has **Traffic**, **PredictPlayoffs
+activity**, and **Google Search** sections with selected-range totals, daily and
+running charts, and expandable tables. See [setup and metric definitions](docs/admin-analytics.md).
 
-Every public page loads `analytics.js` from its head. Visitors must choose
-**Allow analytics** before GA4/Clarity scripts or custom visitor/session IDs are
-enabled. Existing custom aggregate events run without consent or identifiers;
-the dev GoatCounter integration also runs independently of that banner.
-**Cookie preferences** in the footer allows withdrawal. GPC and Do Not Track
-disable tracking. The privacy disclosure is available at `/privacy`.
+No analytics cookies, localStorage/sessionStorage, consent banner, or optional
+provider scripts remain. Cognito's essential sign-in storage is unchanged. GPC
+and DNT suppress GoatCounter and first-party analytics; private admin pages do
+not collect analytics. The privacy policy at `/privacy` explains the collection.
 
-GA4 receives fixed event names only: `sign_up`, `login`, `bracket_started`
-(first valid bracket build), `bracket_completed` (all game winners picked),
-`bracket_saved` (successful save), `group_created`, `group_joined`, and
-`leaderboard_viewed`. Event labels are limited to page, sport, and environment.
-No account IDs, email addresses, group/invite identifiers, or picks are sent.
-Page locations omit query strings/fragments and referrers contain origins only.
-The existing CloudWatch event names are preserved.
-
-Keep GA4 automatic form interactions, site search, and outbound clicks disabled
-to avoid collecting form/link metadata. Keep Clarity strict masking enabled.
-The HTML also masks the body before Clarity loads, and recording is skipped
-when the URL or referrer has any fragment or query other than a valid sport.
-No CSP is defined by the checked-in frontend/CloudFront configuration; this
-integration adds no inline executable scripts or relaxed security policies.
-
-After deploying dev, allow analytics in a browser without a privacy signal and
-check GA4 Realtime for the dev hostname and `environment=dev`. Check Clarity for
-a masked recording. Set `bracket_completed` as a GA4 key event. Production
-promotion and production ID configuration require a separate explicit request.
+`monitoring.js` reports only successful product actions and a coarse NFL/NBA
+bracket type. It sends no account IDs, emails, visitor/session IDs, query strings,
+invite codes, or picks. CloudWatch returns daily aggregates, not raw records.
+GoatCounter's individual pageview export supports distinct sessions, raw
+pageviews, page totals, daily trends, and estimated first-to-last-pageview duration.
+Missing collection coverage is unavailable; standard per-page unique visits are
+clearly labelled as a fallback. Search Console reads server-side performance
+reports for the configured production-domain property without browser tracking.
 
 ## Deployment
 

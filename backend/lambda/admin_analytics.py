@@ -13,9 +13,8 @@ import boto3
 
 from analytics_providers import PROVIDERS, NotConfigured
 
-NAMES = {"custom": "First-party analytics (AWS)", "goatcounter": "GoatCounter",
-         "ga4": "Google Analytics 4", "search-console": "Google Search Console",
-         "clarity": "Microsoft Clarity"}
+NAMES = {"custom": "PredictPlayoffs activity", "goatcounter": "Traffic",
+         "search-console": "Google Search"}
 _config = None
 _config_until = 0
 
@@ -99,8 +98,8 @@ def cached_report(provider, start, end):
     # DynamoDB cache and leases work across Lambda containers. Authorization is
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
-    version = {"custom": "v3", "goatcounter": "v3"}.get(provider, "v1")
-    key = f"{version}:{provider}:{'latest-72h' if provider == 'clarity' else f'{start}:{end}'}"
+    version = "v4"
+    key = f"{version}:{provider}:{start}:{end}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})
     if int(item.get("freshUntil", 0)) > now and item.get("report"):
@@ -123,7 +122,7 @@ def cached_report(provider, start, end):
     result = {"provider": provider, "name": NAMES[provider], "status": "ok", "cached": False,
               "fetchedAt": datetime.now(timezone.utc).isoformat(),
               "range": {"start": start.isoformat(), "end": end.isoformat(), "timezone": "UTC"}}
-    ttl = 21600 if provider == "clarity" else 900
+    ttl = 900
     try:
         config = {} if provider == "custom" else settings()
         report = PROVIDERS[provider](config, start, end)
@@ -140,9 +139,7 @@ def cached_report(provider, start, end):
         # No exception text is sent to the browser or written to logs.
         result.update(status="unavailable", message="This provider is unavailable. Check its credentials and permissions, then try again later.",
                       metrics=[], tables=[])
-        ttl = 21600 if provider == "clarity" else 300
-    # Clarity failures also get a six-hour cooldown: at most four requests/day
-    # from this dashboard, even during an outage or repeated admin refreshes.
+        ttl = 300
     table.update_item(Key={"cacheKey": key},
                       UpdateExpression="SET report = :report, freshUntil = :fresh, expiresAt = :ttl REMOVE leaseUntil, leaseOwner",
                       ConditionExpression="leaseOwner = :owner",

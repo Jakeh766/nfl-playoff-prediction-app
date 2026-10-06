@@ -18,7 +18,6 @@ from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import boto3
-import daily_visitors
 import goatcounter_sessions
 
 
@@ -89,7 +88,7 @@ def cloudwatch_query(query, start, end):
     query_id = client.start_query(logGroupName=os.environ["ADMIN_ANALYTICS_LOG_GROUP"],
         startTime=int(datetime.combine(start, datetime.min.time(), timezone.utc).timestamp()),
         endTime=int(datetime.combine(end + timedelta(days=1), datetime.min.time(), timezone.utc).timestamp()),
-        queryString=query, limit=100)["queryId"]
+        queryString=query, limit=3000)["queryId"]
     deadline = time.monotonic() + 6
     while time.monotonic() < deadline:
         result = client.get_query_results(queryId=query_id)
@@ -102,42 +101,57 @@ def cloudwatch_query(query, start, end):
     raise TimeoutError("Query timed out")
 
 
+ACTIVITY = [("sign_in", "Sign-ins"), ("account_created", "Accounts created"),
+            ("account_deleted", "Accounts deleted"), ("bracket_created", "Brackets created"),
+            ("bracket_completed", "Brackets completed"), ("prediction_saved", "Brackets saved"),
+            ("group_created", "Groups created"), ("group_joined", "Group joins"),
+            ("group_invite_joined", "Invite joins")]
+BRACKET_EVENTS = {"bracket_created", "bracket_completed", "prediction_saved"}
+
+
 def custom(_config, start, end):
-    base = 'filter type = "site_analytics" and environment = "dev"'
-    queries = [base + " | stats count(*) as count, count_distinct(visitorId) as visitors, count_distinct(sessionId) as visits by event",
-               base + ' and event = "page_view" | stats count(*) as pageviews by page | sort pageviews desc | limit 10']
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        totals, pages = list(executor.map(lambda query: cloudwatch_query(query, start, end), queries))
-    events = {row["event"]: row for row in totals}
-    views = events.get("page_view", {})
-    counts = lambda event: number(events.get(event, {}).get("count", 0))
-    metrics = [metric("Pageviews", counts("page_view")),
-               metric("Visitors with consent", views.get("visitors", 0), note="Approximate unique visitor IDs; cookieless visits excluded."),
-               metric("Visits with consent", views.get("visits", 0), note="Unique session IDs; cookieless visits excluded.")]
-    for event, label in [("account_created", "Accounts created"), ("sign_in", "Sign-ins"),
-                         ("bracket_started", "Brackets started"), ("bracket_completed", "Brackets completed"),
-                         ("prediction_saved", "Brackets saved"), ("group_created", "Groups created")]:
-        metrics.append(metric(label, counts(event), note="Browser-reported event count."))
-    metrics.append(metric("Groups joined", counts("group_joined") + counts("group_invite_joined"),
-                          note="Includes joins through invitations."))
-    daily_tables = []
-    try:
-        days = daily_visitors.report(start, end)
-        latest = days[-1]["visitors"]
-        note = f"{end} UTC. Cookie-free estimate, deduplicated across public pages; returning visitors count again the next day."
-        if latest is None:
-            note += " Tracking had not started on this date; choose a current date."
-        daily_tables.append({"title": "Daily distinct visitors", "chart": "daily",
-            "columns": [{"key": "day", "label": "Day (UTC)", "format": "text"},
-                        {"key": "visitors", "label": "Distinct visitors", "format": "number"}], "rows": days})
-    except Exception:
-        latest = None
-        note = "Daily visitor counts could not be read. Other custom metrics are still available."
-    metrics.insert(0, metric("First-party distinct visitors (last day)", latest, note=note))
-    return {"metrics": metrics, "tables": daily_tables + [table("Top pages", [("page", "Page", "text"),
-             ("pageviews", "Pageviews", "number")], [{"page": safe_path(row.get("page")),
-             "pageviews": number(row["pageviews"])} for row in pages])],
-            "note": "Dev only. Daily distinct visitors use first-party cookie-free daily aggregates; shared IP/browser combinations can merge people, and network/browser changes can count someone twice. Pageviews include cookieless visits; consented visitors/sessions use optional IDs. GPC and Do Not Track suppress collection. Event counts are not account database totals."}
+    # One bounded aggregate query, never individual log records or identifiers.
+    query = ('filter type = "site_analytics" and environment = "dev" '
+             '| stats count(*) as count by datefloor(@timestamp, 1d) as day, event, '
+             'coalesce(bracketType, "unknown") as bracketType | sort day asc')
+    rows = cloudwatch_query(query, start, end)
+    daily = {str(start + timedelta(days=i)): {key: 0 for key, _ in ACTIVITY}
+             for i in range((end - start).days + 1)}
+    bracket_totals = {kind: {key: 0 for key in BRACKET_EVENTS} for kind in ("nfl", "nba", "unknown")}
+    bracket_daily = {}
+    for row in rows:
+        event = "bracket_created" if row.get("event") == "bracket_started" else row.get("event")
+        day = str(row.get("day", ""))[:10]
+        if day not in daily or event not in daily[day]:
+            continue
+        count = number(row.get("count"))
+        if count is None:
+            raise ValueError("Missing activity count")
+        daily[day][event] += count
+        if event in BRACKET_EVENTS:
+            kind = row.get("bracketType") if row.get("bracketType") in {"nfl", "nba"} else "unknown"
+            bracket_totals[kind][event] += count
+            bracket_daily.setdefault((day, kind), {key: 0 for key in BRACKET_EVENTS})[event] += count
+    totals = {key: sum(row[key] for row in daily.values()) for key, _ in ACTIVITY}
+    daily_rows, cumulative = [], 0
+    for day, counts in daily.items():
+        total = sum(counts.values())
+        cumulative += total
+        daily_rows.append({"day": day, **counts, "total": total, "cumulative": cumulative})
+    columns = [("day", "Day (UTC)", "text")] + [(key, label, "number") for key, label in ACTIVITY]
+    columns += [("total", "All actions", "number"), ("cumulative", "Running total", "number")]
+    day_table = table("Daily activity", columns, [])
+    day_table.update(rows=daily_rows, chart="trend", series=["total", "cumulative"])
+    type_columns = [("bracketType", "Bracket type", "text")] + [(key, label, "number") for key, label in ACTIVITY if key in BRACKET_EVENTS]
+    type_rows = [{"bracketType": kind.upper() if kind != "unknown" else "Historical / unknown", **values}
+                 for kind, values in bracket_totals.items() if kind != "unknown" or any(values.values())]
+    by_day = table("Brackets by day and type", [("day", "Day (UTC)", "text")] + type_columns, [])
+    by_day["rows"] = [{"day": day, "bracketType": kind.upper(), **bracket_daily.get((day, kind), {key: 0 for key in BRACKET_EVENTS})}
+                      for day in daily for kind in ("nfl", "nba", "unknown")
+                      if kind != "unknown" or (day, kind) in bracket_daily]
+    return {"metrics": [metric(label, totals[key]) for key, label in ACTIVITY],
+            "tables": [day_table, table("Brackets by type", type_columns, type_rows), by_day],
+            "note": "AWS · dev only. Browser-reported successful actions, not database totals or a conversion funnel. Group joins and invite joins are separate. Created brackets are built brackets. Older bracket events without a type remain historical / unknown. Deletions and type breakdowns begin with this release. GPC/DNT suppress collection."}
 
 
 def goatcounter(config, start, end):
@@ -179,49 +193,45 @@ def goatcounter(config, start, end):
     with ThreadPoolExecutor(max_workers=2) as executor:
         totals, hits = list(executor.map(request,
                                         [f"total?{query}", f"hits?{query}&limit=10"]))
-    paths = [hit for hit in hits.get("hits") or [] if not hit.get("event")]
-    referrals = {}
-    def refs(hit):
-        path_id = int(hit["path_id"])
-        try:
-            return request(f"hits/{path_id}?{query}&limit=20")
-        except Exception:
-            # A failed optional breakdown must not hide the main visit counts.
-            return None
-    refs_unavailable = False
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        for result in executor.map(refs, paths[:3]):
-            if result is None:
-                refs_unavailable = True
-                continue
-            for ref in result.get("refs") or []:
-                name = safe_source(ref.get("name"))
-                referrals[name] = referrals.get(name, 0) + number(ref.get("count", 0))
+    paths = [hit for hit in hits.get("hits") or []
+             if not hit.get("event") and hit.get("path") in goatcounter_sessions.PUBLIC_PATHS]
     events = number(totals.get("total_events", 0))
-    daily = []
-    for row in totals.get("stats") or []:
-        day = str(row.get("day", ""))
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
-            raise ValueError("Invalid GoatCounter day")
-        datetime.strptime(day, "%Y-%m-%d")
-        daily.append({"day": day, "visits": number(row.get("daily"))})
-    daily.sort(key=lambda row: row["day"])
-    daily_table = {"title": "Daily unique visits" + (" (including events)" if events else ""),
-        "chart": "goatcounter-daily", "columns": [
-            {"key": "day", "label": "Day (GoatCounter timezone)", "format": "text"},
-            {"key": "visits", "label": "Unique visits", "format": "number"}], "rows": daily[:93]}
-    note = "Cookie-free unique visits per page with Sessions enabled (up to eight hours). A visitor opening two pages contributes two visits; this is not a site-wide count of distinct people. Referrers cover only the top three returned pages."
-    if refs_unavailable:
-        referrals.clear()
-        note += " Referrers are temporarily unavailable; visit counts remain available."
-    sessions, cache_seconds = goatcounter_sessions.report(settings, start, end, api_request)
-    return {"metrics": [metric("Unique visits (per page)", number(totals.get("total", 0)) - events,
-                               note="GoatCounter estimate across the selected range. Repeat visits to the same page within a session count once; tracked events excluded."), sessions],
-            "tables": ([daily_table] if daily else []) + [table("Top pages", [("page", "Page", "text"), ("visits", "Unique visits", "number")],
-                             [{"page": safe_path(hit["path"]), "visits": number(hit["count"])} for hit in paths]),
-                       table("Referrers across the top three pages" + (" (unavailable)" if refs_unavailable else ""), [("source", "Referrer", "text"), ("visits", "Unique visits", "number")],
-                             [{"source": key, "visits": value} for key, value in sorted(referrals.items(), key=lambda item: -item[1])])],
-            "note": note, "_cache_seconds": cache_seconds}
+    sessions, cache_seconds, traffic = goatcounter_sessions.report(settings, start, end, api_request, include_traffic=True)
+    sessions["label"] = "Distinct visitors / sessions"
+    # A cookieless visitor estimate is the session count, not a second person ID.
+    available = bool(traffic and traffic["covered"])
+    coverage_note = sessions["note"]
+    sessions["note"] = "Cookieless short-lived estimate, not permanent people." if sessions["value"] is not None else "Individual pageviews coverage required; see definitions and coverage."
+    metrics = [sessions,
+               metric("Pageviews", traffic["pageviews"] if available else None, note="Includes repeat page loads; export coverage required."),
+               metric("Average session duration", traffic["duration"] if available else None, "seconds",
+                      "First to last recorded pageview; single-page sessions count as 0. Time after the last view is unknown.")]
+    tables = []
+    if traffic:
+        daily, cumulative = [], 0
+        for i in range((end - start).days + 1):
+            day = str(start + timedelta(days=i))
+            measured = traffic["collectedFrom"][:10] <= day <= traffic["asOf"][:10]
+            counts = traffic["daily"].get(day, {"sessions": 0, "pageviews": 0}) if measured else {"sessions": None, "pageviews": None}
+            cumulative += counts["pageviews"] or 0
+            daily.append({"day": day, **counts, "cumulative": cumulative if measured else None})
+        day_table = table("Daily traffic", [("day", "Day (UTC)", "text"), ("sessions", "Distinct sessions", "number"),
+                         ("pageviews", "Pageviews", "number"), ("cumulative", "Running pageviews", "number")], [])
+        day_table.update(rows=daily, chart="trend", series=["pageviews", "cumulative"])
+        tables.append(day_table)
+        if available:
+            tables.append(table("Pageviews by page", [("page", "Page", "text"), ("pageviews", "Pageviews", "number")],
+                                [{"page": page, "pageviews": count} for page, count in sorted(traffic["pages"].items(), key=lambda pair: -pair[1])]))
+    # Standard stats remain useful when export coverage is absent, but must not
+    # be labelled raw pageviews or site-wide distinct sessions.
+    if not available:
+        metrics.append(metric("Unique visits per page", number(totals.get("total", 0)) - events,
+                              note="Fallback GoatCounter statistic: repeat loads of a page within a session count once; different pages add visits."))
+        tables.append(table("Unique visits by page", [("page", "Page", "text"), ("visits", "Unique visits", "number")],
+                            [{"page": hit["path"], "visits": number(hit["count"])} for hit in paths]))
+    return {"metrics": metrics, "tables": tables,
+            "note": "GoatCounter · cookieless dev traffic. Distinct visitors and sessions share one short-lived estimate across public pages, not permanent people. Daily sessions deduplicate per day and must not be summed for range-wide distinct sessions. " + coverage_note,
+            "_cache_seconds": cache_seconds}
 
 
 _google_credentials = {}
@@ -250,7 +260,6 @@ def google_token():
     if credentials is None:
         data["token_uri"] = "https://oauth2.googleapis.com/token"
         credentials = service_account.Credentials.from_service_account_info(data, scopes=[
-            "https://www.googleapis.com/auth/analytics.readonly",
             "https://www.googleapis.com/auth/webmasters.readonly"])
         _google_credentials.clear()
         _google_credentials[fingerprint] = credentials
@@ -258,49 +267,6 @@ def google_token():
         transport = GoogleRequest()
         credentials.refresh(lambda *args, **kwargs: transport(*args, **{**kwargs, "timeout": 4}))
     return credentials.token
-
-
-def ga_rows(report):
-    dimensions = [header["name"] for header in report.get("dimensionHeaders", [])]
-    metrics = [header["name"] for header in report.get("metricHeaders", [])]
-    rows = []
-    for row in report.get("rows", []):
-        parsed = dict(zip(dimensions, [value["value"] for value in row.get("dimensionValues", [])]))
-        parsed.update(zip(metrics, [number(value["value"]) for value in row.get("metricValues", [])]))
-        rows.append(parsed)
-    return rows
-
-
-def ga4(config, start, end):
-    property_id = str(config.get("ga4", {}).get("property_id", ""))
-    if not property_id:
-        raise NotConfigured()
-    if not re.fullmatch(r"\d+", property_id):
-        raise ValueError("GA4 requires numeric property ID")
-    measures = [("totalUsers", "Visitors", "number"), ("sessions", "Visits", "number"),
-                ("screenPageViews", "Pageviews", "number"), ("engagedSessions", "Engaged visits", "number"),
-                ("engagementRate", "Engagement rate", "percent"), ("keyEvents", "Key events / conversions", "number"),
-                ("sessionKeyEventRate", "Visit conversion rate", "percent"),
-                ("averageSessionDuration", "Average visit duration", "seconds"),
-                ("userEngagementDuration", "Total engagement time", "seconds")]
-    ranges = [{"startDate": str(start), "endDate": str(end)}]
-    reports = [{"dateRanges": ranges, "metrics": [{"name": item[0]} for item in measures]},
-               {"dateRanges": ranges, "dimensions": [{"name": "pagePath"}],
-                "metrics": [{"name": "screenPageViews"}], "limit": "10",
-                "orderBys": [{"metric": {"metricName": "screenPageViews"}, "desc": True}]},
-               {"dateRanges": ranges, "dimensions": [{"name": "sessionSourceMedium"}],
-                "metrics": [{"name": "sessions"}], "limit": "10",
-                "orderBys": [{"metric": {"metricName": "sessions"}, "desc": True}]}]
-    result = http_json(f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:batchRunReports",
-                       google_token(), {"requests": reports})["reports"]
-    totals = (ga_rows(result[0]) or [{}])[0]
-    return {"metrics": [metric(label, totals.get(key, 0), format) for key, label, format in measures],
-            "tables": [table("Top pages", [("page", "Page", "text"), ("pageviews", "Pageviews", "number")],
-                             [{"page": safe_path(row["pagePath"]), "pageviews": row["screenPageViews"]} for row in ga_rows(result[1])]),
-                       table("Traffic sources", [("source", "Source / medium", "text"), ("visits", "Visits", "number")],
-                             [{"source": safe_source(row["sessionSourceMedium"]), "visits": row["sessions"]} for row in ga_rows(result[2])])],
-            "range": {"start": str(start), "end": str(end), "timezone": "GA4 property timezone"},
-            "note": "Optional, consented GA4 traffic. Key events must be marked in GA4. Property timezone and provider processing can differ from CloudWatch."}
 
 
 def search_console(config, start, end):
@@ -312,49 +278,40 @@ def search_console(config, start, end):
     token = google_token()
     url = f"https://www.googleapis.com/webmasters/v3/sites/{quote(site, safe='')}/searchAnalytics/query"
     base = {"startDate": str(start), "endDate": str(end), "type": "web", "dataState": "final"}
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        totals, pages = list(executor.map(lambda body: http_json(url, token, body),
-            [base, {**base, "dimensions": ["page"], "rowLimit": 10}]))
-    row = (totals.get("rows") or [{}])[0]
-    return {"metrics": [metric("Impressions", row.get("impressions", 0)), metric("Clicks", row.get("clicks", 0)),
-                         metric("Click-through rate", row.get("ctr", 0), "percent"),
-                         metric("Average position", row.get("position"), "decimal")],
-            "tables": [table("Top search pages", [("page", "Page", "text"), ("clicks", "Clicks", "number"),
-                ("impressions", "Impressions", "number"), ("ctr", "CTR", "percent"), ("position", "Position", "decimal")],
-                [{"page": safe_path(row["keys"][0]), **{key: number(row[key]) for key in
-                  ("clicks", "impressions", "ctr", "position")}} for row in pages.get("rows", [])])],
+    dimensions = [None, "date", "query", "page", "country", "device"]
+    def fetch_dimension(dimension):
+        body = base if dimension is None else {**base, "dimensions": [dimension], "rowLimit": 93 if dimension == "date" else 20}
+        return http_json(url, token, body)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        results = list(executor.map(fetch_dimension, dimensions))
+    row = (results[0].get("rows") or [{}])[0]
+    measures = [("clicks", "Clicks", "number"), ("impressions", "Impressions", "number"),
+                ("ctr", "CTR", "percent"), ("position", "Average position", "decimal")]
+    tables = []
+    for dimension, result in zip(dimensions[1:], results[1:]):
+        rows = []
+        for entry in result.get("rows") or []:
+            key = str(entry["keys"][0])
+            key = safe_path(key) if dimension == "page" else key[:200]
+            rows.append({dimension: key, **{key: number(entry.get(key)) for key, _, _ in measures}})
+        if dimension == "date":
+            by_date = {item["date"]: item for item in rows}
+            rows = [{"date": str(start + timedelta(days=i)), **{key: None for key, _, _ in measures},
+                     **by_date.get(str(start + timedelta(days=i)), {})} for i in range((end - start).days + 1)]
+            cumulative = 0
+            for item in rows:
+                cumulative += item["clicks"] or 0
+                item["cumulative"] = cumulative if item["clicks"] is not None else None
+            report = table("Daily search performance", [("date", "Day (Pacific)", "text")] + measures +
+                           [("cumulative", "Running clicks", "number")], [])
+            report.update(rows=rows, chart="trend", series=["clicks", "cumulative"])
+        else:
+            report = table(f"Search by {dimension}", [(dimension, dimension.title(), "text")] + measures, rows)
+        tables.append(report)
+    return {"metrics": [metric(label, row.get(key, 0) if key != "position" else row.get(key), fmt)
+                         for key, label, fmt in measures], "tables": tables,
             "range": {"start": str(start), "end": str(end), "timezone": "America/Los_Angeles"},
-            "note": "Google web search performance for the configured property. Final data can lag several days. An unindexed development property may have no results."}
+            "note": "Google Search Console · final web search data for the configured property. Pacific dates; data can lag several days. Missing days are unreported, not zero. Query/page/country/device tables show top returned rows; anonymized queries and API limits mean breakdowns may not add up to totals. CTR and average position use provider aggregates."}
 
 
-def clarity(config, _start, _end):
-    token = config.get("clarity", {}).get("token")
-    if not token:
-        raise NotConfigured()
-    data = http_json("https://www.clarity.ms/export-data/api/v1/project-live-insights?numOfDays=3", token)
-    summaries = {item["metricName"]: item.get("information", []) for item in data}
-    metrics = []
-    # No breakdown dimensions: rates/averages are provider aggregates, not sums
-    # or unweighted averages of per-page percentages. Missing metrics stay absent.
-    supported = {"Traffic": [("totalSessionCount", "Visits", "number"),
-                              ("distinctUserCount", "Visitors", "number"),
-                              ("totalBotSessionCount", "Bot visits", "number")],
-                 "EngagementTime": [("activeTime", "Active engagement time", "seconds"),
-                                    ("totalTime", "Total engagement time", "seconds")],
-                 "ScrollDepth": [("averageScrollDepth", "Average scroll depth", "percent100")],
-                 "RageClickCount": [("sessionsWithMetricPercentage", "Visits with rage clicks", "percent100")],
-                 "DeadClickCount": [("sessionsWithMetricPercentage", "Visits with dead clicks", "percent100")]}
-    for name, fields in supported.items():
-        rows = summaries.get(name, [])
-        if len(rows) == 1:
-            for field, label, format in fields:
-                if field in rows[0]:
-                    metrics.append(metric(label, rows[0][field], format))
-    if not metrics:
-        raise ValueError("No supported Clarity summary metrics returned")
-    return {"metrics": metrics, "tables": [], "range": {"window": "Latest 72 hours at retrieval", "timezone": "UTC"},
-            "note": "Clarity's export supports only the latest 72 hours, independently of your selected dates. Summaries are cached for six hours; missing fields are not reported as zero. Visits include reported bot visits."}
-
-
-PROVIDERS = {"custom": custom, "goatcounter": goatcounter, "ga4": ga4,
-             "search-console": search_console, "clarity": clarity}
+PROVIDERS = {"custom": custom, "goatcounter": goatcounter, "search-console": search_console}
