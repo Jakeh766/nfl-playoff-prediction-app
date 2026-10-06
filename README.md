@@ -1,177 +1,111 @@
 # Predict Playoffs
 
-Predict NFL and NBA playoff fields and brackets, save one prediction per sport,
-and compare your results on public or private leaderboards. Use the Sport
-selector to switch; NBA links retain `?sport=nba` across pages and invites.
+Pick the NFL and NBA playoff teams, predict who wins each round, and see how
+your picks compare with friends.
 
-NBA predictions rank eight teams in each conference after the Play-In and pick
-all 15 best-of-seven series winners through the Finals. There are no Play-In
-picks, division-winner picks, byes, or reseeding. Your account, public name, and
-group memberships are shared; predictions, deadlines, results, and leaderboard
-scores are separate for each sport.
+[Open Predict Playoffs](https://predictplayoffs.com/)
 
-## Features
+## How it works
 
-- Build all seven AFC and NFC seeds, division winners, and every playoff round
-  through the Super Bowl.
-- Create an account, save one prediction, and reopen or edit it until the
-  server-enforced regular-season kickoff deadline. Predictions can be deleted
-  from the signed-in account view.
-- Claim a unique public leaderboard name and share a read-only bracket view.
-- Create or join password-protected groups with invite links and member-only
-  leaderboards. Groups choose their scoring mode when they are created.
-- Compare predictions using Classic or Upset Edge scoring.
-- View projected season win totals refreshed from VegasInsider and cached by the
-  backend.
+1. Choose NFL or NBA using the sport selector.
+2. Choose the playoff teams and put them in seed order (their playoff ranking).
+3. Pick the winners through the Super Bowl or NBA Finals.
+4. Create an account, choose a public name, and save your bracket.
+5. Follow your score on the public leaderboard or compete in a private group.
 
-## Architecture
+You can try the bracket builder without an account. An account lets you save
+one prediction per sport and reopen it later. You can change saved picks until
+that sport's regular season starts; the app shows the deadline.
 
-The development-only private dashboard at `/admin/analytics` combines custom,
-GoatCounter traffic, first-party AWS activity and Google Search Console reports. See
-[admin analytics setup](docs/admin-analytics.md) for the deployment permission
-prerequisite, Cognito admin membership, and server-only provider credentials.
+Your account and public name work for both sports. Scores and predictions are
+separate. A private group can include NFL, NBA, or both.
 
-- `frontend/` — static multi-page HTML, CSS, and JavaScript served through
-  CloudFront from a private S3 bucket.
-- `backend/lambda/app.py` — Python Lambda API behind API Gateway. DynamoDB
-  stores predictions, leaderboard profiles, groups, and the win-total cache.
-- `backend/custom-email-sender/` — Node.js Lambda that delivers Cognito
-  account messages through Resend.
-- `terraform/` — shared AWS infrastructure for independent `dev` and `prod`
-  environments.
-- `.github/workflows/` — automated test and deployment workflows. Each
-  environment also gets a privacy-conscious CloudWatch analytics dashboard.
+## What can you predict?
 
-Authentication uses Amazon Cognito directly from the application. Email
-verification and password recovery are handled in-app; no Cognito managed-login
-domain is required.
+| | NFL | NBA |
+| --- | --- | --- |
+| Playoff field | Seven teams from each conference | Eight teams from each conference, after the Play-In |
+| Team order | Seeds 1–7, including division winners | Seeds 1–8 |
+| Playoff picks | Every round through the Super Bowl | Every series through the NBA Finals |
 
-## Scoring and season data
+NFL teams are reseeded after the Wild Card round: the highest remaining seed
+plays the lowest. NBA uses a fixed bracket, with no reseeding or Play-In picks.
+Projected season win totals help you compare teams while making your choices.
 
-The scoring rules below describe NFL. NBA Classic awards 5 per playoff team,
-plus an exact-seed bonus of 6 for #1, 4 for #2–#4, and 3 for #5–#8. Series winners earn
-5 / 10 / 20 / 40 through the four rounds, for a maximum of **300**. NBA Upset
-Edge uses `Classic points × [1 + 0.02 × (41 − preseason win total)]`.
+## How scoring works
 
-NBA season configuration, the verified tip-off deadline, and frozen BetMGM
-scoring snapshot are in `backend/lambda/nba_season.json`; `frontend/sports.js`
-contains the matching static-preview copy, checked by a regression test. The
-2026–27 prediction deadline is October 20, 2026 at 19:00 UTC. Live BetMGM
-projections have their own cache and cannot change the frozen scoring weights.
-See [NBA results ingestion](docs/nba-results-ingestion.md) for automation details.
+- **Classic:** Earn points for correct playoff teams, seed positions, and teams
+  advancing through each round. NFL also awards division-winner points. A perfect
+  bracket earns **300 points** in either sport.
+- **Upset Edge:** Uses the same picks, but awards more points for teams with
+  lower preseason projected win totals. Those scoring weights stay fixed for
+  the season.
 
-Classic scoring is capped at 300 points:
+A wrong early-round pick does not stop you earning points for a correct
+later-round pick. The public leaderboard lets you compare both scoring modes.
+Private groups keep the mode chosen when the group was created.
 
-- 5 points for each correct playoff team
-- 5 points for each correct division winner
-- 5 points for an exact #1 seed, 3 points for an exact #2–#4 seed, and 2 points
-  for an exact #5–#7 seed
-- 5 / 10 / 20 / 40 points for correct advancing teams in the Wild Card,
-  Divisional, Conference Championship, and Super Bowl rounds
+See the app's [scoring page](https://predictplayoffs.com/scoring) for the full rules.
 
-Playoff points are based on advancement, not exact matchups, so an earlier miss
-does not prevent credit for a correct later-round pick.
+## Playing with friends
 
-Upset Edge applies a team-specific multiplier to each Classic scoring item:
+Create a private group and share its invite link, or join with the group's name
+and password. Only members can view its leaderboard. The group commissioner
+(the person managing the group) can change which sports it includes or delete
+it. A commissioner must hand that role to another member before leaving.
 
-```text
-Classic points × [1 + 0.10 × (8.5 − preseason win total)]
-```
+## Preview the app on your computer
 
-Values are rounded half up to hundredths. The public leaderboard can switch
-between both modes; a group keeps the mode selected at creation. See the
-in-app `/scoring` page for the full explanation.
-
-The checked-in season is 2026 and is currently preseason. When results become
-known, update `backend/lambda/season_results.json` with only published results
-and deploy. `backend/lambda/scoring_odds.json` is the frozen 2026 market
-snapshot for Upset Edge; do not change it during the season. Create a matching
-snapshot when rolling over to a new season.
-
-Update `prediction_lock_at` in both environment `terraform.tfvars` files for
-each season. The backend's `/api/prediction-window` endpoint is the source of
-truth used by the countdown and prediction UI.
-
-## Local development
-
-The CI toolchain is Node.js 24, Python 3.13, and Terraform 1.15.7. On Windows,
-initialize the repository-local Python environment and other dependencies once:
+For development on Windows, install **Node.js 24, Python 3.13, and Terraform
+1.15.7**. Open PowerShell in this folder and run setup once:
 
 ```powershell
 .\scripts\setup.ps1
 ```
 
-Run all local checks, or select one or more scopes:
-
-```powershell
-.\scripts\check.ps1
-.\scripts\check.ps1 -Scope Backend
-.\scripts\check.ps1 -Scope Frontend,Terraform
-```
-
-The scripts deliberately use `.venv\Scripts\python.exe` instead of the Windows
-Store `python.exe` launcher. GitHub Actions continues to use the matching
-Python 3.13, Node.js 24, and Terraform 1.15.7 toolchain.
-
-For a frontend-only preview:
+Start the local preview:
 
 ```powershell
 .\.venv\Scripts\python.exe -m http.server 8000 --directory frontend
 ```
 
-Open `http://localhost:8000`. The preview supports the bracket UI and bundled
-win totals, but not Cognito, saved predictions, private groups, or live odds.
-For the other pages, use `/picks.html`, `/leaderboard.html`, or
-`/scoring.html` when using the basic static server. To inspect the leaderboard
-name dialog, open `http://localhost:8000/?preview=leaderboard-name`.
+Open [localhost:8000](http://localhost:8000). Stop the preview with `Ctrl+C`.
+You can build brackets and see bundled win projections. Signing in, saving
+picks, private groups, and live data require the deployed app.
 
-## Product analytics
+The basic preview uses file addresses such as `/picks.html`,
+`/leaderboard.html`, and `/scoring.html`. Add `?sport=nba` to preview NBA.
 
-Traffic comes from cookieless GoatCounter on dev, product activity from first-party
-AWS aggregate events, and search performance from Google Search Console. The
-private dev dashboard at `/admin/analytics` has **Traffic**, **PredictPlayoffs
-activity**, and **Google Search** sections with selected-range totals, daily and
-running charts, and expandable tables. See [setup and metric definitions](docs/admin-analytics.md).
+Before sending code changes, run:
 
-No analytics cookies, localStorage/sessionStorage, consent banner, or optional
-provider scripts remain. Cognito's essential sign-in storage is unchanged. GPC
-and DNT suppress GoatCounter and first-party analytics; private admin pages do
-not collect analytics. The privacy policy at `/privacy` explains the collection.
-
-`monitoring.js` reports only successful product actions and a coarse NFL/NBA
-bracket type. It sends no account IDs, emails, visitor/session IDs, query strings,
-invite codes, or picks. CloudWatch returns daily aggregates, not raw records.
-GoatCounter's individual pageview export supports distinct sessions, raw
-pageviews, page totals, daily trends, and estimated first-to-last-pageview duration.
-Missing collection coverage is unavailable; standard per-page unique visits are
-clearly labelled as a fallback. Search Console reads server-side performance
-reports for the configured production-domain property without browser tracking.
-
-## Deployment
-
-- Pushing to `dev` runs the checks, applies the dev Terraform environment, and
-  seeds sixteen demo participants and two demo groups.
-- After validating dev, promote by merging `dev` into `prod`. A push to `prod`
-  runs the same checks, applies production, and creates a GitHub release.
-- Both GitHub environments provide an AWS role and Terraform state bucket;
-  only prod requires the encrypted `RESEND_API_KEY` secret.
-
-The one-time AWS bootstrap, state migration, Resend setup, and local Terraform
-commands are documented in [`terraform/README.md`](terraform/README.md).
-
-Dev demo groups:
-
-- **Demo Sunday Huddle** — `HuddleDemo26!`
-- **Demo Gridiron Rivals** — `RivalsDemo26!`
-
-These are DynamoDB-only demo data; they are not Cognito accounts. Production is
-never seeded.
-
-## Repository layout
-
-```text
-frontend/              Browser application
-backend/               Lambda code, seed data, and tests
-terraform/              AWS infrastructure and deployment guide
-.github/workflows/      Dev and prod CI/CD workflows
+```powershell
+.\scripts\check.ps1 -Scope All
 ```
+
+## For people maintaining the project
+
+The browser app is plain HTML, CSS, and JavaScript. AWS runs the API and stores
+saved data. GitHub Actions checks and deploys changes.
+
+| Where to look | What it contains |
+| --- | --- |
+| `frontend/` | Pages, styles, and browser behavior |
+| `backend/lambda/` | Saved picks, scoring, groups, results, and analytics |
+| `backend/custom-email-sender/` | Account verification and password-reset emails |
+| `backend/test_*` | Automated checks for application behavior |
+| `scripts/` | Local setup and validation tools |
+| `terraform/` | AWS infrastructure |
+| `docs/` | Detailed maintenance guides |
+
+Start with the [development guide](docs/development.md) for the code map and
+checks, or the [season guide](docs/season-maintenance.md) for scoring data and
+annual updates. Deployment and email setup are in the
+[infrastructure guide](terraform/README.md).
+
+Pushing to `dev` automatically checks and deploys the development app.
+Production uses the separate `prod` branch and is promoted deliberately after
+validation.
+
+The development app also has a private analytics dashboard for admins. Read
+[analytics setup and metric definitions](docs/admin-analytics.md) or the app's
+[privacy policy](https://predictplayoffs.com/privacy) for collection details.
