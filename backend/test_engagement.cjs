@@ -18,11 +18,11 @@ class Target {
 }
 function boot(options = {}) {
   let time = 0, nextTick = 5000, timer;
-  const requests = [], footer = new Target(), document = new Target(), window = new Target();
-  document.visibilityState = "visible"; document.focused = true;
+  const requests = [], document = new Target(), window = new Target();
+  document.visibilityState = options.hidden ? "hidden" : "visible"; document.focused = !options.unfocused;
   document.hasFocus = () => document.focused;
-  document.getElementById = () => options.noFooter ? null : footer;
-  document.createElement = () => new Target();
+  document.getElementById = () => assert.fail("No consent UI");
+  document.createElement = () => assert.fail("No consent UI");
   Object.defineProperty(document, "cookie", { get() { assert.fail("No cookie access"); }, set() { assert.fail("No cookies"); } });
   const storage = new Proxy({}, { get() { assert.fail("No analytics or auth storage access"); } });
   const url = new URL(options.path || "/leaderboard?sport=nba&invite=PRIVATE#secret", "https://dev.example");
@@ -35,10 +35,8 @@ function boot(options = {}) {
     fetch(url, request) { requests.push({ url, request, body: JSON.parse(request.body) }); return options.failFetch ? Promise.reject(new Error("offline")) : Promise.resolve({ status: 202 }); },
   };
   vm.runInNewContext(script, context);
-  const panel = footer.children[0], button = panel?.children[1], status = panel?.children[2];
-  return { requests, document, window, navigator, button, status, panel,
+  return { requests, document, window, navigator,
     total: () => requests.reduce((sum, request) => sum + request.body.milliseconds, 0),
-    allow() { button.fire("click"); },
     advance(ms) {
       const end = time + ms;
       while (timer && nextTick <= end) { time = nextTick; nextTick += 5000; timer(); }
@@ -47,33 +45,30 @@ function boot(options = {}) {
   };
 }
 
-test("off by default, dev/public pages only, with no storage, background collection or timers before opt-in", () => {
-  const app = boot(); app.advance(120_000);
-  assert.equal(app.requests.length, 0);
-  assert.equal(app.document.listeners.size, 0);
-  assert.match(app.status.textContent, /^Off/);
-  for (const options of [{ environment: "prod" }, { path: "/admin/analytics" }, { path: "/account" }, { noFooter: true }]) {
+test("automatic collection on public dev pages only, with no consent UI or storage", () => {
+  const app = boot(); app.advance(30_000);
+  assert.equal(app.requests.length, 1);
+  for (const options of [{ environment: "prod" }, { environment: "unknown" }, { path: "/admin/analytics" }, { path: "/account" }]) {
     const excluded = boot(options); excluded.advance(120_000);
-    assert.equal(excluded.panel, undefined); assert.equal(excluded.requests.length, 0);
+    assert.equal(excluded.document.listeners.size, 0); assert.equal(excluded.requests.length, 0);
   }
 });
 
-test("explicit opt-in sends only time and fixed page/sport labels, without credentials or query secrets", () => {
-  const app = boot(); app.allow(); app.advance(30_000);
+test("automatic measurement sends only time and fixed page/sport labels, without credentials or query secrets", () => {
+  const app = boot(); app.advance(30_000);
   assert.equal(app.requests.length, 1);
   const { url, request, body } = app.requests[0];
   assert.equal(url, "/api/analytics"); assert.equal(request.credentials, "omit");
   assert.equal(request.referrerPolicy, "no-referrer"); assert.equal(request.keepalive, true);
-  assert.deepEqual(body, { event: "active_time", page: "/leaderboard", sport: "nba", milliseconds: 30_000, consent: "active-time-v1" });
-  assert.match(app.status.textContent, /^On/);
+  assert.deepEqual(body, { event: "active_time", page: "/leaderboard", sport: "nba", milliseconds: 30_000 });
   for (const [path, sport] of [["/", "nfl"], ["/nba", "nba"], ["/picks?sport=nfl", "nfl"], ["/privacy.html", "shared"]]) {
-    const sample = boot({ path }); sample.allow(); sample.advance(30_000);
+    const sample = boot({ path }); sample.advance(30_000);
     assert.equal(sample.requests[0].body.sport, sport);
   }
 });
 
 test("idle time stops at exactly one minute, ignores synthetic interaction, and resumes without counting the idle gap", () => {
-  const app = boot(); app.allow(); app.advance(120_000);
+  const app = boot(); app.advance(120_000);
   assert.equal(app.total(), 60_000);
   app.document.fire("keydown", { isTrusted: false }); app.advance(30_000);
   assert.equal(app.total(), 60_000);
@@ -83,8 +78,8 @@ test("idle time stops at exactly one minute, ignores synthetic interaction, and 
   assert.doesNotMatch(JSON.stringify(app.requests), /PRIVATE/);
 });
 
-test("hidden tabs and blurred windows pause immediately, foreground interaction resumes, and pagehide ends permission", () => {
-  const app = boot(); app.allow(); app.advance(12_000);
+test("hidden tabs and blurred windows pause immediately, foreground interaction resumes, and browser-history restoration resumes automatically", () => {
+  const app = boot(); app.advance(12_000);
   app.document.visibilityState = "hidden"; app.document.fire("visibilitychange");
   assert.equal(app.total(), 12_000); app.advance(120_000); assert.equal(app.total(), 12_000);
   app.document.visibilityState = "visible"; app.document.fire("visibilitychange");
@@ -93,32 +88,38 @@ test("hidden tabs and blurred windows pause immediately, foreground interaction 
   assert.equal(app.total(), 22_000); app.advance(120_000); assert.equal(app.total(), 22_000);
   app.document.focused = true; app.window.fire("focus"); app.advance(7_000);
   app.window.fire("pagehide"); assert.equal(app.total(), 29_000);
-  app.window.fire("pageshow", { persisted: true }); app.advance(60_000);
-  assert.equal(app.total(), 29_000); assert.match(app.status.textContent, /^Off/);
+  app.advance(120_000); assert.equal(app.total(), 29_000);
+  app.window.fire("pageshow", { persisted: true });
+  app.window.fire("pageshow", { persisted: true }); app.advance(30_000);
+  assert.equal(app.total(), 59_000);
 });
 
-test("withdrawal discards pending time and removes all sampling listeners", () => {
-  const app = boot(); app.allow(); app.advance(10_000); app.button.fire("click");
-  app.document.fire("scroll"); app.window.fire("pagehide"); app.advance(90_000);
-  assert.equal(app.total(), 0); assert.match(app.status.textContent, /^Off/);
-  assert.ok([...app.document.listeners.values(), ...app.window.listeners.values()].every(set => set.size === 0));
+test("initially hidden or unfocused pages collect nothing until foreground interaction", () => {
+  for (const options of [{ hidden: true }, { unfocused: true }]) {
+    const app = boot(options); app.advance(120_000); assert.equal(app.total(), 0);
+    app.document.visibilityState = "visible"; app.document.focused = true;
+    app.window.fire("focus"); app.advance(30_000); app.window.fire("pagehide");
+    assert.equal(app.total(), 30_000);
+  }
 });
 
-test("initial and newly enabled GPC/DNT block collection even after permission", () => {
+test("initial and newly enabled GPC/DNT block collection and discard unsent time", () => {
   for (const options of [{ gpc: true }, { dnt: "1" }]) {
-    const app = boot(options); app.allow(); app.advance(60_000);
-    assert.equal(app.button.disabled, true); assert.equal(app.total(), 0);
+    const app = boot(options); app.advance(60_000);
+    assert.equal(app.total(), 0); assert.equal(app.document.listeners.size, 0);
   }
   for (const key of ["globalPrivacyControl", "doNotTrack"]) {
-    const app = boot(); app.allow(); app.advance(10_000);
+    const app = boot(); app.advance(10_000);
     app.navigator[key] = key === "doNotTrack" ? "1" : true; app.advance(60_000);
-    assert.equal(app.total(), 0); assert.equal(app.button.disabled, true);
-    assert.match(app.status.textContent, /privacy signal/);
+    assert.equal(app.total(), 0);
+    assert.ok([...app.document.listeners.values()].every(set => set.size === 0));
+    app.window.fire("pageshow", { persisted: true }); app.advance(60_000);
+    assert.equal(app.total(), 0);
   }
 });
 
 test("network failures do not retry, persist data, or interrupt the page", async () => {
-  const app = boot({ failFetch: true }); app.allow(); app.advance(60_000); app.advance(120_000);
+  const app = boot({ failFetch: true }); app.advance(60_000); app.advance(120_000);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.requests.length, 2); assert.equal(app.total(), 60_000);
 });

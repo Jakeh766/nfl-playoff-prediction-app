@@ -134,7 +134,7 @@ def custom(_config, start, end):
             bracket_totals[kind][event] += count
             bracket_daily.setdefault((day, kind), {key: 0 for key in BRACKET_EVENTS})[event] += count
     totals = {key: sum(row[key] for row in daily.values()) for key, _ in ACTIVITY}
-    engagement_note = "Total across opted-in page visits; pauses after 1 minute idle. No measurements appear until visitors opt in."
+    engagement_note = "Total active time across public page visits; pauses after 1 minute idle. GPC and Do Not Track exclude collection."
     try:
         active = engagement.report(start, end)
     except Exception:

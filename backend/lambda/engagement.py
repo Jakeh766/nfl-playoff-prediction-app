@@ -1,4 +1,4 @@
-"""Opt-in active-time estimates; atomic monthly buckets contain only daily totals."""
+"""Cookieless active-time estimates; atomic monthly buckets contain daily totals."""
 from datetime import datetime, timedelta, timezone
 import calendar
 import os
@@ -10,13 +10,12 @@ PAGES = {"/": "predictor", "/nba": "predictor", "/picks": "picks",
 BUCKETS = {f"{page}_{sport}": (page.capitalize(), sport.upper())
            for page in ("predictor", "picks", "leaderboard", "scoring") for sport in ("nfl", "nba")}
 BUCKETS["privacy_shared"] = ("Privacy policy", "Shared")
-CONSENT = "active-time-v1"
 
 
 def record(event, payload):
     if os.environ.get("ENVIRONMENT") != "dev":
         raise ValueError("Engagement measurements are available only on dev")
-    if set(payload) != {"event", "page", "sport", "milliseconds", "consent"} or payload["event"] != "active_time":
+    if set(payload) != {"event", "page", "sport", "milliseconds"} or payload["event"] != "active_time":
         raise ValueError("Only anonymous engagement fields are accepted")
     page, sport, milliseconds = payload["page"], payload["sport"], payload["milliseconds"]
     if (not isinstance(page, str) or page not in PAGES or not isinstance(sport, str)
@@ -24,8 +23,6 @@ def record(event, payload):
         raise ValueError("Unknown engagement page or sport")
     if type(milliseconds) is not int or not 1 <= milliseconds <= 60_000:
         raise ValueError("Engagement intervals must be between 1 and 60000 milliseconds")
-    if payload["consent"] != CONSENT:
-        raise ValueError("Engagement requires explicit permission for this page")
     headers = {key.lower(): value for key, value in (event.get("headers") or {}).items()}
     if headers.get("sec-gpc") == "1" or headers.get("dnt") == "1":
         return

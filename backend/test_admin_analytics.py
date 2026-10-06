@@ -150,7 +150,7 @@ class AdminTests(unittest.TestCase):
     def test_cache_lease_prevents_concurrent_provider_requests(self):
         request = event("custom")
         params = request["queryStringParameters"]
-        self.cache.items[f"v5:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
+        self.cache.items[f"v6:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
         with patch.dict(admin.PROVIDERS, custom=Mock()) as adapter:
             result = admin.handler(request, None)
             self.assertEqual(json.loads(result["body"])["status"], "updating")

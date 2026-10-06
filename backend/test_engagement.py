@@ -44,8 +44,7 @@ class EngagementTests(unittest.TestCase):
         self.now = datetime(2026, 10, 6, 12, tzinfo=timezone.utc)
         clock = patch.object(engagement, "datetime", Mock(wraps=datetime))
         self.clock = clock.start(); self.clock.now.return_value = self.now; self.addCleanup(clock.stop)
-        self.payload = {"event": "active_time", "page": "/leaderboard", "sport": "nba", "milliseconds": 30000,
-                        "consent": "active-time-v1"}
+        self.payload = {"event": "active_time", "page": "/leaderboard", "sport": "nba", "milliseconds": 30000}
 
     def test_only_aggregate_atomic_increments_no_individual_records_or_logging(self):
         output = io.StringIO()
@@ -62,11 +61,11 @@ class EngagementTests(unittest.TestCase):
         self.assertGreater(item["expiresAt"], int(self.now.timestamp()))
         self.assertLess(item["expiresAt"], int(self.now.timestamp()) + 400 * 86400)
 
-    def test_rejects_extra_fields_bad_consent_scalars_routes_sports_and_production(self):
+    def test_rejects_extra_fields_scalars_routes_sports_and_production(self):
         for change in [{"milliseconds": value} for value in [0, -1, 60001, True, None, "100", 1.5]] + [
             {"page": "/leaderboard?invite=private"}, {"page": []}, {"page": "/admin/analytics"},
             {"page": "/nba", "sport": "nfl"}, {"page": "/privacy", "sport": "nba"}, {"sport": []},
-            {"consent": ""}, {"consent": True}, {"event": "page_view"}, {"accountId": "private"}]:
+            {"event": "page_view"}, {"accountId": "private"}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 engagement.record({}, {**self.payload, **change})
         with patch.dict(os.environ, ENVIRONMENT="prod"), self.assertRaises(ValueError):

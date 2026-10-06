@@ -338,7 +338,7 @@ function dailyReport(rows, format = "number") {
 
 test("active time has a readable total, daily hover values, compact axes and a visible sport table", async () => {
   const app = await boot({ reports: { custom: {
-    engagement: { label: "Active engagement time", value: 4604, format: "seconds", note: "Total across opted-in page visits" },
+    engagement: { label: "Active engagement time", value: 4604, format: "seconds", note: "Total active time across public page visits" },
     tables: [{ title: "Daily activity", chart: "trend", series: ["active_time"],
       columns: [{ key: "day", label: "Day", format: "text" }, { key: "active_time", label: "Active engagement time", format: "seconds" }],
       rows: [{ day: "2026-10-01", active_time: null }, { day: "2026-10-02", active_time: 4604 }] },
@@ -346,7 +346,7 @@ test("active time has a readable total, daily hover values, compact axes and a v
         { key: "sport", label: "Sport", format: "text" }, { key: "seconds", label: "Active time", format: "seconds" }],
         rows: [{ page: "Leaderboard", sport: "NBA", seconds: 4604 }] }] } } });
   const section = app.elements.get("analytics-reports").children[1];
-  assert.match(section.text, /Active engagement time.*1 hr 16 min 44 sec.*Total across opted-in/);
+  assert.match(section.text, /Active engagement time.*1 hr 16 min 44 sec.*Total active time across public/);
   assert.match(section.text, /Active time by page.*Leaderboard.*NBA.*1 hr 16 min 44 sec/);
   const axes = nodes(section).filter(node => node.className === "analytics-axis");
   assert.ok(axes.some(node => node.textContent === "1.3 hr"));
