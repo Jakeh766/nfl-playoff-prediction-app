@@ -70,6 +70,9 @@ rejoin using any invite or the password; there is no unblock control currently.
 Voluntary departures can still rejoin. Revoked invites remain disabled when
 read, including by older clients, until the commissioner regenerates one.
 Existing memberships and archived results survive invite changes and removal.
+The dev deployment seeder skips existing demo groups and their membership
+records, so repeated deployments preserve commissioner edits, kicked members,
+and voluntary departures. It continues initializing new demo groups normally.
 
 **My Groups** in primary navigation and **View my groups** on the homepage open
 `/leaderboard#groups` directly, retaining the NBA query parameter when selected.

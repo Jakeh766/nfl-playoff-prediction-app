@@ -264,10 +264,24 @@ def seed_tables(
     region: str,
 ) -> None:
     data = build_seed_data()
+    # Existing demo groups are real editable groups. Never reset commissioner
+    # controls, activation history, removed memberships, or voluntary departures.
+    existing_groups = set()
+    for group in data["groups"]:
+        if group["recordType"] != "group":
+            continue
+        result = subprocess.run([
+            "aws", "dynamodb", "get-item", "--region", region,
+            "--table-name", groups_table, "--consistent-read",
+            "--key", json.dumps(dynamodb_item({"groupKey": group["groupKey"]})),
+            "--projection-expression", "groupKey", "--output", "json",
+        ], check=True, capture_output=True, text=True)
+        if json.loads(result.stdout).get("Item"):
+            existing_groups.add(group["groupId"])
     writes = (
         [(profiles_table, item) for item in data["profiles"]]
         + [(predictions_table, item) for item in data["predictions"]]
-        + [(groups_table, item) for item in data["groups"]]
+        + [(groups_table, item) for item in data["groups"] if item["groupId"] not in existing_groups]
     )
 
     for offset in range(0, len(writes), 25):
