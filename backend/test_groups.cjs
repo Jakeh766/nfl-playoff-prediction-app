@@ -46,7 +46,7 @@ function boot() {
   };
   const context = vm.createContext({
     document: { title: '', createElement: () => new Element(), querySelector: node, getElementById: id => node(`#${id}`),
-      querySelectorAll: selector => selector === '[data-group-view]' ? tabs : [], body: new Element() },
+      querySelectorAll: selector => selector === '[data-group-view]' ? tabs : selector === '[data-commissioner-only]' ? [node('#commissioner-section')] : [], body: new Element() },
     state: { signedIn: true, groups: [group], activeGroupId: 'g', groupSummaries: {}, groupLeaderboard: { members: [
       { userId: 'a', displayName: 'Alice', isCommissioner: true, isCurrentUser: true, hasPrediction: true },
       { userId: 'b', displayName: '<Bob>', hasPrediction: false },
@@ -64,6 +64,7 @@ function boot() {
   vm.runInContext(leaderboard, context);
   vm.runInContext(groups, context);
   context.realLoadGroupLeaderboard = context.loadGroupLeaderboard;
+  context.realOpenGroupInviteDialog = context.openGroupInviteDialog;
   context.loadGroupLeaderboard = async id => { context.loaded = id; };
   context.openGroupInviteDialog = async group => { context.invited = group.groupId; };
   return { context, node, tabs };
@@ -136,16 +137,142 @@ test('member list shows everyone and restricts removal controls to commissioner'
   context.renderGroupMembers();
   const list = node('#group-member-list');
   assert.equal(list.children.length, 2);
-  assert.match(list.children[0].children[0].textContent, /Commissioner · You/);
-  assert.equal(list.children[0].children.length, 1);
-  assert.equal(list.children[1].children[0].textContent, '<Bob> · No prediction');
-  await list.children[1].children[1].events.click();
+  const identity = list.children[0].children[1];
+  assert.equal(identity.children[0].textContent, 'Alice');
+  assert.deepEqual(identity.children[1].children.map(badge => badge.textContent), ['Commissioner', 'You', 'Prediction saved']);
+  assert.equal(list.children[0].children.length, 2);
+  assert.equal(list.children[0].dataset.currentUser, 'true');
+  assert.equal(list.children[1].children[1].children[0].textContent, '<Bob>');
+  assert.equal(list.children[1].children[1].children[1].children[0].textContent, 'No prediction');
+  await list.children[1].children[2].events.click();
   assert.equal(context.requests[0][0], '/api/groups/g/members/b');
   assert.equal(context.requests[0][1].method, 'DELETE');
   assert.equal(context.loaded, 'g');
   context.state.groups[0].isCommissioner = false;
   context.renderGroupMembers();
-  assert.ok(list.children.every(item => item.children.length === 1));
+  assert.ok(list.children.every(item => item.children.length === 2));
+});
+
+test('member removal cancellation and failure preserve the roster and usable action', async () => {
+  const { context, node } = boot();
+  context.renderGroupMembers();
+  const button = node('#group-member-list').children[1].children[2];
+  context.window.confirm = () => false;
+  await button.events.click();
+  assert.equal(context.requests.length, 0);
+  context.window.confirm = () => true;
+  context.apiRequest = async () => { throw new Error('Removal failed'); };
+  await button.events.click();
+  assert.equal(button.disabled, false);
+  assert.equal(node('#group-members-status').textContent, 'Removal failed');
+  assert.equal(node('#group-member-list').children.length, 2);
+});
+
+test('group hub shows sport-scoped season, commissioner, complete member count and tied personal rank', () => {
+  const { context, node } = boot();
+  context.state.groupLeaderboard = { ...board(), season: 2026 };
+  context.state.groupLeaderboard.members[0].isCommissioner = true;
+  context.renderGroups();
+  assert.equal(node('#active-group-meta').textContent, 'NFL + NBA · Classic');
+  assert.equal(node('#group-header-member-count').textContent, '2');
+  assert.equal(node('#group-header-commissioner').textContent, 'Alice (You)');
+  assert.equal(node('#group-season-label').textContent, 'NFL · 2026 season');
+  assert.equal(node('#group-standings-summary').textContent, '1 of 2 members have a prediction for NFL.');
+  assert.equal(node('#group-personal-rank').textContent, 'Your rank #1');
+  assert.equal(node('#commissioner-section').classes.has('hidden'), false);
+  context.IS_NBA = true; context.SPORT = 'nba';
+  context.state.groupLeaderboard.season = 2027;
+  context.state.groupLeaderboard.members[0].isCurrentUser = false;
+  context.state.groups[0].isCommissioner = false;
+  context.renderGroups();
+  assert.equal(node('#group-season-label').textContent, 'NBA · 2026–27 season');
+  assert.equal(node('#group-header-commissioner').textContent, 'Alice');
+  assert.equal(node('#group-personal-rank').textContent, 'You’re not ranked yet');
+  assert.equal(node('#commissioner-section').classes.has('hidden'), true);
+});
+
+test('header loading and detail failures do not invent zero counts or stale personal ranks', async () => {
+  const { context, node } = boot();
+  context.state.groupLeaderboard = null;
+  context.renderGroupHub();
+  assert.equal(node('#group-header-member-count').textContent, 'Loading…');
+  assert.equal(node('#group-personal-rank').textContent, '');
+  context.apiRequest = async () => { throw new Error('Unavailable'); };
+  await context.realLoadGroupLeaderboard('g');
+  assert.equal(node('#group-header-member-count').textContent, 'Unavailable');
+  assert.match(node('#status').textContent, /could not be loaded/);
+  assert.match(node('#group-members-status').textContent, /could not be loaded/);
+});
+
+test('history without seasons is a single empty state that links back to standings', () => {
+  const { context, node, tabs } = boot();
+  context.state.groupLeaderboard = board();
+  context.renderGroupHistory();
+  const history = node('#group-history-content');
+  assert.equal(history.children.length, 1);
+  assert.equal(history.children[0].className, 'group-history-empty');
+  assert.match(history.children[0].children[1].textContent, /No completed NFL seasons/);
+  history.children[0].children[2].events.click();
+  assert.equal(tabs[0].attributes['aria-selected'], 'true');
+  assert.equal(tabs[0].focused, true);
+  assert.equal(context.lastUrl, '/groups?group=g');
+});
+
+test('history renders champions and all-time sections only when each has data, retaining shared titles', () => {
+  const { context, node } = boot();
+  context.state.groupLeaderboard = board();
+  context.state.groupLeaderboard.history.seasons = [{ season: 2025, champions: ['Alice', 'Bob'], scoringOption: 'classic' }];
+  context.renderGroupHistory();
+  let children = node('#group-history-content').children;
+  assert.ok(children.some(child => child.textContent === 'Group champions'));
+  assert.ok(!children.some(child => child.textContent === 'All-time standings'));
+  const champion = children.find(child => child.className === 'group-history-champions').children[0];
+  assert.equal(champion.children[1].textContent, 'Alice & Bob');
+  assert.match(champion.children[2].textContent, /Shared title/);
+  context.state.groupLeaderboard.history.seasons = [];
+  context.state.groupLeaderboard.history.standings = [{ rank: 1, leaderboardName: 'Alice', titles: 1, seasons: 1, total: 30 }];
+  context.renderGroupHistory();
+  children = node('#group-history-content').children;
+  assert.ok(!children.some(child => child.textContent === 'Group champions'));
+  assert.ok(children.some(child => child.textContent === 'All-time standings'));
+  context.renderGroupHistory(true);
+  assert.equal(node('#group-history-content').children.length, 1);
+  assert.match(node('#group-history-content').children[0].textContent, /could not be loaded/);
+});
+
+test('sectioned settings retain invite and member actions', async () => {
+  const { context, node, tabs } = boot();
+  context.initializeGroupSettings();
+  await node('#settings-share-group-invite').events.click();
+  assert.equal(context.invited, 'g');
+  node('#settings-group-members').events.click();
+  assert.equal(tabs[1].attributes['aria-selected'], 'true');
+  assert.equal(tabs[1].focused, true);
+  const html = read('groups.html');
+  for (const id of ['group-invites-heading', 'group-competition-heading', 'group-membership-heading', 'group-danger-heading']) {
+    assert.match(html, new RegExp(`aria-labelledby="${id}"`));
+  }
+  assert.equal((html.match(/id="share-group-invite"/g) || []).length, 1);
+});
+
+test('invite dialog restores focus to the actual header, settings or regenerate opener', async () => {
+  const { context, node } = boot();
+  context.navigator = {};
+  for (const [key, id] of Object.entries({ groupInviteDialog: '#invite-dialog', groupInviteName: '#invite-name',
+    groupInviteLink: '#invite-link', groupInviteMessage: '#invite-message', copyGroupInvite: '#copy-invite',
+    shareGroupInviteNative: '#share-native' })) context.elements[key] = node(id);
+  context.apiRequest = async () => ({ groupId: 'g', groupName: 'Crew', inviteCode: 'private-test-code' });
+  context.openGroupInviteDialog = context.realOpenGroupInviteDialog;
+  context.initializeGroupSettings();
+  for (const id of ['#share-group-invite', '#settings-share-group-invite']) {
+    const trigger = node(id);
+    await context.shareActiveGroupInvite({ currentTarget: trigger });
+    node('#invite-dialog').close();
+    assert.equal(trigger.focused, true);
+  }
+  await context.changeActiveGroupInvite(false);
+  node('#invite-dialog').close();
+  assert.equal(node('#regenerate-group-invite').focused, true);
 });
 
 test('invite controls regenerate and revoke with explicit confirmation and handle failures', async () => {

@@ -1,6 +1,7 @@
 const GROUP_VIEWS = ["standings", "members", "history", "settings"];
 let groupsRequest = 0;
 let groupDetailRequest = 0;
+let groupInviteReturnFocus = null;
 
 function groupPageUrl(groupId = "", view = "standings", sport = SPORT) {
   const url = new URL(routeHref("/groups"), window.location.origin);
@@ -142,6 +143,7 @@ function renderGroups() {
   for (const id of ["regenerate-group-invite", "revoke-group-invite"]) {
     document.getElementById(id)?.classList.toggle("hidden", !isCommissioner);
   }
+  document.querySelectorAll("[data-commissioner-only]").forEach(section => section.classList.toggle("hidden", !isCommissioner));
   document.querySelector("#group-member-list")?.replaceChildren();
   if (document.querySelector("#group-member-count")) document.querySelector("#group-member-count").textContent = "";
   if (activeGroup) {
@@ -174,10 +176,15 @@ function renderGroups() {
   elements.emptyGroupLeaderboard.classList.add("hidden");
   if (activeGroup) {
     elements.activeGroupName.textContent = activeGroup.groupName;
-    document.getElementById("active-group-meta").textContent = `${groupMetadata(activeGroup)}${isCommissioner ? " · You are the commissioner" : ""}`;
+    document.getElementById("active-group-meta").textContent = groupMetadata(activeGroup);
+    document.getElementById("group-competition-summary").textContent = groupMetadata(activeGroup);
     document.getElementById("group-settings-description").textContent = isCommissioner
-      ? "You are the commissioner. Manage sports, invite links, and members from here. Remove members from the Members tab."
-      : "Invite friends or leave the group. The commissioner manages sports, invite links, and members.";
+      ? "You’re the commissioner. Shape the competition and manage access."
+      : "Your commissioner manages the competition. You can invite friends and manage your membership.";
+    document.getElementById("group-membership-description").textContent = isCommissioner
+      ? "Manage the roster in Members. To leave, first choose a member to take over as commissioner."
+      : "View the roster or leave this private competition. Leaving removes you from its standings.";
+    renderGroupHub();
     document.title = `${activeGroup.groupName} | Groups | Predict Playoffs`;
     selectGroupView(new URLSearchParams(window.location.search).get("view"), false);
   } else {
@@ -190,6 +197,11 @@ function initializeGroupSettings() {
   if (!settings) return;
   document.getElementById("regenerate-group-invite")?.addEventListener("click", () => changeActiveGroupInvite(false));
   document.getElementById("revoke-group-invite")?.addEventListener("click", () => changeActiveGroupInvite(true));
+  document.getElementById("settings-share-group-invite")?.addEventListener("click", shareActiveGroupInvite);
+  document.getElementById("settings-group-members")?.addEventListener("click", () => {
+    selectGroupView("members");
+    document.getElementById("group-tab-members").focus();
+  });
   const actionDialogs = {
     "share-group-invite": elements.groupInviteDialog,
     "edit-group-sports": elements.editGroupSportsDialog,
@@ -198,11 +210,35 @@ function initializeGroupSettings() {
   };
   Object.entries(actionDialogs).forEach(([id, dialog]) => {
     dialog?.addEventListener("close", () => {
-      const trigger = document.getElementById(id);
+      const trigger = id === "share-group-invite" && groupInviteReturnFocus
+        ? groupInviteReturnFocus : document.getElementById(id);
       if (trigger?.getClientRects().length) trigger.focus();
       else document.getElementById("groups-back")?.focus();
     });
   });
+}
+
+function renderGroupHub() {
+  if (PAGE !== "groups") return;
+  const board = state.groupLeaderboard;
+  const group = state.groups.find(item => item.groupId === state.activeGroupId);
+  const members = board?.members || [];
+  const commissioner = members.find(member => member.isCommissioner);
+  const season = board?.season;
+  const seasonLabel = season ? (IS_NBA ? `${Number(season) - 1}–${String(season).slice(-2)}` : String(season)) : "Current";
+  document.getElementById("group-season-label").textContent = `${SPORT.toUpperCase()} · ${seasonLabel} season`;
+  document.getElementById("group-header-member-count").textContent = board ? String(members.length) : "Loading…";
+  document.getElementById("group-header-commissioner").textContent = commissioner
+    ? `${commissioner.displayName}${commissioner.isCurrentUser ? " (You)" : ""}`
+    : (group?.isCommissioner ?? group?.isCreator) ? "You" : board ? "Commissioner unavailable" : "Loading…";
+  const predictions = members.filter(member => member.hasPrediction).length;
+  document.getElementById("group-standings-summary").textContent = board
+    ? `${predictions} of ${members.length} members have a prediction for ${SPORT.toUpperCase()}.`
+    : "Your group’s race to the title.";
+  const rank = groupCurrentRank(board);
+  document.getElementById("group-personal-rank").textContent = board
+    ? rank ? `Your rank #${rank}` : "You’re not ranked yet" : "";
+  if (!board) elements.groupLeaderboardStatus.textContent = "Loading competition…";
 }
 
 function renderGroupLeaderboard() {
@@ -215,9 +251,10 @@ function renderGroupLeaderboard() {
   elements.emptyGroupLeaderboard.classList.toggle("hidden", Boolean(entries.length));
   updateLeaderboardScoreHeading(elements.groupLeaderboardBody, mode);
   renderLeaderboardRows(elements.groupLeaderboardBody, entries, mode);
+  renderGroupHub();
   if (leaderboard) {
     elements.activeGroupName.textContent = leaderboard.groupName;
-    elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Upset Edge" : "Classic"} ranking · ${leaderboard.status}`;
+    elements.groupLeaderboardStatus.textContent = leaderboard.status || "Results unavailable";
     elements.groupLeaderboardStatus.title = "";
   }
 }
@@ -226,7 +263,8 @@ async function loadGroupLeaderboard(groupId = state.activeGroupId) {
   if (!groupId) return;
   const request = ++groupDetailRequest;
   renderGroupHistory();
-  elements.groupLeaderboardStatus.textContent = "Loading group leaderboard…";
+  elements.groupLeaderboardStatus.textContent = "Loading competition…";
+  document.querySelector("#group-members-status").textContent = "Loading members…";
   try {
     const leaderboard = await apiRequest(
       `/api/groups/${encodeURIComponent(groupId)}/leaderboard`,
@@ -239,6 +277,8 @@ async function loadGroupLeaderboard(groupId = state.activeGroupId) {
   } catch (error) {
     if (!state.signedIn || state.activeGroupId !== groupId || request !== groupDetailRequest) return;
     state.groupLeaderboard = null;
+    renderGroupHub();
+    document.getElementById("group-header-member-count").textContent = "Unavailable";
     elements.groupLeaderboardBody.innerHTML = "";
     elements.groupLeaderboardTableShell.classList.add("hidden");
     elements.emptyGroupLeaderboard.classList.add("hidden");
@@ -260,13 +300,38 @@ function renderGroupMembers() {
   document.querySelector("#group-members-status").textContent = "";
   for (const member of members) {
     const item = document.createElement("li");
-    const name = document.createElement("span");
-    name.textContent = `${member.displayName}${member.isCommissioner ? " · Commissioner" : ""}${member.isCurrentUser ? " · You" : ""}${member.hasPrediction ? "" : " · No prediction"}`;
-    item.appendChild(name);
+    item.className = "group-member";
+    item.dataset.currentUser = String(Boolean(member.isCurrentUser));
+    const avatar = document.createElement("span");
+    avatar.className = "group-member-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.textContent = member.displayName.trim().split(/\s+/).slice(0, 2).map(part => Array.from(part)[0] || "").join("").toUpperCase();
+    const identity = document.createElement("div");
+    identity.className = "group-member-identity";
+    const name = document.createElement("strong");
+    name.textContent = member.displayName;
+    const badges = document.createElement("div");
+    badges.className = "group-member-badges";
+    for (const [label, className, visible] of [
+      ["Commissioner", "commissioner-badge", member.isCommissioner],
+      ["You", "group-you-badge", member.isCurrentUser],
+    ]) {
+      if (!visible) continue;
+      const badge = document.createElement("span");
+      badge.className = className;
+      badge.textContent = label;
+      badges.appendChild(badge);
+    }
+    const prediction = document.createElement("span");
+    prediction.className = "group-member-prediction";
+    prediction.textContent = member.hasPrediction ? "Prediction saved" : "No prediction";
+    badges.appendChild(prediction);
+    identity.append(name, badges);
+    item.append(avatar, identity);
     if ((group?.isCommissioner ?? group?.isCreator) && !member.isCommissioner && !member.isCurrentUser) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "button button-secondary";
+      button.className = "text-link group-member-remove group-destructive";
       button.textContent = "Remove";
       button.setAttribute("aria-label", `Remove ${member.displayName}`);
       button.addEventListener("click", async () => {
@@ -298,7 +363,7 @@ async function changeActiveGroupInvite(revoke) {
   try {
     await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}/invite`, { method: revoke ? "DELETE" : "POST" });
     showToast(revoke ? "Invite link revoked. Regenerate it to invite new members." : "Invite link regenerated. Old links no longer work.");
-    if (!revoke) await openGroupInviteDialog(group);
+    if (!revoke) await openGroupInviteDialog(group, document.getElementById("regenerate-group-invite"));
   } catch (error) {
     elements.groupLeaderboardStatus.textContent = error.message;
   } finally {
@@ -327,29 +392,33 @@ function renderGroupHistory(failed = false) {
     return;
   }
   const sport = IS_NBA ? "NBA" : "NFL";
-  add("p", `${sport} · Completed seasons only. Current-season scores are in Standings.`, container, "input-hint");
-  if (!history.seasons.length) {
+  const seasons = history.seasons || [];
+  const standings = history.standings || [];
+  if (!seasons.length && !standings.length) {
     const empty = add("div", "", container, "group-history-empty");
     add("h4", "Your group’s story starts here.", empty);
-    add("p", "No completed seasons yet. After your first season ends, your champions and all-time standings will appear here.", empty);
+    add("p", `No completed ${sport} seasons yet. After your first season ends, your champions and all-time standings will appear here.`, empty);
+    const action = add("button", "View current standings", empty, "button button-secondary");
+    action.type = "button";
+    action.addEventListener("click", () => {
+      selectGroupView("standings");
+      document.getElementById("group-tab-standings").focus();
+    });
+    return;
   }
-  add("h4", "Group champions");
-  if (!history.seasons.length) {
-    add("p", "The first title is still up for grabs.", container, "input-hint");
-  } else {
+  add("p", `${sport} · Completed seasons only. Current-season scores are in Standings.`, container, "input-hint");
+  if (seasons.length) {
+    add("h4", "Group champions");
     const list = add("ol", "", container, "group-history-champions");
-    for (const season of history.seasons) {
+    for (const season of seasons) {
       const item = add("li", "", list);
       add("span", String(season.season), item, "group-history-year");
       add("strong", season.champions.length ? season.champions.join(" & ") : "No champion", item);
       add("span", `${season.champions.length > 1 ? "Shared title · " : ""}${season.scoringOption === "vegas" ? "Upset Edge" : "Classic"}`, item, "input-hint");
     }
   }
+  if (!standings.length) return;
   add("h4", "All-time standings");
-  if (!history.standings.length) {
-    add("p", "Titles, seasons played, and total points will build up here with each completed season.", container, "input-hint");
-    return;
-  }
   add("p", "Ranked by titles, then total points. Tied records share a rank.", container, "input-hint");
   const shell = add("div", "", container, "leaderboard-table-shell");
   shell.tabIndex = 0;
@@ -361,7 +430,7 @@ function renderGroupHistory(failed = false) {
     add("th", label, head).scope = "col";
   }
   const body = add("tbody", "", table);
-  for (const entry of history.standings) {
+  for (const entry of standings) {
     const row = add("tr", "", body);
     add("td", String(entry.rank), row);
     add("th", entry.leaderboardName, row).scope = "row";
@@ -832,7 +901,8 @@ function groupInviteUrl(groupId, inviteCode) {
   return url.toString();
 }
 
-async function openGroupInviteDialog(group) {
+async function openGroupInviteDialog(group, trigger = null) {
+  groupInviteReturnFocus = trigger;
   elements.groupInviteName.textContent = group.groupName;
   elements.groupInviteLink.value = "";
   elements.groupInviteMessage.textContent = "Creating a private invite link…";
@@ -861,11 +931,11 @@ async function openGroupInviteDialog(group) {
   }
 }
 
-async function shareActiveGroupInvite() {
+async function shareActiveGroupInvite(event) {
   const group = state.groups.find(
     (candidate) => candidate.groupId === state.activeGroupId,
   );
-  if (group) await openGroupInviteDialog(group);
+  if (group) await openGroupInviteDialog(group, event?.currentTarget);
 }
 
 async function copyGroupInviteLink() {

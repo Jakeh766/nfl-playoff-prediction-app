@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=61" />
+    <link rel="stylesheet" href="/styles.css?v=62" />
     <script src="/sports.js?v=4" defer></script>
     <script src="/shell.js?v=21" defer></script>
     <script src="/auth-config.js" defer></script>
@@ -38,7 +38,7 @@
     <script src="/engagement.js?v=1" defer></script>
     <script src="/app.js?v=36" defer></script>
     <script src="/leaderboard.js?v=23" defer></script>
-    <script src="/groups.js?v=2" defer></script>
+    <script src="/groups.js?v=3" defer></script>
     <script src="/bootstrap.js?v=12" defer></script>
   </head>
   <body data-page="groups">
@@ -57,10 +57,17 @@
         </div>
         <section class="group-detail hidden" id="group-leaderboard" aria-labelledby="active-group-name">
           <button class="text-link groups-back" id="groups-back" type="button">Back to Groups</button>
-          <div class="group-leaderboard-heading">
-            <div><h1 id="active-group-name" tabindex="-1"></h1><p id="active-group-meta" class="input-hint" data-no-sport-copy></p></div>
-            <p class="leaderboard-status" id="group-leaderboard-status" role="status" aria-live="polite"></p>
-          </div>
+          <header class="group-hub-header">
+            <div class="group-hub-title">
+              <div><h1 id="active-group-name" tabindex="-1"></h1><p id="active-group-meta" data-no-sport-copy></p></div>
+              <button class="button group-invite-button" id="share-group-invite" type="button">Invite others</button>
+            </div>
+            <dl class="group-hub-facts">
+              <div class="group-season-fact"><dt id="group-season-label">Current season</dt><dd id="group-leaderboard-status" role="status" aria-live="polite">Loading competition…</dd></div>
+              <div><dt>Members</dt><dd id="group-header-member-count">Loading…</dd></div>
+              <div><dt>Commissioner</dt><dd id="group-header-commissioner">Loading…</dd></div>
+            </dl>
+          </header>
           <div class="group-detail-tabs" role="tablist" aria-label="Group details">
             <button class="group-detail-tab active" id="group-tab-standings" role="tab" type="button" aria-selected="true" aria-controls="group-panel-standings" data-group-view="standings">Standings</button>
             <button class="group-detail-tab" id="group-tab-members" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-members" data-group-view="members">Members</button>
@@ -68,7 +75,8 @@
             <button class="group-detail-tab" id="group-tab-settings" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-settings" data-group-view="settings">Settings</button>
           </div>
           <div id="group-panel-standings" role="tabpanel" aria-labelledby="group-tab-standings" tabindex="0">
-            <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Rankings and scores use this group’s scoring option. Select a player to view their bracket.</p>
+            <div class="group-panel-heading"><div><h2>Season standings</h2><p id="group-standings-summary">Your group’s race to the title.</p></div><p class="group-personal-rank" id="group-personal-rank"></p></div>
+            <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Select a player to view their bracket. Use the column headings to sort scores.</p>
             <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell" role="region" aria-label="Group leaderboard table" tabindex="0">
               <table class="leaderboard-table" aria-describedby="group-leaderboard-sort-hint">
                 <thead><tr>
@@ -85,25 +93,34 @@
             <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No group member has a saved prediction yet.</p>
           </div>
           <div id="group-panel-members" class="hidden" role="tabpanel" aria-labelledby="group-tab-members" tabindex="0">
-            <h3>Members <span id="group-member-count"></span></h3>
-            <p class="input-hint">The commissioner manages sports, invites, and members. Removed members cannot rejoin with an invite or password.</p>
+            <div class="group-panel-heading"><div><h2>The roster <span id="group-member-count"></span></h2><p>Everyone in your private competition, with or without a prediction.</p></div></div>
             <ul id="group-member-list" class="group-member-list"></ul>
+            <p class="input-hint group-removal-note hidden" data-commissioner-only>Removing a member blocks them from rejoining with an invite or password.</p>
             <p id="group-members-status" role="status" aria-live="polite"></p>
           </div>
           <div id="group-panel-history" class="group-history hidden" role="tabpanel" aria-labelledby="group-tab-history" tabindex="0">
-            <h3>Group history</h3>
+            <div class="group-panel-heading"><div><h2>Group history</h2><p>Past seasons. Shared titles. Lasting bragging rights.</p></div></div>
             <div class="group-history-content" id="group-history-content" aria-live="polite"></div>
           </div>
           <div id="group-panel-settings" class="hidden" role="tabpanel" aria-labelledby="group-tab-settings" tabindex="0">
-            <h3>Group settings</h3>
-            <p class="input-hint" id="group-settings-description"></p>
-            <div class="group-settings-actions" role="group" aria-label="Group settings">
-              <button class="button button-secondary" id="share-group-invite" type="button">Invite others</button>
-              <button class="button button-secondary hidden" id="edit-group-sports" type="button">Edit sports</button>
-              <button class="button button-secondary hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button>
-              <button class="button button-secondary hidden" id="revoke-group-invite" type="button">Revoke invite link</button>
-              <button class="button button-secondary" id="leave-group" type="button">Leave group</button>
-              <button class="button button-secondary group-settings-danger hidden" id="delete-group" type="button">Delete group</button>
+            <div class="group-panel-heading"><div><h2>Group settings</h2><p id="group-settings-description"></p></div></div>
+            <div class="group-settings-actions">
+              <section class="group-setting-section" aria-labelledby="group-invites-heading">
+                <div><h3 id="group-invites-heading">Invites</h3><p>Bring your people into the competition with a private invite link.</p><p class="input-hint hidden" data-commissioner-only>Regenerating or revoking a link stops all previous links from working.</p></div>
+                <div class="group-setting-controls"><button class="button button-secondary" id="settings-share-group-invite" type="button">Copy or share invite</button><button class="text-link hidden" id="regenerate-group-invite" type="button">Regenerate link</button></div>
+              </section>
+              <section class="group-setting-section" aria-labelledby="group-competition-heading">
+                <div><h3 id="group-competition-heading">Competition</h3><p id="group-competition-summary"></p><p class="input-hint">Standings and history follow this group’s scoring mode. History includes only eligible seasons.</p></div>
+                <div class="group-setting-controls"><button class="button button-secondary hidden" id="edit-group-sports" type="button">Edit sports</button></div>
+              </section>
+              <section class="group-setting-section" aria-labelledby="group-membership-heading">
+                <div><h3 id="group-membership-heading">Membership</h3><p id="group-membership-description"></p></div>
+                <div class="group-setting-controls"><button class="button button-secondary" id="settings-group-members" type="button">View members</button><button class="text-link group-destructive" id="leave-group" type="button">Leave group</button></div>
+              </section>
+              <section class="group-setting-section group-danger-zone hidden" data-commissioner-only aria-labelledby="group-danger-heading">
+                <div><h3 id="group-danger-heading">Danger Zone</h3><p>Revoke access to the current invite link, or permanently delete the group for everyone.</p><p class="input-hint">Deleting removes the group and its history. This cannot be undone.</p></div>
+                <div class="group-setting-controls"><button class="button button-secondary group-destructive hidden" id="revoke-group-invite" type="button">Revoke invite link</button><button class="button group-delete-button hidden" id="delete-group" type="button">Delete group</button></div>
+              </section>
             </div>
           </div>
         </section>
