@@ -1,4 +1,4 @@
-"""AWS Lambda API for NFL win totals and saved playoff predictions."""
+"""AWS Lambda API for NFL/NBA predictions, scoring, profiles, and groups."""
 
 from __future__ import annotations
 
@@ -1271,6 +1271,20 @@ def create_group(user_id: str, event: dict) -> dict:
     return public_group(group, user_id)
 
 
+def commissioner_condition(group: dict, user_id: str) -> dict:
+    """Guard a write against a concurrent role change, including legacy groups."""
+    if group.get("commissionerId"):
+        condition = "commissionerId = :commissioner"
+    elif group.get("createdBy"):
+        condition = "attribute_not_exists(commissionerId) AND createdBy = :commissioner"
+    else:
+        # No placeholder is needed when the commissioner was inferred from members.
+        return {"ConditionExpression": "attribute_exists(groupKey) AND "
+                "attribute_not_exists(commissionerId) AND attribute_not_exists(createdBy)"}
+    return {"ConditionExpression": condition,
+            "ExpressionAttributeValues": {":commissioner": user_id}}
+
+
 def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
     group = get_group(group_id)
     if not group:
@@ -1280,26 +1294,20 @@ def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
     if commissioner_id != user_id:
         raise PermissionError("Only the group commissioner can edit its sports")
     sports = validate_group_sports(parse_body(event).get("sports"))
-    condition = "commissionerId = :commissioner"
-    if not group.get("commissionerId"):
-        condition = (
-            "attribute_not_exists(commissionerId) AND createdBy = :commissioner"
-            if group.get("createdBy") else
-            "attribute_not_exists(commissionerId) AND attribute_not_exists(createdBy)"
-        )
+    guard = commissioner_condition(group, user_id)
     try:
         updated = table.update_item(
             Key={"groupKey": group_item_key(group_id)},
             UpdateExpression="SET sports = :sports",
-            ConditionExpression=condition,
-            ExpressionAttributeValues={":sports": sports, ":commissioner": user_id},
+            ConditionExpression=guard["ConditionExpression"],
+            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}), ":sports": sports},
             ReturnValues="ALL_NEW",
         )["Attributes"]
     except Exception as error:
         if is_conditional_failure(error):
             raise PermissionError("The group commissioner changed. Refresh and try again") from error
         raise
-    return public_group(updated, user_id)
+    return public_group(updated, user_id, commissioner_id)
 
 
 def join_group(user_id: str, event: dict) -> dict:
@@ -1330,16 +1338,22 @@ def add_group_membership(group_id: str, user_id: str) -> None:
     if is_group_member(group_id, user_id):
         return
 
-    groups_table().put_item(
-        Item={
-            "groupKey": membership_item_key(group_id, user_id),
-            "recordType": "membership",
-            "groupId": group_id,
-            "userId": user_id,
-            "joinedAt": int(time.time() * 1000),
-        },
-        ConditionExpression="attribute_not_exists(groupKey)",
-    )
+    try:
+        groups_table().put_item(
+            Item={
+                "groupKey": membership_item_key(group_id, user_id),
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": user_id,
+                "joinedAt": int(time.time() * 1000),
+            },
+            ConditionExpression="attribute_not_exists(groupKey)",
+        )
+    except Exception as error:
+        # A second join can win the race after the membership read. Keep its
+        # original joinedAt and treat this request as an already successful join.
+        if not is_conditional_failure(error):
+            raise
 
 
 def get_group_invite(group_id: str, user_id: str) -> dict:
@@ -1580,28 +1594,14 @@ def leave_group(group_id: str, user_id: str, event: dict) -> dict:
         ):
             raise ValueError("The new commissioner must be another current group member")
 
-        condition = "commissionerId = :currentCommissioner"
-        values = {
-            ":newCommissioner": new_commissioner_id,
-            ":currentCommissioner": user_id,
-        }
-        if not group.get("commissionerId"):
-            if group.get("createdBy"):
-                condition = (
-                    "attribute_not_exists(commissionerId) AND "
-                    "createdBy = :currentCommissioner"
-                )
-            else:
-                condition = (
-                    "attribute_not_exists(commissionerId) AND "
-                    "attribute_not_exists(createdBy)"
-                )
+        guard = commissioner_condition(group, user_id)
         try:
             table.update_item(
                 Key={"groupKey": group_item_key(group_id)},
                 UpdateExpression="SET commissionerId = :newCommissioner",
-                ConditionExpression=condition,
-                ExpressionAttributeValues=values,
+                ConditionExpression=guard["ConditionExpression"],
+                ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}),
+                                           ":newCommissioner": new_commissioner_id},
             )
         except Exception as error:
             if is_conditional_failure(error):
@@ -1626,6 +1626,16 @@ def delete_group(group_id: str, user_id: str) -> None:
     if commissioner_id != user_id:
         raise PermissionError("Only the group commissioner can delete this group")
 
+    # Check ownership before deleting any related data. A commissioner transfer
+    # between the read and this write must leave the group's records intact.
+    try:
+        table.delete_item(Key={"groupKey": group_item_key(group_id)},
+                          **commissioner_condition(group, user_id))
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise PermissionError("The group commissioner changed. Refresh and try again") from error
+        raise
+
     for item in items:
         if item.get("recordType") in ("membership", "groupSeason") and item.get("groupId") == group_id:
             table.delete_item(Key={"groupKey": item["groupKey"]})
@@ -1639,19 +1649,6 @@ def delete_group(group_id: str, user_id: str) -> None:
     except Exception as error:
         if not is_conditional_failure(error):
             raise
-
-    group_delete = {"Key": {"groupKey": group_item_key(group_id)}}
-    if group.get("commissionerId"):
-        group_delete.update(
-            ConditionExpression="commissionerId = :commissioner",
-            ExpressionAttributeValues={":commissioner": user_id},
-        )
-    elif group.get("createdBy"):
-        group_delete.update(
-            ConditionExpression="createdBy = :creator",
-            ExpressionAttributeValues={":creator": user_id},
-        )
-    table.delete_item(**group_delete)
 
 
 def delete_group_memberships(user_id: str) -> None:

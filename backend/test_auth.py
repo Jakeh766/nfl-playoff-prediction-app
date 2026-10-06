@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import types
 import unittest
@@ -67,6 +68,12 @@ class FakeGroupTable:
         item = self.items.get(Key["groupKey"])
         return {"Item": item} if item else {}
 
+    @staticmethod
+    def check_expression_values(values, *expressions):
+        used = set(re.findall(r":[A-Za-z0-9_]+", " ".join(expression or "" for expression in expressions)))
+        if used != set(values or {}):
+            raise ValueError("DynamoDB requires every expression value to be used")
+
     def put_item(self, *, Item, ConditionExpression=None):
         if ConditionExpression and Item["groupKey"] in self.items:
             raise ConditionalCheckFailed()
@@ -80,12 +87,20 @@ class FakeGroupTable:
         ExpressionAttributeValues=None,
     ):
         existing = self.items.get(Key["groupKey"])
+        self.check_expression_values(ExpressionAttributeValues, ConditionExpression)
         if ConditionExpression:
             values = ExpressionAttributeValues or {}
-            if "commissionerId" in ConditionExpression:
+            if "commissionerId = :commissioner" in ConditionExpression:
                 attribute, value_key = "commissionerId", ":commissioner"
-            elif "createdBy" in ConditionExpression:
-                attribute, value_key = "createdBy", ":creator"
+            elif "createdBy = :commissioner" in ConditionExpression:
+                if not existing or "commissionerId" in existing:
+                    raise ConditionalCheckFailed()
+                attribute, value_key = "createdBy", ":commissioner"
+            elif "attribute_not_exists(commissionerId)" in ConditionExpression:
+                if not existing or "commissionerId" in existing or "createdBy" in existing:
+                    raise ConditionalCheckFailed()
+                self.items.pop(Key["groupKey"])
+                return
             else:
                 attribute, value_key = "groupId", ":groupId"
             if not existing or existing.get(attribute) != values.get(value_key):
@@ -103,16 +118,17 @@ class FakeGroupTable:
     ):
         item = self.items[Key["groupKey"]]
         values = ExpressionAttributeValues or {}
+        self.check_expression_values(values, UpdateExpression, ConditionExpression)
         if UpdateExpression == "SET inviteCode = :inviteCode":
             if ConditionExpression and "inviteCode" in item:
                 raise ConditionalCheckFailed()
             item["inviteCode"] = values[":inviteCode"]
         elif UpdateExpression == "SET commissionerId = :newCommissioner":
-            current = values[":currentCommissioner"]
-            if "commissionerId = :currentCommissioner" == ConditionExpression:
+            current = values.get(":commissioner")
+            if "commissionerId = :commissioner" == ConditionExpression:
                 if item.get("commissionerId") != current:
                     raise ConditionalCheckFailed()
-            elif "createdBy = :currentCommissioner" in (ConditionExpression or ""):
+            elif "createdBy = :commissioner" in (ConditionExpression or ""):
                 if "commissionerId" in item or item.get("createdBy") != current:
                     raise ConditionalCheckFailed()
             elif "commissionerId" in item or "createdBy" in item:
@@ -648,6 +664,64 @@ class PrivateGroupTests(unittest.TestCase):
 
         duplicate = self.create(user_id="user-456", name="  sunday crew  ")
         self.assertEqual(duplicate["statusCode"], 400)
+
+    def test_legacy_groups_can_edit_sports_and_transfer_without_unused_values(self):
+        for keep_creator in (True, False):
+            with self.subTest(keep_creator=keep_creator):
+                created = json.loads(self.create(name=f"Legacy {keep_creator}")["body"])
+                group_id = created["groupId"]
+                self.join(name=f"Legacy {keep_creator}")
+                group = self.groups.items[f"group#{group_id}"]
+                group.pop("commissionerId", None)
+                if not keep_creator:
+                    del group["createdBy"]
+                    # Make the inferred creator unambiguous even on fast machines.
+                    group["createdAt"] = 1
+                    self.groups.items[lambda_app.membership_item_key(group_id, "user-123")]["joinedAt"] = 1
+                    self.groups.items[lambda_app.membership_item_key(group_id, "user-456")]["joinedAt"] = 2
+                updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                    body={"sports": ["nfl", "nba"]}), None)
+                self.assertEqual(updated["statusCode"], 200)
+                self.assertTrue(json.loads(updated["body"])["isCommissioner"])
+                transferred = self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")
+                self.assertEqual(transferred["statusCode"], 200)
+                self.assertEqual(group["commissionerId"], "user-456")
+
+    def test_role_change_during_delete_preserves_memberships_name_and_history(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+        history_key = f"history#{group_id}#nfl#2026"
+        self.groups.items[history_key] = {"groupKey": history_key, "recordType": "groupSeason", "groupId": group_id}
+        original_delete = self.groups.delete_item
+
+        def transfer_before_delete(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original_delete(**kwargs)
+
+        keys = set(self.groups.items)
+        with patch.object(self.groups, "delete_item", side_effect=transfer_before_delete) as deletion:
+            rejected = self.delete(group_id)
+        self.assertEqual(rejected["statusCode"], 403)
+        deletion.assert_called_once()
+        self.assertEqual(set(self.groups.items), keys)
+
+    def test_concurrent_password_and_invite_joins_preserve_original_membership(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+        membership = dict(self.groups.items[lambda_app.membership_item_key(group_id, "user-456")])
+        code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        with patch.object(lambda_app, "is_group_member", return_value=False):
+            self.assertEqual(self.join()["statusCode"], 200)
+            self.assertEqual(self.join_invite(group_id, code)["statusCode"], 200)
+        self.assertEqual(self.groups.items[lambda_app.membership_item_key(group_id, "user-456")], membership)
+
+    def test_join_storage_failure_is_not_treated_as_success(self):
+        created = json.loads(self.create()["body"])
+        with patch.object(self.groups, "put_item", side_effect=RuntimeError("Storage unavailable")):
+            with self.assertRaises(RuntimeError):
+                lambda_app.add_group_membership(created["groupId"], "user-456")
 
     def test_group_creator_can_delete_group_and_release_its_name(self):
         created = json.loads(self.create()["body"])
