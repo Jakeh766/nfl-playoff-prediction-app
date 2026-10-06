@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css?v=59" />
-    <link rel="stylesheet" href="/admin-analytics.css?v=5" />
+    <link rel="stylesheet" href="/admin-analytics.css?v=6" />
     <script src="/auth-config.js" defer></script>
-    <script src="/admin-analytics.js?v=6" defer></script>
+    <script src="/admin-analytics.js?v=7" defer></script>
   </head>
   <body data-page="admin-analytics">
     <a class="analytics-skip" href="#analytics-main">Skip to analytics</a>
@@ -40,11 +40,12 @@
         <label>End date<input id="analytics-end" type="date" required /></label>
         <button class="button button-primary" id="analytics-apply" type="submit">Update reports</button>
       </form>
-      <p class="analytics-note">Totals cover the selected range. Traffic and activity measure dev; Google Search measures the connected production domain.</p>
+      <p class="analytics-note">Traffic, activity and seasons measure dev; Google Search measures the connected production domain. Seasons covers all retained seasons, independent of the date range.</p>
       <p id="analytics-status" class="analytics-status" role="status" aria-live="polite"></p>
       <div class="analytics-tabs" role="tablist" aria-label="Analytics sections">
         <button id="analytics-tab-goatcounter" class="analytics-tab" type="button" role="tab" aria-selected="true" aria-controls="analytics-panel-goatcounter" aria-label="Traffic" data-provider="goatcounter">Traffic<span class="analytics-tab-state">Loading</span></button>
         <button id="analytics-tab-custom" class="analytics-tab" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-custom" aria-label="PredictPlayoffs activity" tabindex="-1" data-provider="custom">Activity<span class="analytics-tab-state">Loading</span></button>
+        <button id="analytics-tab-seasons" class="analytics-tab" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-seasons" aria-label="Season activity" tabindex="-1" data-provider="seasons">Seasons<span class="analytics-tab-state">Loading</span></button>
         <button id="analytics-tab-search-console" class="analytics-tab" type="button" role="tab" aria-selected="false" aria-controls="analytics-panel-search-console" aria-label="Google Search" data-provider="search-console">Google Search<span class="analytics-tab-state">Loading</span></button>
       </div>
       <div class="analytics-reports" id="analytics-reports" aria-busy="true"></div>

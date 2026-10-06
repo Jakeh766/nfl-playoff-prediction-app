@@ -20,6 +20,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 import boto3
 import goatcounter_sessions
 import engagement
+import season_analytics
 
 
 class NotConfigured(Exception):
@@ -328,4 +329,5 @@ def search_console(config, start, end):
             "note": "Google Search Console · final web search data for the configured property. Pacific dates; data can lag several days. Missing days are unreported, not zero. Query/page/country/device tables show top returned rows; anonymized queries and API limits mean breakdowns may not add up to totals. CTR and average position use provider aggregates."}
 
 
-PROVIDERS = {"custom": custom, "goatcounter": goatcounter, "search-console": search_console}
+PROVIDERS = {"custom": custom, "goatcounter": goatcounter, "search-console": search_console,
+             "seasons": season_analytics.report}

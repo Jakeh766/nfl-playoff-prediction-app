@@ -14,7 +14,7 @@ import boto3
 from analytics_providers import PROVIDERS, NotConfigured
 
 NAMES = {"custom": "PredictPlayoffs activity", "goatcounter": "Traffic",
-         "search-console": "Google Search"}
+         "search-console": "Google Search", "seasons": "Season activity"}
 _config = None
 _config_until = 0
 
@@ -99,7 +99,7 @@ def cached_report(provider, start, end):
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
     version = "v6" if provider == "custom" else "v4"
-    key = f"{version}:{provider}:{start}:{end}"
+    key = "v1:seasons:all" if provider == "seasons" else f"{version}:{provider}:{start}:{end}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})
     if int(item.get("freshUntil", 0)) > now and item.get("report"):
@@ -124,7 +124,7 @@ def cached_report(provider, start, end):
               "range": {"start": start.isoformat(), "end": end.isoformat(), "timezone": "UTC"}}
     ttl = 900
     try:
-        config = {} if provider == "custom" else settings()
+        config = {} if provider in {"custom", "seasons"} else settings()
         report = PROVIDERS[provider](config, start, end)
         if provider == "goatcounter":
             # Pending exports need a short retry, not the normal 15-minute cache.

@@ -156,6 +156,21 @@ class AdminTests(unittest.TestCase):
             self.assertEqual(json.loads(result["body"])["status"], "updating")
             adapter["custom"].assert_not_called()
 
+    def test_season_cache_is_shared_across_date_ranges_without_provider_credentials(self):
+        adapter = Mock(return_value={"metrics": [], "tables": [],
+                                     "range": {"window": "All retained seasons", "timezone": "Season totals"}})
+        with patch.dict(admin.PROVIDERS, seasons=adapter), patch.object(admin, "settings") as settings:
+            first = json.loads(admin.handler(event("seasons"), None)["body"])
+            request = event("seasons")
+            request["queryStringParameters"] = {"start": str(date.today() - timedelta(days=28)),
+                                                "end": str(date.today() - timedelta(days=1))}
+            second = json.loads(admin.handler(request, None)["body"])
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        self.assertEqual(second["range"]["window"], "All retained seasons")
+        adapter.assert_called_once()
+        settings.assert_not_called()
+
     def test_cache_expiry_and_missing_configuration(self):
         with patch.object(admin, "settings", return_value={}), patch.dict(admin.PROVIDERS,
              goatcounter=Mock(side_effect=providers.NotConfigured)):
