@@ -143,6 +143,8 @@ class FakeGroupTable:
         self.check_expression_values(ExpressionAttributeValues, ConditionExpression)
         if ConditionExpression:
             values = ExpressionAttributeValues or {}
+            if not self.condition_matches(existing, ConditionExpression, values):
+                raise ConditionalCheckFailed()
             if "commissionerId = :commissioner" in ConditionExpression:
                 attribute, value_key = "commissionerId", ":commissioner"
             elif "createdBy = :commissioner" in ConditionExpression:
@@ -189,7 +191,7 @@ class FakeGroupTable:
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
             item["commissionerId"] = values[":newCommissioner"]
-        elif UpdateExpression.startswith(("SET sports = :sports", "SET scoringOptions =", "SET passwordSalt =")):
+        elif UpdateExpression.startswith(("SET groupName =", "SET sports = :sports", "SET scoringOptions =", "SET passwordSalt =")):
             if not self.condition_matches(item, ConditionExpression or "", values):
                 raise ConditionalCheckFailed()
             if "commissionerId = :commissioner" in ConditionExpression:
@@ -560,6 +562,71 @@ class PrivateGroupTests(unittest.TestCase):
                 result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body=body), None)
                 self.assertEqual(result["statusCode"], 400)
                 self.assertEqual(self.groups.items[f"group#{group_id}"], original)
+
+    def test_group_rename_preserves_members_history_credentials_and_invites(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.items[f"group#{group_id}"].copy()
+        result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                         body={"groupName": "  Sunday   Legends  "}), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(json.loads(result["body"])["groupName"], "Sunday Legends")
+        self.assertNotIn("name#sunday crew", self.groups.items)
+        self.assertEqual(self.groups.items["name#sunday legends"]["groupId"], group_id)
+        updated = self.groups.items[f"group#{group_id}"]
+        for key, value in original.items():
+            if key not in ("groupName", "normalizedName"):
+                self.assertEqual(updated[key], value)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(self.join(user_id="third", name="Sunday Legends")["statusCode"], 200)
+        self.assertEqual(self.join(user_id="fourth", name="Sunday Crew")["statusCode"], 400)
+        result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                         body={"groupName": "SUNDAY LEGENDS"}), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["groupName"], "SUNDAY LEGENDS")
+        self.assertEqual(self.create(name="Sunday Crew", user_id="another")["statusCode"], 201)
+
+    def test_group_rename_rejects_members_invalid_names_and_duplicate_reservations_atomically(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.create(name="Taken Name", user_id="another")
+        original = {key: value.copy() for key, value in self.groups.items.items()}
+        for user, name, status in (("user-456", "Member Rename", 403), ("outsider", "Outsider Rename", 403),
+                                   ("user-123", "x", 400), ("user-123", "<invalid>", 400),
+                                   ("user-123", "Taken Name", 400)):
+            result = lambda_app.handler(event("PATCH", user_id=user, path=f"/api/groups/{group_id}",
+                                             body={"groupName": name, "password": "changed-secret"}), None)
+            self.assertEqual(result["statusCode"], status)
+            self.assertEqual(self.groups.items, original)
+
+    def test_group_rename_losing_commissioner_race_keeps_both_name_reservations_intact(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        transaction = self.groups.transact_write_items
+        def transfer_first(**arguments):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "new-owner"
+            return transaction(**arguments)
+        with patch.object(self.groups, "transact_write_items", side_effect=transfer_first):
+            result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                             body={"groupName": "New Name"}), None)
+        self.assertEqual(result["statusCode"], 400)
+        self.assertIn("name#sunday crew", self.groups.items)
+        self.assertNotIn("name#new name", self.groups.items)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["groupName"], "Sunday Crew")
+
+    def test_group_delete_rejects_a_concurrent_rename_before_removing_records(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        original_delete = self.groups.delete_item
+        def rename_first(**arguments):
+            group = self.groups.items[f"group#{group_id}"]
+            group["groupName"] = "Renamed Crew"
+            group["normalizedName"] = "renamed crew"
+            self.groups.items["name#renamed crew"] = {"groupKey": "name#renamed crew", "groupId": group_id}
+            return original_delete(**arguments)
+        with patch.object(self.groups, "delete_item", side_effect=rename_first):
+            self.assertEqual(self.delete(group_id)["statusCode"], 403)
+        self.assertIn(f"group#{group_id}", self.groups.items)
+        self.assertIn("name#renamed crew", self.groups.items)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
 
     def test_scoring_is_sport_specific_and_locked_at_exact_deadline_even_on_dev(self):
         group_id = json.loads(self.create()["body"])["groupId"]

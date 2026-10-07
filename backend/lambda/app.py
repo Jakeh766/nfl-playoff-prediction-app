@@ -1386,12 +1386,19 @@ def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
     if commissioner_id != user_id:
         raise PermissionError("Only the group commissioner can change competition settings")
     body = parse_body(event)
-    if not isinstance(body, dict) or set(body) - {"sports", "scoringOption", "password"}:
-        raise ValueError("Choose sports, scoringOption, or password to change")
+    if not isinstance(body, dict) or set(body) - {"groupName", "sports", "scoringOption", "password"}:
+        raise ValueError("Choose groupName, sports, scoringOption, or password to change")
     if not body:
         raise ValueError("Choose a group setting to change")
     sports = validate_group_sports(body["sports"]) if "sports" in body else group_sports(group)
     updates, values = [], {}
+    renamed = False
+    if "groupName" in body:
+        name, normalized = normalize_group_name(body["groupName"])
+        renamed = normalized != group["normalizedName"]
+        updates.extend(["groupName = :name", "normalizedName = :normalized"])
+        values.update({":name": name, ":normalized": normalized,
+                       ":previousName": group["normalizedName"], ":previousLabel": group["groupName"]})
     if "sports" in body:
         eligibility = json.loads(json.dumps(sport_eligibility(group), default=int))
         now = int(time.time() * 1000)
@@ -1403,6 +1410,8 @@ def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
         updates.extend(["sports = :sports", "sportEligibility = :eligibility"])
         values.update({":sports": sports, ":eligibility": eligibility})
     guard = commissioner_condition(group, user_id)
+    if "groupName" in body:
+        guard["ConditionExpression"] += " AND normalizedName = :previousName AND groupName = :previousLabel"
     if "scoringOption" in body:
         mode = body["scoringOption"]
         if mode not in ("classic", "vegas"):
@@ -1434,6 +1443,24 @@ def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
     if "scoringOption" in body and group_scoring_lock()["locked"]:
         raise PermissionError("Scoring is locked for this sport at the prediction deadline")
     try:
+        if renamed:
+            # Reserve the new name, release the old name, and update the group
+            # together. A duplicate name or concurrent edit leaves all three intact.
+            table.meta.client.transact_write_items(TransactItems=[
+                {"Update": {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                            "UpdateExpression": "SET " + ", ".join(updates),
+                            "ConditionExpression": guard["ConditionExpression"],
+                            "ExpressionAttributeValues": {**guard.get("ExpressionAttributeValues", {}), **values}}},
+                {"Put": {"TableName": table.name,
+                         "Item": {"groupKey": group_name_item_key(normalized), "recordType": "groupName",
+                                  "normalizedName": normalized, "groupId": group_id},
+                         "ConditionExpression": "attribute_not_exists(groupKey)"}},
+                {"Delete": {"TableName": table.name,
+                            "Key": {"groupKey": group_name_item_key(group["normalizedName"])},
+                            "ConditionExpression": "groupId = :groupId",
+                            "ExpressionAttributeValues": {":groupId": group_id}}},
+            ])
+            return public_group(get_group(group_id), user_id, commissioner_id)
         updated = table.update_item(
             Key={"groupKey": group_item_key(group_id)},
             UpdateExpression="SET " + ", ".join(updates),
@@ -1442,6 +1469,8 @@ def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
             ReturnValues="ALL_NEW",
         )["Attributes"]
     except Exception as error:
+        if renamed and group_transaction_conflict(error):
+            raise ValueError("That group name is already taken or group settings changed. Refresh and try again") from error
         if is_conditional_failure(error):
             raise PermissionError("Group settings or commissioner changed. Refresh and try again") from error
         raise
@@ -1889,11 +1918,14 @@ def delete_group(group_id: str, user_id: str) -> None:
     # Check ownership before deleting any related data. A commissioner transfer
     # between the read and this write must leave the group's records intact.
     try:
+        guard = commissioner_condition(group, user_id)
+        guard["ConditionExpression"] += " AND normalizedName = :previousName"
+        guard.setdefault("ExpressionAttributeValues", {})[":previousName"] = group["normalizedName"]
         table.delete_item(Key={"groupKey": group_item_key(group_id)},
-                          **commissioner_condition(group, user_id))
+                          **guard)
     except Exception as error:
         if is_conditional_failure(error):
-            raise PermissionError("The group commissioner changed. Refresh and try again") from error
+            raise PermissionError("The group name or commissioner changed. Refresh and try again") from error
         raise
 
     for item in items:
