@@ -16,6 +16,7 @@
   --divider: #ebe8e2;
   --field-border: #c9c8c2;
   --link: #0d3972;
+  --link-hover: #082b58;
   --accent-text: #e33b3f;
   --danger-text: #b7202d;
   --warning-text: #73520d;
@@ -79,6 +80,7 @@
     --divider: #405368;
     --field-border: #52677b;
     --link: #a4ceff;
+    --link-hover: #8cb8eb;
     --accent-text: #ff727e;
     --danger-text: #ff8b95;
     --warning-text: #ffd584;
@@ -3220,12 +3222,23 @@ body .champion-display strong {
 }
 
 .leaderboard-row {
-  cursor: pointer;
+  cursor: default;
   transition: background 150ms ease;
 }
 
-.leaderboard-row:hover {
-  background: var(--row-hover);
+.leaderboard-row[data-has-prediction="true"] {
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .leaderboard-row[data-has-prediction="true"]:hover {
+    background: var(--row-hover);
+  }
+
+  .leaderboard-row[data-has-prediction="true"]:hover .leaderboard-player-button strong {
+    color: var(--link-hover);
+    text-decoration: underline;
+  }
 }
 
 .leaderboard-player-button {
@@ -3243,25 +3256,26 @@ body .champion-display strong {
 
 .leaderboard-player-button strong {
   font-size: 14px;
+  text-decoration: none;
+  text-underline-offset: 3px;
 }
 
 .leaderboard-player-button span {
   margin-top: 3px;
+  color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  text-decoration: underline;
-  text-underline-offset: 2px;
   text-transform: uppercase;
 }
 
-.leaderboard-player-button:hover strong {
+.leaderboard-player-button:enabled:focus-visible strong {
+  color: var(--link-hover);
   text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .leaderboard-player-button:focus-visible {
-  outline: 3px solid var(--focus-ring);
+  outline: 2px solid var(--focus-outline);
   outline-offset: 4px;
   border-radius: 2px;
 }

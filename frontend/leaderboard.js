@@ -437,6 +437,7 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
     const row = document.createElement("tr");
     row.className = "leaderboard-row";
     const hasPrediction = entry.hasPrediction !== false;
+    row.dataset.hasPrediction = String(hasPrediction);
     if (hasPrediction) row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
@@ -453,10 +454,15 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
     playerButton.type = "button";
     const playerName = document.createElement("strong");
     playerName.textContent = entry.leaderboardName + (entry.isCommissioner ? " · Commissioner" : "");
-    const viewLabel = document.createElement("span");
-    viewLabel.textContent = hasPrediction ? "View bracket" : "No prediction";
     playerButton.disabled = !hasPrediction;
-    playerButton.append(playerName, viewLabel);
+    playerButton.appendChild(playerName);
+    if (hasPrediction) {
+      playerButton.setAttribute("aria-label", `View bracket for ${entry.leaderboardName}`);
+    } else {
+      const status = document.createElement("span");
+      status.textContent = "No prediction";
+      playerButton.appendChild(status);
+    }
     player.appendChild(playerButton);
 
     const champion = createLeaderboardChampionCell(entry);

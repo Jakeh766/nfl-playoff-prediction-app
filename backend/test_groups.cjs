@@ -128,8 +128,31 @@ test('shared renderer does not open a bracket for missing predictions', () => {
   assert.equal(button.children[0].textContent, 'Alice · Commissioner');
   assert.equal(button.children[1].textContent, 'No prediction');
   assert.equal(button.disabled, true);
+  assert.equal(button.attributes['aria-label'], undefined);
+  assert.equal(row.dataset.hasPrediction, 'false');
   assert.equal(row.events.click, undefined);
   assert.equal(row.children[5].textContent, '—');
+});
+
+test('saved player rows show only an accessible player name and retain full-row activation', () => {
+  for (const hasPrediction of [true, undefined]) {
+    const { context } = boot();
+    const body = new Element();
+    const entry = { leaderboardName: '<Alice & friends>', hasPrediction, total: 30, rank: 1 };
+    const opened = [];
+    context.openPublicBracket = player => opened.push(player);
+    context.renderLeaderboardRows(body, [entry]);
+    const row = body.children[0];
+    const button = row.children[1].children[0];
+    assert.equal(row.dataset.hasPrediction, 'true');
+    assert.equal(button.type, 'button');
+    assert.equal(button.disabled, false);
+    assert.equal(button.children.length, 1, 'no repeated label or extra icon');
+    assert.equal(button.children[0].textContent, '<Alice & friends>');
+    assert.equal(button.attributes['aria-label'], 'View bracket for <Alice & friends>');
+    row.events.click();
+    assert.deepEqual(opened, [entry]);
+  }
 });
 
 test('member list shows everyone and restricts removal controls to commissioner', async () => {
