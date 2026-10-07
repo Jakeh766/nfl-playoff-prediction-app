@@ -2,10 +2,15 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "CreateProdResponseHeadersPolicy",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateResponseHeadersPolicy",
+      "Resource": "*"
+    },
+    {
       "Sid": "ManageProdResponseHeadersPolicy",
       "Effect": "Allow",
       "Action": [
-        "cloudfront:CreateResponseHeadersPolicy",
         "cloudfront:DeleteResponseHeadersPolicy",
         "cloudfront:GetResponseHeadersPolicy",
         "cloudfront:GetResponseHeadersPolicyConfig",

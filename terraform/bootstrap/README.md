@@ -39,9 +39,11 @@ terraform -chdir=terraform/bootstrap apply
 
 The browser-security deployment creates a custom CloudFront response-header
 policy. Both deployment roles need its five lifecycle operations: create,
-get, get configuration, update, and delete. These permissions are scoped to
-response-header policies in this AWS account; CloudFront assigns their IDs at
-creation, so the resource ARN ends in `response-headers-policy/*`.
+get, get configuration, update, and delete. AWS does not support resource-level
+permissions for `CreateResponseHeadersPolicy`, so its separate creation statement
+requires `Resource: "*"`. The other four operations remain scoped to response-header
+policies in this AWS account using `response-headers-policy/*`. See the
+[CloudFront authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudfront.html).
 
 Production run 13 failed with `AccessDenied` for
 `cloudfront:CreateResponseHeadersPolicy`. Its Groups database indexes and other
@@ -53,11 +55,11 @@ the deployment succeeds.
 
 The reviewed grant is available in
 [`prod-response-headers-permission.json`](prod-response-headers-permission.json).
-It contains only the additive statement for the existing
+It contains only the two additive statements for the existing
 `nfl-playoff-predictor-prod-github-actions` role. If applying it in the IAM
-console, append its statement to the existing
+console, append both statements to the existing
 `nfl-playoff-predictor-prod-terraform-deploy` inline policy; do not replace the
-existing policy with this small document. The matching statement in `main.tf`
+existing policy with this small document. The matching statements in `main.tf`
 keeps future bootstrap applies consistent.
 
 Changing live IAM permissions requires explicit authorization under
