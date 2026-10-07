@@ -1175,18 +1175,8 @@ async function submitDeleteAccount(event) {
     const accessToken = await getValidAccessToken();
     if (!accessToken) throw new Error("Your session expired. Please sign in again.");
 
-    const groupsPayload = await apiRequest("/api/groups");
-    const managedGroups = (groupsPayload.groups || []).filter(
-      (group) => group.isCommissioner ?? group.isCreator,
-    );
-    if (managedGroups.length) {
-      const groupNames = managedGroups.map((group) => group.groupName).join(", ");
-      throw new Error(
-        `Before deleting your account, leave each group you manage and appoint a new commissioner: ${groupNames}`,
-      );
-    }
-
-    await apiRequest("/api/prediction", { method: "DELETE" });
+    // The profile endpoint checks commissioner roles across both sports before
+    // removing memberships, predictions, and the profile.
     await apiRequest("/api/profile", { method: "DELETE" });
     await requestCognito("DeleteUser", { AccessToken: accessToken });
     window.siteAnalytics?.track("account_deleted");

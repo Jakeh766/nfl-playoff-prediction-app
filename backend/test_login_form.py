@@ -219,15 +219,10 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('value !== "DELETE"', app_javascript)
 
         delete_flow = app_javascript[app_javascript.index("async function submitDeleteAccount") :]
-        prediction_delete = delete_flow.index(
-            'apiRequest("/api/prediction", { method: "DELETE" })'
-        )
         profile_delete = delete_flow.index(
             'apiRequest("/api/profile", { method: "DELETE" })'
         )
         account_delete = delete_flow.index('requestCognito("DeleteUser"')
-        self.assertLess(prediction_delete, account_delete)
-        self.assertLess(prediction_delete, profile_delete)
         self.assertLess(profile_delete, account_delete)
 
     def test_signed_in_card_keeps_account_details_in_account_dialog(self):
