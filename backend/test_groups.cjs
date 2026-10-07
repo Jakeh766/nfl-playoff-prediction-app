@@ -125,6 +125,8 @@ test('shared renderer does not open a bracket for missing predictions', () => {
   context.renderLeaderboardRows(body, [{ leaderboardName: 'Alice', isCommissioner: true, hasPrediction: false, total: null }]);
   const row = body.children[0];
   const button = row.children[1].children[0];
+  assert.match(button.className, /\btext-button\b/);
+  assert.equal(button.type, 'button');
   assert.equal(button.children[0].textContent, 'Alice · Commissioner');
   assert.equal(button.children[1].textContent, 'No prediction');
   assert.equal(button.disabled, true);
@@ -144,6 +146,10 @@ test('member list shows everyone and restricts removal controls to commissioner'
   assert.equal(list.children[0].dataset.currentUser, 'true');
   assert.equal(list.children[1].children[1].children[0].textContent, '<Bob>');
   assert.equal(list.children[1].children[1].children[1].children[0].textContent, 'No prediction');
+  const remove = list.children[1].children[2];
+  assert.match(remove.className, /\btext-button\b/);
+  assert.match(remove.className, /\btext-button--danger\b/);
+  assert.equal(remove.type, 'button');
   await list.children[1].children[2].events.click();
   assert.equal(context.requests[0][0], '/api/groups/g/members/b');
   assert.equal(context.requests[0][1].method, 'DELETE');

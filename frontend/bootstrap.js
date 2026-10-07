@@ -139,14 +139,12 @@ elements.leaderboardNameDialog.addEventListener("close", () => {
   pendingPredictionSave = false;
   elements.leaderboardNameMessage.textContent = "";
 });
-elements.forgotPassword.addEventListener("click", (event) => {
-  event.preventDefault();
+elements.forgotPassword.addEventListener("click", () => {
   elements.forgotEmail.value = elements.loginEmail.value.trim();
   showAuthPanel("forgotPassword");
   elements.forgotEmail.focus();
 });
-elements.createAccount.addEventListener("click", (event) => {
-  event.preventDefault();
+elements.createAccount.addEventListener("click", () => {
   elements.createEmail.value = elements.loginEmail.value.trim();
   showAuthPanel("createAccount");
   elements.createEmail.focus();

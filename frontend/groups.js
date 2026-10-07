@@ -400,7 +400,7 @@ function renderGroupMembers() {
     if ((group?.isCommissioner ?? group?.isCreator) && !member.isCommissioner && !member.isCurrentUser) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "text-link group-member-remove group-destructive";
+      button.className = "text-button text-button--danger group-member-remove";
       button.textContent = "Remove";
       button.setAttribute("aria-label", `Remove ${member.displayName}`);
       button.addEventListener("click", async () => {
