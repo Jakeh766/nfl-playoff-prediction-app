@@ -1277,6 +1277,47 @@ class PrivateGroupTests(unittest.TestCase):
             self.groups.items,
         )
 
+    def test_visible_password_is_member_only_and_updates_with_existing_patch(self):
+        created = json.loads(self.create(password="<shared & secret>  ")["body"])
+        group_id = created["groupId"]
+        path = f"/api/groups/{group_id}/invite"
+        self.join(password="<shared & secret>  ")
+        for user in ("user-123", "user-456"):
+            result = lambda_app.handler(event("GET", user_id=user, path=path), None)
+            self.assertEqual(result["statusCode"], 200)
+            self.assertEqual(json.loads(result["body"])["groupPassword"], "<shared & secret>  ")
+            self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+            for key in ("passwordHash", "passwordSalt", "shareablePassword"):
+                self.assertNotIn(key, json.loads(result["body"]))
+        for user, status in ((None, 401), ("outsider", 403)):
+            result = lambda_app.handler(event("GET", user_id=user, path=path), None)
+            self.assertEqual(result["statusCode"], status)
+            self.assertNotIn("groupPassword", json.loads(result["body"]))
+        updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                    body={"password": "replacement-secret"}), None)
+        self.assertEqual(updated["statusCode"], 200)
+        self.assertNotIn("shareablePassword", json.loads(updated["body"]))
+        self.assertEqual(lambda_app.get_group_invite(group_id, "user-456")["groupPassword"], "replacement-secret")
+        listed = lambda_app.list_groups("user-456")["groups"][0]
+        for key in ("groupPassword", "shareablePassword"):
+            self.assertNotIn(key, listed)
+        lambda_app.remove_group_member(group_id, "user-123", "user-456")
+        self.assertEqual(lambda_app.handler(event("GET", user_id="user-456", path=path), None)["statusCode"], 403)
+
+    def test_legacy_password_stays_valid_until_commissioner_sets_visible_password(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        group = self.groups.items[f"group#{group_id}"]
+        del group["shareablePassword"]
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["groupPassword"])
+        self.assertEqual(self.join()["statusCode"], 200)
+        group["inviteRevoked"] = True
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["groupPassword"])
+        updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                    body={"password": "visible-secret"}), None)
+        self.assertEqual(updated["statusCode"], 200)
+        self.assertEqual(lambda_app.get_group_invite(group_id, "user-123")["groupPassword"], "visible-secret")
+
     def test_existing_group_gets_an_invite_code_when_first_shared(self):
         created = json.loads(self.create()["body"])
         group = self.groups.items[f"group#{created['groupId']}"]

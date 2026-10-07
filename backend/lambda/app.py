@@ -1338,6 +1338,9 @@ def create_group(user_id: str, event: dict) -> dict:
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
+        # Shared group credential, readable only through the member-only invite API.
+        # Keep the hash for join validation; DynamoDB encrypts the record at rest.
+        "shareablePassword": password,
         "inviteCode": new_group_invite_code(),
         "createdAt": created_at,
     }
@@ -1419,8 +1422,9 @@ def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
             guard["ConditionExpression"] += " AND attribute_not_exists(scoringOptions)"
     if "password" in body:
         salt, digest = hash_group_password(validate_group_password(body["password"]))
-        updates.extend(["passwordSalt = :salt", "passwordHash = :hash", "passwordIterations = :iterations"])
-        values.update({":salt": salt, ":hash": digest, ":iterations": GROUP_PASSWORD_ITERATIONS})
+        updates.extend(["passwordSalt = :salt", "passwordHash = :hash", "passwordIterations = :iterations", "shareablePassword = :password"])
+        values.update({":salt": salt, ":hash": digest, ":iterations": GROUP_PASSWORD_ITERATIONS,
+                       ":password": body["password"]})
     # Preserve concurrent sports/eligibility changes and the current role.
     if "sports" in group:
         guard["ConditionExpression"] += " AND sports = :previousSports"
@@ -1579,7 +1583,8 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
 
     invite_code = group.get("inviteCode")
     if group.get("inviteRevoked"):
-        return {"groupId": group_id, "groupName": group["groupName"], "inviteCode": None, "revoked": True}
+        return {"groupId": group_id, "groupName": group["groupName"], "inviteCode": None,
+                "revoked": True, "groupPassword": group.get("shareablePassword")}
     if not isinstance(invite_code, str) or not GROUP_INVITE_CODE_PATTERN.fullmatch(
         invite_code
     ):
@@ -1607,6 +1612,7 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
         "groupId": group_id,
         "groupName": group["groupName"],
         "inviteCode": invite_code,
+        "groupPassword": group.get("shareablePassword"),
     }
 
 

@@ -130,6 +130,7 @@ def password_fields(group_name: str, password: str) -> dict:
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": PASSWORD_ITERATIONS,
+        "shareablePassword": password,
     }
 
 

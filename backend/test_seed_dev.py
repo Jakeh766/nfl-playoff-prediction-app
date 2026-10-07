@@ -53,6 +53,7 @@ class DevSeedTests(unittest.TestCase):
             self.assertNotIn("password", group)
             self.assertEqual(len(group["passwordSalt"]), 32)
             self.assertEqual(len(group["passwordHash"]), 64)
+            self.assertGreaterEqual(len(group["shareablePassword"]), 6)
             self.assertIn(group["createdBy"], {
                 membership["userId"]
                 for membership in memberships
