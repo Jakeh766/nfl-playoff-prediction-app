@@ -13,10 +13,12 @@ class GroupQueryTests(unittest.TestCase):
         routes = dict(re.findall(r'resource "aws_apigatewayv2_route" "([^"]+)" \{\n(.*?)\n\}', source, re.S))
         for name, route in (("group_member_remove", "DELETE /api/groups/{groupId}/members/{userId}"),
                             ("group_invite_regenerate", "POST /api/groups/{groupId}/invite"),
-                            ("group_invite_revoke", "DELETE /api/groups/{groupId}/invite")):
+                            ("group_commissioner_transfer", "POST /api/groups/{groupId}/commissioner")):
             self.assertIn(f'"{route}"', routes[name])
             self.assertIn('authorization_type = "JWT"', routes[name])
             self.assertIn('authorizer_id      = aws_apigatewayv2_authorizer.cognito.id', routes[name])
+        self.assertNotIn('group_invite_revoke', routes)
+        self.assertNotIn('DELETE /api/groups/{groupId}/invite', source)
 
     def test_queries_follow_every_page_with_the_same_index_condition(self):
         table = Mock()

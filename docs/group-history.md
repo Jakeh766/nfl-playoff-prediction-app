@@ -63,8 +63,8 @@ membership candidates are rechecked against the base table because indexes are
 eventually consistent; newly joined members may take a short time to appear.
 
 Commissioners can remove another member from **Members** or regenerate the invite
-with `POST /api/groups/{id}/invite`. The UI has no separate revoke action; the
-legacy `DELETE` endpoint remains commissioner-only for older clients.
+with `POST /api/groups/{id}/invite` under Settings → Invite options. Invite friends
+is the main invite action. The revoke feature and `DELETE` invite route are removed.
 Removal uses `DELETE /api/groups/{id}/members/{userId}` and an atomic commissioner
 check plus a `removedMembership` tombstone. Joins atomically check the group and
 the invite/password against a new membership write. Removed accounts cannot
@@ -90,8 +90,15 @@ change NFL scoring, and immutable season snapshots retain their captured mode.
 Writes check the current commissioner and previous sports/scoring values so
 concurrent edits or commissioner transfers cannot overwrite another change.
 Regular members can view competition info, share the current invite, and leave.
-Commissioners must transfer to another current member before leaving; only the
-commissioner can delete the group.
+Settings groups the commissioner’s controls into Group, Invites, Members &
+Commissioner, and Danger Zone. Regular members see group information, the
+commissioner, invite sharing, and their own membership controls. Password and
+scoring editors stay collapsed until needed; locked scoring has no editor.
+Commissioners transfer with `POST /api/groups/{id}/commissioner`, supplying a
+`newCommissionerId` for another current member. The atomic role change preserves
+both memberships and existing group records. Transfer is separate from leaving:
+`DELETE /api/groups/{id}/membership` rejects the current commissioner and guards
+against a concurrent role change. Only the commissioner can delete the group.
 
 **Groups** in primary navigation and **View groups** on the homepage open
 `/groups` directly, retaining the NBA query parameter when selected. Old

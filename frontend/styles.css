@@ -2972,28 +2972,38 @@ body .champion-display strong {
 .group-detail .group-destructive { color: var(--danger-text); }
 .group-removal-note { margin-top: 16px; font-size: 0.75rem; }
 .group-settings-actions { display: flex; flex-direction: column; gap: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.group-setting-section { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 28px; padding: 24px; border-bottom: 1px solid var(--line); }
+.group-setting-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: start; gap: 28px; padding: 24px; border-bottom: 1px solid var(--line); }
 .group-setting-section h3 { margin: 0 0 8px; font-size: 1rem; }
 .group-setting-section p { max-width: 60ch; margin: 0; font-size: 0.875rem; line-height: 1.6; color: var(--muted); }
 .group-setting-section .input-hint { margin-top: 8px; font-size: 0.75rem; }
-.group-setting-controls { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 180px; }
+.group-setting-controls { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
 .group-setting-controls .button { font-size: 0.875rem; }
 .group-setting-section:last-child { border-bottom: 0; }
-.group-competition-section { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.group-competition-section { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .group-competition-fields { display: flex; flex-direction: column; gap: 0; }
-.group-competition-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 0.6fr); align-items: start; gap: 24px; padding: 18px 0; border-top: 1px solid var(--line); }
+.group-competition-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: start; gap: 28px; padding: 18px 0; border-top: 1px solid var(--line); }
+.group-competition-row:first-child { border-top: 0; }
+.group-competition-row:last-child { padding-bottom: 0; }
 .group-competition-row h4 { margin: 0 0 6px; font-size: 0.875rem; }
 .group-competition-row > button { justify-self: start; }
 .group-inline-form { display: grid; gap: 8px; }
 .group-inline-form label { font-size: 0.75rem; font-weight: 600; }
 .group-inline-form input, .group-inline-form select { width: 100%; min-height: 44px; padding: 10px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px; font: inherit; font-size: 0.875rem; }
 .group-inline-form .button { justify-self: start; }
-.group-password-editor summary { min-height: 44px; padding: 10px 0; color: var(--link); font-size: 0.875rem; font-weight: 600; cursor: pointer; }
-.group-password-editor summary:focus-visible, .group-inline-form input:focus-visible, .group-inline-form select:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 3px; }
+.group-setting-editor { width: 100%; min-width: 0; }
+.group-setting-editor summary { min-height: 44px; padding: 10px 0; color: var(--link); font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+.group-setting-editor[open] summary { margin-bottom: 8px; }
+.group-setting-editor summary:focus-visible, .group-inline-form input:focus-visible, .group-inline-form select:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 3px; }
+.group-invite-options summary { font-size: 0.75rem; font-weight: 500; color: var(--muted); }
+.group-settings-actions .text-link { text-decoration: none; color: var(--link); }
+.group-settings-actions .text-link.group-destructive { color: var(--danger-text); }
+.group-settings-actions .text-link:focus-visible, .group-setting-editor summary:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+@media (hover: hover) and (pointer: fine) {
+  .group-settings-actions .text-link:hover, .group-setting-editor summary:hover { text-decoration: underline; text-underline-offset: 4px; }
+}
 .group-detail .group-inline-form button:disabled, .group-detail .group-inline-form select:disabled { opacity: 0.6; cursor: not-allowed; }
 .group-password-mask { letter-spacing: 0.15em; }
-#group-competition-message:empty { display: none; }
-.group-settings-actions .group-danger-zone { margin: 12px; padding: 20px; border: 1px solid var(--danger-text); border-radius: 8px; }
+#group-competition-message:empty, #group-commissioner-message:empty { display: none; }
 .group-danger-zone h3 { color: var(--danger-text); }
 .group-detail .group-delete-button { color: white; background: var(--red-dark); border-color: var(--red-dark); }
 .group-detail .group-delete-button:hover { background: #971927; border-color: #971927; }
@@ -3016,7 +3026,7 @@ body .champion-display strong {
   .group-detail .group-member-avatar { width: 34px; height: 34px; flex-basis: 34px; font-size: 0.75rem; }
   .group-setting-section { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 20px; }
   .group-competition-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .group-setting-controls { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 18px; min-width: 0; }
+  .group-setting-controls { gap: 8px; }
   .group-detail .group-history-empty { padding: 28px 20px; }
 }
 

@@ -60,7 +60,7 @@
           <header class="group-hub-header">
             <div class="group-hub-title">
               <div><h1 id="active-group-name" tabindex="-1"></h1><p id="active-group-meta" data-no-sport-copy></p></div>
-              <button class="button group-invite-button" id="share-group-invite" type="button">Invite others</button>
+              <button class="button group-invite-button" id="share-group-invite" type="button">Invite friends</button>
             </div>
             <dl class="group-hub-facts">
               <div class="group-season-fact"><dt id="group-season-label">Current season</dt><dd id="group-leaderboard-status" role="status" aria-live="polite">Loading competition…</dd></div>
@@ -103,35 +103,36 @@
             <div class="group-history-content" id="group-history-content" aria-live="polite"></div>
           </div>
           <div id="group-panel-settings" class="hidden" role="tabpanel" aria-labelledby="group-tab-settings" tabindex="0">
-            <div class="group-panel-heading"><div><h2>Group settings</h2><p id="group-settings-description"></p></div></div>
+            <div class="group-panel-heading"><div><h2>Group settings</h2></div></div>
             <div class="group-settings-actions">
               <section class="group-setting-section group-competition-section" aria-labelledby="group-competition-heading">
-                <div><h3 id="group-competition-heading">Competition</h3><p id="group-competition-summary"></p><p class="input-hint">History includes only eligible seasons. Scoring changes apply to the selected sport.</p></div>
+                <h3 id="group-competition-heading">Group</h3>
                 <div class="group-competition-fields">
+                  <div class="group-competition-row"><div><h4>Group name</h4><p id="group-settings-name"></p></div></div>
                   <div class="group-competition-row"><div><h4>Sports</h4><p id="group-settings-sports"></p></div><button class="button button-secondary hidden" id="edit-group-sports" type="button">Change sports</button></div>
                   <div class="group-competition-row">
                     <div><h4 id="group-settings-scoring-label">Scoring</h4><p id="group-settings-scoring"></p><p class="input-hint" id="group-scoring-lock-status"></p></div>
-                    <form id="group-scoring-form" class="group-inline-form hidden" data-commissioner-only>
+                    <details id="group-scoring-editor" class="group-setting-editor hidden" data-commissioner-only><summary>Change scoring</summary><form id="group-scoring-form" class="group-inline-form">
                       <label for="group-settings-scoring-select">New scoring system</label><select id="group-settings-scoring-select"><option value="classic">Classic</option><option value="vegas">Upset Edge</option></select><button class="button button-secondary" id="save-group-scoring" type="submit">Save scoring</button>
-                    </form>
+                    </form></details>
                   </div>
                   <div class="group-competition-row">
-                    <div><h4>Password</h4><p class="group-password-mask" aria-label="Group password is hidden">••••••••</p><p class="input-hint">The current password cannot be viewed or recovered.</p></div>
-                    <details class="group-password-editor hidden" data-commissioner-only id="group-password-editor"><summary>Set a new password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details>
+                    <div><h4>Group password</h4><p class="group-password-mask" aria-label="Group password is hidden and cannot be recovered">••••••••</p></div>
+                    <details class="group-setting-editor hidden" data-commissioner-only id="group-password-editor"><summary>Change password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details>
                   </div>
                 </div>
                 <p class="dialog-message" id="group-competition-message" role="status" aria-live="polite"></p>
               </section>
               <section class="group-setting-section" aria-labelledby="group-invites-heading">
-                <div><h3 id="group-invites-heading">Invites</h3><p>Bring your people into the competition with a private invite link.</p><p class="input-hint hidden" data-commissioner-only>Regenerating creates a new link and stops all previous links from working.</p></div>
-                <div class="group-setting-controls"><button class="button button-secondary" id="settings-share-group-invite" type="button">Copy or share invite</button><button class="text-link hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button></div>
+                <div><h3 id="group-invites-heading">Invites</h3><p>Bring your friends into the group.</p></div>
+                <div class="group-setting-controls"><button class="button button-primary" id="settings-share-group-invite" type="button">Invite friends</button><details class="group-setting-editor group-invite-options hidden" data-commissioner-only id="group-invite-options"><summary>Invite options</summary><button class="text-link" id="regenerate-group-invite" type="button">Regenerate invite link</button></details></div>
               </section>
               <section class="group-setting-section" aria-labelledby="group-membership-heading">
-                <div><h3 id="group-membership-heading">Membership</h3><p id="group-membership-description"></p></div>
-                <div class="group-setting-controls"><button class="button button-secondary" id="settings-group-members" type="button">View members</button><button class="text-link group-destructive" id="leave-group" type="button">Leave group</button></div>
+                <div><h3 id="group-membership-heading">Members &amp; Commissioner</h3><p>Commissioner: <strong id="group-settings-commissioner"></strong></p><p class="input-hint hidden" data-commissioner-only>Transfer commissioner before leaving.</p></div>
+                <div class="group-setting-controls"><button class="button button-secondary" id="settings-group-members" type="button">Manage members</button><details class="group-setting-editor hidden" data-commissioner-only id="group-commissioner-editor"><summary>Transfer commissioner</summary><form id="group-commissioner-form" class="group-inline-form"><label for="group-new-commissioner">New commissioner</label><select id="group-new-commissioner" required></select><p class="input-hint">They’ll manage the group. You’ll stay as a member.</p><button class="button button-secondary" id="save-group-commissioner" type="submit">Transfer commissioner</button></form></details><p class="dialog-message" id="group-commissioner-message" role="status" aria-live="polite"></p><button class="text-link group-destructive hidden" id="leave-group" type="button">Leave group</button></div>
               </section>
               <section class="group-setting-section group-danger-zone hidden" data-commissioner-only aria-labelledby="group-danger-heading">
-                <div><h3 id="group-danger-heading">Danger Zone</h3><p>Permanently delete the group for everyone.</p><p class="input-hint">Deleting removes the group and its history. This cannot be undone.</p></div>
+                <div><h3 id="group-danger-heading">Danger Zone</h3><p>Delete the group and its history for everyone.</p></div>
                 <div class="group-setting-controls"><button class="button group-delete-button hidden" id="delete-group" type="button">Delete group</button></div>
               </section>
             </div>

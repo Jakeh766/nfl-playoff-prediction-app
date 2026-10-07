@@ -392,8 +392,6 @@ const elements = {
   leaveGroupForm: document.querySelector("#leave-group-form"),
   leaveGroupTitle: document.querySelector("#leave-group-title"),
   leaveGroupDescription: document.querySelector("#leave-group-description"),
-  newCommissionerField: document.querySelector("#new-commissioner-field"),
-  newCommissioner: document.querySelector("#new-commissioner"),
   leaveGroupMessage: document.querySelector("#leave-group-message"),
   cancelLeaveGroup: document.querySelector("#cancel-leave-group"),
   confirmLeaveGroup: document.querySelector("#confirm-leave-group"),

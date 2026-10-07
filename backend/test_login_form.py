@@ -385,7 +385,7 @@ class LoginFormTests(unittest.TestCase):
         groups_permissions = terraform[:groups_resource_index].rsplit("{", 1)[-1]
         self.assertIn('"dynamodb:UpdateItem"', groups_permissions)
 
-    def test_group_deletion_is_creator_only_and_confirmed(self):
+    def test_group_deletion_is_commissioner_only_and_transfer_is_separate_from_leaving(self):
         html = (FRONTEND_DIR / "groups.html").read_text(encoding="utf-8")
         app_javascript = "\n".join(
             (
@@ -406,10 +406,12 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('route_key          = "DELETE /api/groups/{groupId}"', terraform)
         self.assertIn('id="leave-group"', html)
         self.assertIn('id="leave-group-dialog"', self.shell)
-        self.assertIn('}/members`', app_javascript)
+        self.assertIn('}/commissioner`', app_javascript)
+        self.assertNotIn('id="new-commissioner-field"', self.shell)
         self.assertIn('}/membership`', app_javascript)
         self.assertIn('route_key          = "GET /api/groups/{groupId}/members"', terraform)
         self.assertIn('route_key          = "DELETE /api/groups/{groupId}/membership"', terraform)
+        self.assertIn('route_key          = "POST /api/groups/{groupId}/commissioner"', terraform)
 
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")

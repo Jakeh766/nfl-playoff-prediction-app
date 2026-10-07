@@ -1529,7 +1529,7 @@ def require_commissioner(group_id: str, user_id: str) -> dict:
 def remove_group_member(group_id: str, user_id: str, member_id: str) -> dict:
     group = require_commissioner(group_id, user_id)
     if member_id == user_id:
-        raise ValueError("Use Leave group to transfer commissioner access before leaving")
+        raise ValueError("Transfer commissioner before leaving this group")
     if not is_group_member(group_id, member_id):
         raise ValueError("That user is not a current group member")
     table = groups_table()
@@ -1552,9 +1552,9 @@ def remove_group_member(group_id: str, user_id: str, member_id: str) -> dict:
     return {"removed": True}
 
 
-def change_group_invite(group_id: str, user_id: str, *, revoke=False) -> dict:
+def change_group_invite(group_id: str, user_id: str) -> dict:
     group = require_commissioner(group_id, user_id)
-    code = "" if revoke else new_group_invite_code()
+    code = new_group_invite_code()
     guard = commissioner_condition(group, user_id)
     try:
         groups_table().update_item(
@@ -1562,14 +1562,14 @@ def change_group_invite(group_id: str, user_id: str, *, revoke=False) -> dict:
             UpdateExpression="SET inviteCode = :inviteCode, inviteRevoked = :revoked",
             ConditionExpression=guard["ConditionExpression"],
             ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}),
-                                       ":inviteCode": code, ":revoked": revoke},
+                                       ":inviteCode": code, ":revoked": False},
         )
     except Exception as error:
         if is_conditional_failure(error):
             raise PermissionError("The group commissioner changed. Refresh and try again") from error
         raise
     return {"groupId": group_id, "groupName": group["groupName"],
-            "inviteCode": code or None, "revoked": revoke}
+            "inviteCode": code}
 
 
 def get_group_invite(group_id: str, user_id: str) -> dict:
@@ -1797,6 +1797,41 @@ def list_group_members(group_id: str, user_id: str) -> dict:
     return {"groupId": group_id, "members": members}
 
 
+def transfer_group_commissioner(group_id: str, user_id: str, event: dict) -> dict:
+    group = require_commissioner(group_id, user_id)
+    body = parse_body(event)
+    if not isinstance(body, dict) or set(body) != {"newCommissionerId"}:
+        raise ValueError("Choose a new commissioner")
+    replacement = body["newCommissionerId"]
+    if not isinstance(replacement, str) or not replacement or replacement == user_id:
+        raise ValueError("The new commissioner must be another current group member")
+    if not is_group_member(group_id, replacement):
+        raise ValueError("The new commissioner must be another current group member")
+    table = groups_table()
+    guard = commissioner_condition(group, user_id)
+    try:
+        table.meta.client.transact_write_items(TransactItems=[
+            {"Update": {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                        "UpdateExpression": "SET commissionerId = :newCommissioner",
+                        "ConditionExpression": guard["ConditionExpression"],
+                        "ExpressionAttributeValues": {**guard.get("ExpressionAttributeValues", {}),
+                                                      ":newCommissioner": replacement}}},
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": membership_item_key(group_id, replacement)},
+                                "ConditionExpression": "recordType = :membership",
+                                "ExpressionAttributeValues": {":membership": "membership"}}},
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": membership_item_key(group_id, user_id)},
+                                "ConditionExpression": "recordType = :membership",
+                                "ExpressionAttributeValues": {":membership": "membership"}}},
+        ])
+    except Exception as error:
+        if group_transaction_conflict(error):
+            raise PermissionError("The commissioner or membership changed. Refresh and try again") from error
+        raise
+    return {"commissionerTransferred": True}
+
+
 def leave_group(group_id: str, user_id: str, event: dict) -> dict:
     group = get_group(group_id)
     if not group:
@@ -1813,44 +1848,26 @@ def leave_group(group_id: str, user_id: str, event: dict) -> dict:
         raise PermissionError("Group membership required")
 
     commissioner_id = group_commissioner_id(group, memberships)
-    new_commissioner_id = parse_body(event).get("newCommissionerId")
     if commissioner_id == user_id:
-        if not isinstance(new_commissioner_id, str) or not new_commissioner_id:
-            raise ValueError("Choose a new commissioner before leaving this group")
-        if new_commissioner_id == user_id or not any(
-            item.get("userId") == new_commissioner_id for item in memberships
-        ):
-            raise ValueError("The new commissioner must be another current group member")
-
-        guard = commissioner_condition(group, user_id)
-        try:
-            table.meta.client.transact_write_items(TransactItems=[
-                {"Update": {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
-                            "UpdateExpression": "SET commissionerId = :newCommissioner",
-                            "ConditionExpression": guard["ConditionExpression"],
-                            "ExpressionAttributeValues": {**guard.get("ExpressionAttributeValues", {}),
-                                                          ":newCommissioner": new_commissioner_id}}},
-                {"ConditionCheck": {"TableName": table.name,
-                                    "Key": {"groupKey": membership_item_key(group_id, new_commissioner_id)},
-                                    "ConditionExpression": "recordType = :membership",
-                                    "ExpressionAttributeValues": {":membership": "membership"}}},
-                {"Delete": {"TableName": table.name,
-                            "Key": {"groupKey": membership_item_key(group_id, user_id)},
-                            "ConditionExpression": "recordType = :membership",
-                            "ExpressionAttributeValues": {":membership": "membership"}}},
-            ])
-        except Exception as error:
-            if group_transaction_conflict(error):
-                raise ValueError(
-                    "The commissioner or replacement membership changed. Refresh and try again"
-                ) from error
-            raise
-        return {"left": True, "commissionerTransferred": True}
-    elif new_commissioner_id is not None:
-        raise ValueError("Only the current commissioner can appoint a replacement")
-
-    table.delete_item(Key={"groupKey": membership_item_key(group_id, user_id)})
-    return {"left": True, "commissionerTransferred": commissioner_id == user_id}
+        raise PermissionError("Transfer commissioner to another member before leaving this group")
+    if parse_body(event):
+        raise ValueError("Transfer commissioner separately before leaving")
+    # A concurrent transfer must not allow the new commissioner to leave.
+    try:
+        table.meta.client.transact_write_items(TransactItems=[
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": group_item_key(group_id)},
+                                **commissioner_condition(group, commissioner_id)}},
+            {"Delete": {"TableName": table.name,
+                        "Key": {"groupKey": membership_item_key(group_id, user_id)},
+                        "ConditionExpression": "recordType = :membership",
+                        "ExpressionAttributeValues": {":membership": "membership"}}},
+        ])
+    except Exception as error:
+        if group_transaction_conflict(error):
+            raise PermissionError("The commissioner or membership changed. Refresh and try again") from error
+        raise
+    return {"left": True, "commissionerTransferred": False}
 
 
 def delete_group(group_id: str, user_id: str) -> None:
@@ -1984,6 +2001,7 @@ def handle_request(event, context):
     group_membership_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/membership", path or ""
     )
+    group_commissioner_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})/commissioner", path or "")
     group_delete_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})", path or "")
     if path not in (
         "/api/prediction",
@@ -1998,6 +2016,7 @@ def handle_request(event, context):
             group_members_match,
             group_remove_match,
             group_membership_match,
+            group_commissioner_match,
             group_delete_match,
         )
     ):
@@ -2077,6 +2096,16 @@ def handle_request(event, context):
         except PermissionError as error:
             return response(403, {"message": str(error)})
 
+    if group_commissioner_match:
+        if method != "POST":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(200, transfer_group_commissioner(group_commissioner_match.group(1), user_id, event))
+        except ValueError as error:
+            return response(400, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
+
     if group_membership_match:
         if method != "DELETE":
             return response(404, {"message": "Not found"})
@@ -2091,12 +2120,11 @@ def handle_request(event, context):
             return response(403, {"message": str(error)})
 
     if group_invite_match:
-        if method not in ("GET", "POST", "DELETE"):
+        if method not in ("GET", "POST"):
             return response(404, {"message": "Not found"})
         try:
             if method != "GET":
-                return response(200, change_group_invite(group_invite_match.group(1), user_id,
-                                                         revoke=method == "DELETE"))
+                return response(200, change_group_invite(group_invite_match.group(1), user_id))
             return response(
                 200,
                 get_group_invite(group_invite_match.group(1), user_id),

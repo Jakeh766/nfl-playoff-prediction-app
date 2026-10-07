@@ -826,9 +826,9 @@ resource "aws_apigatewayv2_route" "group_invite_regenerate" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
-resource "aws_apigatewayv2_route" "group_invite_revoke" {
+resource "aws_apigatewayv2_route" "group_commissioner_transfer" {
   api_id             = aws_apigatewayv2_api.api.id
-  route_key          = "DELETE /api/groups/{groupId}/invite"
+  route_key          = "POST /api/groups/{groupId}/commissioner"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

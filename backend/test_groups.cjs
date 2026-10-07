@@ -299,6 +299,12 @@ test('sectioned settings retain invite and member actions', async () => {
     assert.match(html, new RegExp(`aria-labelledby="${id}"`));
   }
   assert.equal((html.match(/id="share-group-invite"/g) || []).length, 1);
+  assert.match(html, />Group<\/h3>/);
+  assert.match(html, />Members &amp; Commissioner<\/h3>/);
+  assert.match(html, /id="settings-share-group-invite"[^>]*>Invite friends/);
+  assert.match(html, /id="group-invite-options"><summary>Invite options/);
+  assert.match(html, /id="group-password-editor"><summary>Change password/);
+  assert.doesNotMatch(html, /group-settings-description|History includes only eligible seasons|Set a new password/);
 });
 
 test('invite dialog restores focus to the actual header, settings or regenerate opener', async () => {
@@ -347,11 +353,13 @@ test('competition settings reflect the selected sport, scoring lock and role', (
   context.renderGroupCompetition();
   assert.equal(node('#group-settings-scoring').textContent, 'Classic');
   assert.equal(node('#save-group-scoring').disabled, false);
+  assert.equal(node('#group-scoring-editor').classes.has('hidden'), false);
   assert.equal(node('#save-group-password').disabled, false);
   assert.match(context.groupMetadata(context.state.groups[0]), /NFL · Classic \/ NBA · Upset Edge/);
   context.state.groupLeaderboard.scoringLock.locked = true;
   context.renderGroupCompetition();
   assert.equal(node('#save-group-scoring').disabled, true);
+  assert.equal(node('#group-scoring-editor').classes.has('hidden'), true);
   assert.equal(node('#group-settings-scoring-select').disabled, true);
   assert.equal(node('#save-group-password').disabled, false);
   assert.match(node('#group-scoring-lock-status').textContent, /locked for NFL/);
@@ -362,6 +370,9 @@ test('competition settings reflect the selected sport, scoring lock and role', (
   assert.equal(node('#edit-group-sports').classes.has('hidden'), true);
   assert.equal(node('#delete-group').classes.has('hidden'), true);
   assert.equal(node('#regenerate-group-invite').classes.has('hidden'), true);
+  assert.equal(node('#leave-group').classes.has('hidden'), false);
+  assert.equal(node('#settings-group-members').textContent, 'View members');
+  assert.equal(node('#group-membership-heading').textContent, 'Membership');
 });
 
 test('commissioner updates password without retrieving it, clears secret inputs and keeps errors usable', async () => {
@@ -593,15 +604,89 @@ test('sport settings preserve PATCH semantics and refresh the open group', async
   assert.equal(context.refreshed, 'g');
 });
 
-test('leaving transfers commissioner access and returns to the directory', async () => {
+test('commissioner transfers separately, stays in group and loses management controls', async () => {
   const { context, node } = boot();
-  for (const [key, id] of Object.entries({ newCommissioner: '#successor', confirmLeaveGroup: '#confirm',
+  context.renderGroups();
+  assert.equal(node('#leave-group').classes.has('hidden'), true);
+  assert.equal(node('#group-settings-commissioner').textContent, 'Alice (You)');
+  node('#group-new-commissioner').value = 'b';
+  let finish;
+  context.apiRequest = (...args) => { context.requests.push(args); return new Promise(resolve => { finish = resolve; }); };
+  context.refreshGroups = async id => { context.refreshed = id; };
+  const pending = context.submitGroupCommissioner({ preventDefault() {} });
+  assert.equal(node('#save-group-commissioner').disabled, true);
+  await context.submitGroupCommissioner({ preventDefault() {} });
+  assert.equal(context.requests.length, 1);
+  assert.equal(context.requests[0][0], '/api/groups/g/commissioner');
+  assert.equal(context.requests[0][1].method, 'POST');
+  assert.deepEqual(JSON.parse(context.requests[0][1].body), { newCommissionerId: 'b' });
+  finish({}); await pending;
+  assert.equal(context.state.groups.length, 1);
+  assert.equal(context.state.activeGroupId, 'g');
+  assert.equal(context.state.groups[0].isCommissioner, false);
+  assert.equal(context.state.groupLeaderboard.members[1].isCommissioner, true);
+  assert.equal(node('#delete-group').classes.has('hidden'), true);
+  assert.equal(node('#leave-group').classes.has('hidden'), false);
+  assert.equal(context.refreshed, 'g');
+  assert.match(context.toast, /still a member/);
+  assert.equal(node('#settings-group-members').focused, true);
+});
+
+test('transfer only allows another member, handles errors and empty/loading rosters', async () => {
+  const { context, node } = boot();
+  context.renderGroupCommissioner();
+  assert.equal(node('#group-new-commissioner').children[1].textContent, '<Bob>');
+  for (const id of ['', 'a', 'outsider']) {
+    node('#group-new-commissioner').value = id;
+    await context.submitGroupCommissioner({ preventDefault() {} });
+  }
+  assert.equal(context.requests.length, 0);
+  context.apiRequest = async () => { throw new Error('Membership changed'); };
+  node('#group-new-commissioner').value = 'b';
+  await context.submitGroupCommissioner({ preventDefault() {} });
+  assert.equal(context.state.groups[0].isCommissioner, true);
+  assert.equal(node('#group-commissioner-message').textContent, 'Membership changed');
+  assert.equal(node('#save-group-commissioner').disabled, false);
+  context.state.groupLeaderboard = null;
+  context.renderGroupCommissioner();
+  assert.equal(node('#group-new-commissioner').disabled, true);
+  assert.equal(node('#save-group-commissioner').disabled, true);
+  context.state.groups[0].isCommissioner = false;
+  context.state.groupLeaderboard = board();
+  node('#group-new-commissioner').value = 'b';
+  context.apiRequest = async (...args) => context.requests.push(args);
+  await context.submitGroupCommissioner({ preventDefault() {} });
+  assert.equal(context.requests.length, 0);
+});
+
+test('late transfer response cannot repopulate a signed-out group', async () => {
+  const { context, node } = boot();
+  node('#group-new-commissioner').value = 'b';
+  let finish;
+  context.apiRequest = () => new Promise(resolve => { finish = resolve; });
+  const pending = context.submitGroupCommissioner({ preventDefault() {} });
+  context.state.signedIn = false; context.state.groups = []; context.state.groupLeaderboard = null;
+  context.state.activeGroupId = '';
+  finish({}); await pending;
+  assert.equal(context.state.groups.length, 0);
+  assert.equal(context.state.activeGroupId, '');
+  assert.equal(node('#save-group-commissioner').disabled, true);
+});
+
+test('commissioners cannot leave; regular members leave and return to the directory', async () => {
+  const { context, node } = boot();
+  for (const [key, id] of Object.entries({ confirmLeaveGroup: '#confirm',
     leaveGroupMessage: '#message', leaveGroupDialog: '#dialog' })) context.elements[key] = node(id);
-  context.leaveGroupPending = false; context.leaveGroupId = 'g'; node('#successor').value = 'b';
+  context.leaveGroupPending = false; context.leaveGroupId = 'g';
+  await context.openLeaveGroupDialog(context.state.groups[0]);
+  assert.equal(node('#dialog').open, undefined);
+  await context.submitLeaveGroup({ preventDefault() {} });
+  assert.equal(context.requests.length, 0);
+  context.state.groups[0].isCommissioner = false;
   context.state.groupSummaries.g = board();
   await context.submitLeaveGroup({ preventDefault() {} });
   assert.equal(context.requests[0][0], '/api/groups/g/membership');
-  assert.deepEqual(JSON.parse(context.requests[0][1].body), { newCommissionerId: 'b' });
+  assert.deepEqual(JSON.parse(context.requests[0][1].body), {});
   assert.equal(context.state.groups.length, 0);
   assert.equal(context.state.activeGroupId, '');
   assert.equal(context.lastUrl, '/groups');

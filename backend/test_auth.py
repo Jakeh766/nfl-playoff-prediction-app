@@ -628,24 +628,31 @@ class PrivateGroupTests(unittest.TestCase):
             self.assertEqual(lambda_app.handler(event("GET", user_id="user-456", path=f"/api/groups/{group_id}/{suffix}"), None)["statusCode"], 403)
         self.assertEqual(len(lambda_app.list_group_members(group_id, "user-123")["members"]), 1)
 
-    def test_invite_rotation_revocation_and_member_permissions(self):
+    def test_invite_rotation_permissions_and_revoke_feature_removed(self):
         group_id = json.loads(self.create()["body"])["groupId"]
         self.join()
         path = f"/api/groups/{group_id}/invite"
         old = self.groups.items[f"group#{group_id}"]["inviteCode"]
-        for method in ("POST", "DELETE"):
-            self.assertEqual(lambda_app.handler(event(method, user_id="user-456", path=path), None)["statusCode"], 403)
-            self.assertEqual(lambda_app.handler(event(method, user_id=None, path=path), None)["statusCode"], 401)
+        self.assertEqual(lambda_app.handler(event("POST", user_id="user-456", path=path), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("POST", user_id=None, path=path), None)["statusCode"], 401)
         rotated = json.loads(lambda_app.handler(event("POST", path=path), None)["body"])["inviteCode"]
         self.assertNotEqual(old, rotated)
         self.assertEqual(self.join_invite(group_id, old, user_id="new-user")["statusCode"], 400)
         self.assertEqual(self.join_invite(group_id, rotated, user_id="new-user")["statusCode"], 200)
-        self.assertEqual(lambda_app.handler(event("DELETE", path=path), None)["statusCode"], 200)
-        self.assertEqual(self.join_invite(group_id, rotated, user_id="another-user")["statusCode"], 400)
-        self.assertTrue(lambda_app.get_group_invite(group_id, "user-456")["revoked"])
-        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["inviteCode"])
+        self.assertEqual(lambda_app.handler(event("DELETE", path=path), None)["statusCode"], 404)
+        self.assertEqual(self.join_invite(group_id, rotated, user_id="another-user")["statusCode"], 200)
+        self.assertEqual(lambda_app.get_group_invite(group_id, "user-456")["inviteCode"], rotated)
         self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
         self.assertTrue(lambda_app.change_group_invite(group_id, "user-123")["inviteCode"])
+
+    def test_legacy_revoked_invite_stays_disabled_until_secondary_reset(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        group = self.groups.items[f"group#{group_id}"]
+        group.update(inviteCode="", inviteRevoked=True)
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["inviteCode"])
+        code = lambda_app.change_group_invite(group_id, "user-123")["inviteCode"]
+        self.assertFalse(group["inviteRevoked"])
+        self.assertEqual(self.join_invite(group_id, code)["statusCode"], 200)
 
     def test_group_reads_do_not_scan_and_include_members_without_predictions(self):
         group_id = json.loads(self.create()["body"])["groupId"]
@@ -695,8 +702,8 @@ class PrivateGroupTests(unittest.TestCase):
             self.groups.items[lambda_app.membership_item_key(group_id, "user-456")]["recordType"] = "removedMembership"
             return original(**kwargs)
         with patch.object(self.groups, "transact_write_items", side_effect=remove_replacement):
-            rejected = self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")
-        self.assertEqual(rejected["statusCode"], 400)
+            rejected = self.transfer(group_id, "user-456")
+        self.assertEqual(rejected["statusCode"], 403)
         self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "user-123")
         self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
 
@@ -809,6 +816,10 @@ class PrivateGroupTests(unittest.TestCase):
             None,
         )
 
+    def transfer(self, group_id, replacement, user_id="user-123"):
+        return lambda_app.handler(event("POST", user_id=user_id,
+            path=f"/api/groups/{group_id}/commissioner", body={"newCommissionerId": replacement}), None)
+
     def join(self, user_id="user-456", name="Sunday Crew", password="secret1"):
         return lambda_app.handler(
             event(
@@ -896,7 +907,7 @@ class PrivateGroupTests(unittest.TestCase):
         updated = lambda_app.handler(event("PATCH", path=path, body={"sports": ["nba", "nfl"]}), None)
         self.assertEqual(json.loads(updated["body"])["sports"], ["nfl", "nba"])
         self.assertEqual(len([item for item in self.groups.items.values() if item.get("recordType") == "group"]), 1)
-        self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")
+        self.transfer(group_id, "user-456")
         self.assertEqual(lambda_app.handler(event("PATCH", path=path, body={"sports": ["nfl"]}), None)["statusCode"], 403)
         self.assertEqual(lambda_app.handler(event("PATCH", user_id="user-456", path=path, body={"sports": ["nba"]}), None)["statusCode"], 200)
 
@@ -938,7 +949,7 @@ class PrivateGroupTests(unittest.TestCase):
                     body={"sports": ["nfl", "nba"]}), None)
                 self.assertEqual(updated["statusCode"], 200)
                 self.assertTrue(json.loads(updated["body"])["isCommissioner"])
-                transferred = self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")
+                transferred = self.transfer(group_id, "user-456")
                 self.assertEqual(transferred["statusCode"], 200)
                 self.assertEqual(group["commissionerId"], "user-456")
 
@@ -1030,16 +1041,21 @@ class PrivateGroupTests(unittest.TestCase):
         self.join()
 
         rejected = self.leave(group_id, user_id="user-123")
-        transferred = self.leave(
-            group_id,
-            user_id="user-123",
-            new_commissioner_id="user-456",
-        )
+        self.assertEqual(self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")["statusCode"], 403)
+        before = {key: dict(value) for key, value in self.groups.items.items()}
+        transferred = self.transfer(group_id, "user-456")
         group = self.groups.items[f"group#{group_id}"]
 
-        self.assertEqual(rejected["statusCode"], 400)
+        self.assertEqual(rejected["statusCode"], 403)
         self.assertEqual(transferred["statusCode"], 200)
         self.assertEqual(group["commissionerId"], "user-456")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(set(self.groups.items), set(before))
+        self.assertEqual({key: value for key, value in self.groups.items.items() if key != f"group#{group_id}"},
+                         {key: value for key, value in before.items() if key != f"group#{group_id}"})
+        self.assertEqual(group["createdBy"], "user-123")
+        self.assertEqual(self.leave(group_id, user_id="user-123")["statusCode"], 200)
         self.assertNotIn(
             f"membership#{group_id}#user#user-123",
             self.groups.items,
@@ -1058,17 +1074,60 @@ class PrivateGroupTests(unittest.TestCase):
     def test_commissioner_can_only_transfer_to_another_member(self):
         created = json.loads(self.create()["body"])
 
-        result = self.leave(
-            created["groupId"],
-            user_id="user-123",
-            new_commissioner_id="outsider",
-        )
+        result = self.transfer(created["groupId"], "outsider")
 
         self.assertEqual(result["statusCode"], 400)
         self.assertIn(
             f"membership#{created['groupId']}#user#user-123",
             self.groups.items,
         )
+
+    def test_transfer_rejects_members_outsiders_self_and_invalid_bodies(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        path = f"/api/groups/{group_id}/commissioner"
+        for user in (None, "user-456", "outsider"):
+            self.assertEqual(self.transfer(group_id, "user-456", user_id=user)["statusCode"], 401 if user is None else 403)
+        for body in ({}, [], None, {"newCommissionerId": ""}, {"newCommissionerId": "user-123"},
+                     {"newCommissionerId": "outsider"}, {"newCommissionerId": "user-456", "extra": True}):
+            with self.subTest(body=body):
+                self.assertEqual(lambda_app.handler(event("POST", path=path, body=body), None)["statusCode"], 400)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "user-123")
+        self.assertEqual(lambda_app.handler(event("GET", path=path), None)["statusCode"], 404)
+
+    def test_members_without_predictions_can_be_commissioner_but_leave_cannot_transfer(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.assertEqual(self.leave(group_id, new_commissioner_id="user-123")["statusCode"], 400)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        lambda_app.add_group_membership(group_id, "no-prediction")
+        self.assertEqual(self.transfer(group_id, "no-prediction")["statusCode"], 200)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "no-prediction")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_stale_transfer_cannot_replace_new_commissioner(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        lambda_app.add_group_membership(group_id, "third")
+        original = self.groups.transact_write_items
+        def concurrent_transfer(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "third"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=concurrent_transfer):
+            self.assertEqual(self.transfer(group_id, "user-456")["statusCode"], 403)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "third")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_new_commissioner_cannot_leave_during_concurrent_transfer(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.transact_write_items
+        def concurrent_transfer(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=concurrent_transfer):
+            self.assertEqual(self.leave(group_id)["statusCode"], 403)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
 
     def test_group_members_endpoint_is_member_only(self):
         created = json.loads(self.create()["body"])

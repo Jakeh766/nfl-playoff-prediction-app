@@ -260,11 +260,6 @@ if (dialogs) {
         <form id="leave-group-form" method="post">
           <h2 id="leave-group-title">Leave this group?</h2>
           <p id="leave-group-description"></p>
-          <div class="hidden" id="new-commissioner-field">
-            <label for="new-commissioner">New commissioner</label>
-            <select id="new-commissioner" name="new-commissioner"></select>
-            <p class="input-hint">They will be able to manage and delete the group.</p>
-          </div>
           <p class="dialog-message" id="leave-group-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">
             <button class="button button-secondary" id="cancel-leave-group" type="button">Stay in group</button>
