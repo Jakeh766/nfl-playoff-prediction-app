@@ -1,6 +1,7 @@
 const GROUP_VIEWS = ["standings", "history"];
 let groupsRequest = 0;
 let groupDetailRequest = 0;
+let groupNavigationRequest = 0;
 let groupInviteReturnFocus = null;
 let groupSettingPending = false;
 let groupTransferPending = false;
@@ -38,22 +39,6 @@ async function loadGroupSettingsPassword() {
     status.textContent = "Password could not be loaded. Try again.";
     document.getElementById("retry-group-password").classList.remove("hidden");
   }
-}
-
-function groupPageUrl(groupId = "", view = "standings", sport = SPORT) {
-  const url = new URL(routeHref("/groups"), window.location.origin);
-  if (sport === "nba") url.searchParams.set("sport", "nba");
-  else url.searchParams.delete("sport");
-  if (groupId) {
-    url.searchParams.set("group", groupId);
-    if (view !== "standings") url.searchParams.set("view", view);
-  }
-  return url.pathname + url.search;
-}
-
-function groupDisplaySport(group) {
-  const sports = group.sports || ["nfl"];
-  return sports.includes(SPORT) ? SPORT : sports[0];
 }
 
 function groupMetadata(group) {
@@ -133,6 +118,7 @@ function selectGroupView(view = "standings", updateUrl = true) {
 
 function openGroupDetail(groupId, updateUrl = true) {
   if (!state.signedIn || !state.groups.some(group => group.groupId === groupId)) return;
+  groupNavigationRequest++;
   closeGroupSettings();
   state.activeGroupId = groupId;
   state.groupLeaderboard = null;
@@ -145,6 +131,7 @@ function openGroupDetail(groupId, updateUrl = true) {
 }
 
 function showGroupsDirectory(updateUrl = true) {
+  groupNavigationRequest++;
   closeGroupSettings();
   state.activeGroupId = "";
   state.groupLeaderboard = null;
@@ -666,14 +653,13 @@ function renderGroupHistory(failed = false) {
 
 async function refreshGroups(preferredGroupId = new URLSearchParams(window.location.search).get("group") || "") {
   const request = ++groupsRequest;
+  const navigation = groupNavigationRequest;
   const status = document.getElementById("groups-status");
   if (status) status.textContent = "Loading your groups…";
   try {
-    // The existing API is sport-scoped. Merge both lists for a complete directory.
-    const payloads = await Promise.all(["nfl", "nba"].map(sport => apiRequest("/api/groups", { sport })));
+    if (!await refreshGroupMemberships()) return;
     if (!state.signedIn || request !== groupsRequest) return;
-    state.groups = [...new Map(payloads.flatMap(payload => payload.groups || []).map(group => [group.groupId, group])).values()]
-      .sort((a, b) => a.groupName.localeCompare(b.groupName));
+    if (navigation !== groupNavigationRequest) preferredGroupId = state.activeGroupId;
     state.activeGroupId = state.groups.some(
       (group) => group.groupId === preferredGroupId,
     )
@@ -719,6 +705,8 @@ async function refreshGroups(preferredGroupId = new URLSearchParams(window.locat
   } catch (error) {
     if (!state.signedIn || request !== groupsRequest) return;
     state.groups = [];
+    state.groupsLoaded = false;
+    updateGroupsNavigation();
     state.activeGroupId = "";
     state.groupLeaderboard = null;
     if (!elements.groupCards) throw error;
@@ -773,6 +761,7 @@ async function submitLeaveGroup(event) {
     state.groups = state.groups.filter(
       (candidate) => candidate.groupId !== group.groupId,
     );
+    updateGroupsNavigation();
     state.activeGroupId = "";
     state.groupLeaderboard = null;
     elements.leaveGroupDialog.close();
@@ -864,6 +853,7 @@ async function submitDeleteGroup(event) {
     state.groups = state.groups.filter(
       (candidate) => candidate.groupId !== group.groupId,
     );
+    updateGroupsNavigation();
     state.activeGroupId = "";
     state.groupLeaderboard = null;
     elements.deleteGroupDialog.close();
@@ -934,6 +924,7 @@ async function submitGroup(event) {
     ];
     window.siteAnalytics?.track(creating ? "group_created" : "group_joined");
     if (PAGE === "groups") await refreshGroups(group.groupId);
+    else refreshGroupMemberships().catch(() => {});
     if (elements.homeGroupStatus) {
       elements.homeGroupStatus.textContent = creating
         ? `${group.groupName} is ready. Copy the invite link to bring people in.`
@@ -1041,6 +1032,7 @@ async function acceptPendingGroupInvite() {
       method: "POST",
       body: JSON.stringify(pendingGroupInvite),
     });
+    refreshGroupMemberships().catch(() => {});
     pendingGroupInvite = null;
     window.siteAnalytics?.track("group_invite_joined");
     const url = new URL(window.location.href);

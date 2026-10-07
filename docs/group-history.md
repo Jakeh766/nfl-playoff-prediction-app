@@ -1,6 +1,6 @@
 # Group history
 
-Open **Groups**, select a group, then choose **History**. History
+Open **Groups**, select a group if needed, then choose **History**. History
 is visible only to current group members and is scoped to the selected sport.
 New groups show an empty state until a season has ended and been archived.
 
@@ -114,10 +114,20 @@ both memberships and existing group records. Transfer is separate from leaving:
 `DELETE /api/groups/{id}/membership` rejects the current commissioner and guards
 against a concurrent role change. Only the commissioner can delete the group.
 
-**Groups** in primary navigation and **View groups** on the homepage open
-`/groups` directly, retaining the NBA query parameter when selected. Old
+Primary navigation is **My Picks**, **Groups**, **Leaderboard**, **Scoring**.
+For a signed-in user with exactly one known membership, its **Groups** link opens
+that group using the existing detail URL. Zero or multiple memberships, signed-out
+sessions, and loading or failed membership requests use the directory. The count
+merges both sport lists by group ID, so a dual-sport group counts once. The link
+retains the selected sport when supported, otherwise uses the group's sport.
+Other pages load only membership lists for this shortcut; their content does not
+depend on this request succeeding. Returning to a cached page refreshes membership.
+
+`/groups`, **Back to Groups**, and **View groups** on the homepage always open
+the directory, retaining the NBA query parameter when selected. Old
 `/leaderboard#groups` links redirect to this page. The public leaderboard remains
-on `/leaderboard` and does not load private memberships.
+on `/leaderboard`; its public results are independent of the signed-in navigation
+membership lookup, which does not request group standings or passwords.
 Signed-out visitors see a sign-in prompt and can start the existing create/join
 authentication flows. Commissioner identity appears in the group header.
 
@@ -129,7 +139,11 @@ failed summaries keep their cards visible with a retry prompt. No new backend
 endpoint or stored group field is required.
 
 Group details use `?group=<id>` and optional `&view=history`.
-The default view is Standings. Browser Back restores the directory, and tabs
+The default view is Standings. Main Groups navigation uses an ordinary link on
+other pages and when changing sport; modified clicks retain normal browser
+behavior. Within Groups, same-sport navigation updates the existing page and
+history. An intentional directory visit during loading is not undone by an older
+detail request. Browser Back and Forward restore the directory or detail, and tabs
 support arrow keys, Home, and End. Closing or signing out of a group prevents
 late requests from restoring private content. Leaving or deleting returns to
 the directory. Former `view=members` and `view=settings` links are normalized to

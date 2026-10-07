@@ -311,7 +311,7 @@ class LoginFormTests(unittest.TestCase):
             'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true"',
             self.shell,
         )
-        self.assertIn('apiRequest("/api/groups", { sport })', self.groups_javascript)
+        self.assertIn('apiRequest("/api/groups", { sport })', self.app_javascript)
         self.assertIn('"/api/groups/join"', self.groups_javascript)
         self.assertIn('/leaderboard`', self.groups_javascript)
         self.assertIn('path.startsWith("/api/groups")', self.app_javascript)

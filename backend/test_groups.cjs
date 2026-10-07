@@ -51,7 +51,7 @@ function boot() {
   const context = vm.createContext({
     document: { title: '', createElement: () => new Element(), querySelector: selector => selector === 'dialog[open]' ? null : node(selector), getElementById: id => node(`#${id}`),
       querySelectorAll: selector => selector === '[data-group-view]' ? tabs : selector === '[data-commissioner-only]' ? [node('#commissioner-section')] : [], body: new Element() },
-    state: { signedIn: true, groups: [group], activeGroupId: 'g', groupSummaries: {}, groupLeaderboard: { members: [
+    state: { signedIn: true, groupsLoaded: true, groups: [group], activeGroupId: 'g', groupSummaries: {}, groupLeaderboard: { members: [
       { userId: 'a', displayName: 'Alice', isCommissioner: true, isCurrentUser: true, hasPrediction: true },
       { userId: 'b', displayName: '<Bob>', hasPrediction: false },
     ] } },
@@ -67,6 +67,7 @@ function boot() {
     showToast: text => { context.toast = text; }, FINAL_NAME: 'Super Bowl',
   });
   vm.runInContext(leaderboard, context);
+  vm.runInContext(app.slice(app.indexOf('let groupMembershipRequest ='), app.indexOf('async function apiRequest(')), context);
   vm.runInContext(groups, context);
   node('#group-settings-panel').style = { setProperty() {} };
   context.realLoadGroupLeaderboard = context.loadGroupLeaderboard;
@@ -119,6 +120,8 @@ test('sign-out clears private cards, details and cached summaries', () => {
   vm.runInContext(app.slice(start, app.indexOf('async function refreshProfile(', start)), context);
   context.renderAuthentication(false);
   assert.equal(context.state.groups.length, 0);
+  assert.equal(context.state.groupsLoaded, false);
+  assert.equal(node(navSelector).href, '/groups');
   assert.equal(context.state.groupLeaderboard, null);
   assert.equal(Object.keys(context.state.groupSummaries).length, 0);
   assert.equal(node('#group-cards').children.length, 0);
@@ -139,6 +142,192 @@ test('shared renderer does not open a bracket for missing predictions', () => {
   assert.equal(row.dataset.hasPrediction, 'false');
   assert.equal(row.events.click, undefined);
   assert.equal(row.children[5].textContent, '—');
+});
+
+test('rendered primary navigation keeps the requested order, names, active page and sport scope', () => {
+  const shell = read('shell.js');
+  for (const page of ['picks', 'groups', 'leaderboard', 'scoring']) for (const nba of [false, true]) {
+    const selected = [];
+    const header = { innerHTML: '', querySelector: selector => ({ setAttribute: (key, value) => selected.push([selector, key, value]) }) };
+    vm.runInNewContext(shell.slice(0, shell.indexOf('const dialogs =')), {
+      IS_NBA: nba, document: { body: { dataset: { page } }, querySelector: () => header },
+      window: { location: { hostname: 'example.com', hash: '' } }, sportUrl: path => path + (nba ? '?sport=nba' : ''),
+    });
+    const nav = header.innerHTML.match(/<nav class="primary-nav"[\s\S]*?<\/nav>/)[0];
+    assert.deepEqual([...nav.matchAll(/data-nav-page="([^"]+)">([^<]+)/g)].map(match => [match[1], match[2]]),
+      [['picks', 'My Picks'], ['groups', 'Groups'], ['leaderboard', 'Leaderboard'], ['scoring', 'Scoring']]);
+    assert.deepEqual(selected, [[`[data-nav-page="${page}"]`, 'aria-current', 'page']]);
+    assert.match(nav, new RegExp(`href="/groups${nba ? '\\?sport=nba' : ''}"`));
+  }
+});
+
+const navSelector = '.primary-nav [data-nav-page="groups"]';
+const navClick = (link, overrides = {}) => {
+  const event = { button: 0, prevented: false, preventDefault() { this.prevented = true; }, ...overrides };
+  link.events.click(event);
+  return event;
+};
+
+test('Groups nav routes 0, 2+, unknown and signed-out memberships to the directory, and exactly one to its detail', () => {
+  for (const [count, known, signedIn, expected] of [[0, true, true, '/groups'], [1, true, true, '/groups?group=g'],
+    [2, true, true, '/groups'], [1, false, true, '/groups'], [1, true, false, '/groups']]) {
+    const { context, node } = boot();
+    const group = context.state.groups[0];
+    context.state.groups = Array.from({ length: count }, (_, index) => ({ ...group, groupId: index ? 'other' : 'g' }));
+    context.state.groupsLoaded = known; context.state.signedIn = signedIn;
+    context.initializeGroupsNavigation();
+    const link = node(navSelector);
+    const event = navClick(link);
+    assert.equal(link.href, expected);
+    assert.equal(event.prevented, signedIn, 'signed-out navigation uses its normal anchor');
+    if (signedIn) assert.equal(context.lastUrl, expected);
+  }
+});
+
+test('all main pages expose the same Groups destination through a normal anchor, including modified clicks', () => {
+  for (const page of ['home', 'picks', 'leaderboard', 'scoring', 'privacy']) {
+    const { context, node } = boot();
+    context.PAGE = page;
+    context.initializeGroupsNavigation();
+    assert.equal(node(navSelector).href, '/groups?group=g');
+    assert.equal(navClick(node(navSelector)).prevented, false);
+  }
+  for (const modifier of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+    const { context, node } = boot();
+    context.initializeGroupsNavigation();
+    assert.equal(navClick(node(navSelector), modifier).prevented, false);
+    assert.equal(node(navSelector).href, '/groups?group=g');
+    assert.equal(context.loaded, undefined);
+  }
+});
+
+test('sole-group links retain the selected eligible sport and switch for a single-sport group, including local preview', () => {
+  const { context, node } = boot();
+  context.SPORT = 'nba'; context.IS_NBA = true;
+  context.routeHref = path => `${path}.html?sport=nba`;
+  context.initializeGroupsNavigation();
+  assert.equal(node(navSelector).href, '/groups.html?sport=nba&group=g');
+  context.state.groups[0].sports = ['nfl'];
+  assert.equal(navClick(node(navSelector)).prevented, false);
+  assert.equal(node(navSelector).href, '/groups.html?group=g');
+  context.SPORT = 'nfl'; context.IS_NBA = false;
+  context.state.groups[0].sports = ['nba'];
+  assert.equal(navClick(node(navSelector)).prevented, false);
+  assert.equal(node(navSelector).href, '/groups.html?sport=nba&group=g');
+});
+
+test('Back to Groups stays an intentional directory visit for a one-group user; history and direct URLs stay independent', async () => {
+  const { context, node } = boot();
+  context.initializeGroupsNavigation(); context.initializeGroupsPage();
+  context.openGroupDetail('g');
+  node('#groups-back').events.click();
+  assert.equal(context.lastUrl, '/groups');
+  assert.equal(context.state.activeGroupId, '');
+  assert.equal(node(navSelector).href, '/groups?group=g');
+  context.window.location.search = '?group=g&view=history';
+  context.window.events.popstate();
+  assert.equal(context.state.activeGroupId, 'g');
+  assert.equal(node('#group-panel-history').classes.has('hidden'), false);
+  context.window.location.search = '';
+  context.window.events.popstate();
+  assert.equal(context.state.activeGroupId, '');
+  context.apiRequest = async path => path === '/api/groups' ? { groups: context.state.groups } : board();
+  await context.refreshGroups();
+  assert.equal(context.state.activeGroupId, '', 'loading /groups never automatically redirects a sole member');
+});
+
+test('membership loading waits for both sports, deduplicates dual-sport groups and never fetches standings on public pages', async () => {
+  const { context, node } = boot();
+  context.PAGE = 'leaderboard';
+  const group = context.state.groups[0];
+  let finishNBA;
+  context.apiRequest = async (...args) => {
+    context.requests.push(args);
+    return args[1].sport === 'nfl' ? { groups: [group] } : new Promise(resolve => { finishNBA = resolve; });
+  };
+  const pending = context.refreshGroupMemberships();
+  await Promise.resolve();
+  assert.equal(context.state.groupsLoaded, false);
+  assert.equal(node(navSelector).href, '/groups');
+  finishNBA({ groups: [group] }); await pending;
+  assert.equal(context.state.groups.length, 1);
+  assert.equal(context.state.groupsLoaded, true);
+  assert.equal(node(navSelector).href, '/groups?group=g');
+  assert.equal(context.requests.length, 2);
+  assert.ok(context.requests.every(([path]) => path === '/api/groups'));
+  context.apiRequest = async (_path, options) => ({ groups: options.sport === 'nfl' ? [group] : [{ ...group, groupId: 'nba-only' }] });
+  await context.refreshGroupMemberships();
+  assert.equal(context.state.groups.length, 2);
+  assert.equal(node(navSelector).href, '/groups');
+});
+
+test('failed membership refresh, signed-out sessions and late responses leave Groups on its directory fallback', async () => {
+  const { context, node } = boot();
+  context.apiRequest = async () => { throw new Error('Unavailable'); };
+  await assert.rejects(context.refreshGroupMemberships(), /Unavailable/);
+  assert.equal(context.state.groupsLoaded, false);
+  assert.equal(node(navSelector).href, '/groups');
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  context.apiRequest = () => response;
+  const pending = context.refreshGroupMemberships();
+  context.state.signedIn = false; context.state.groups = [];
+  finish({ groups: [{ groupId: 'stale', groupName: 'Stale group' }] }); await pending;
+  assert.equal(context.state.groupsLoaded, false);
+  assert.equal(context.state.groups.length, 0);
+  context.apiRequest = () => { throw new Error('Signed-out users must not fetch memberships'); };
+  assert.equal(await context.refreshGroupMemberships(), false);
+});
+
+test('directory navigation while memberships load is not undone by an earlier detail refresh', async () => {
+  const { context } = boot();
+  context.window.location.search = '?group=g';
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  context.apiRequest = path => path === '/api/groups' ? response : Promise.resolve(board());
+  const pending = context.refreshGroups('g');
+  context.showGroupsDirectory();
+  finish({ groups: context.state.groups }); await pending;
+  assert.equal(context.state.activeGroupId, '');
+  assert.equal(context.lastUrl, '/groups');
+});
+
+test('superseded membership responses cannot replace a newer count or a new signed-in session', async () => {
+  const { context, node } = boot();
+  let finish;
+  const old = new Promise(resolve => { finish = resolve; });
+  context.apiRequest = () => old;
+  const pending = context.refreshGroupMemberships();
+  context.authPanels = {};
+  for (const name of ['accountAuthView', 'accountSettingsView', 'headerAccount', 'accountEmail', 'savedSection', 'signedOutPanel']) context.elements[name] = new Element();
+  context.renderLeaderboardProfile = () => {};
+  const start = app.indexOf('function renderAuthentication(');
+  vm.runInContext(app.slice(start, app.indexOf('async function refreshProfile(', start)), context);
+  context.renderAuthentication(false);
+  context.state.signedIn = true;
+  context.apiRequest = async () => ({ groups: [{ groupId: 'new-user-group', groupName: 'New user' }] });
+  await context.refreshGroupMemberships();
+  finish({ groups: [{ groupId: 'old-user-group', groupName: 'Old user' }] }); await pending;
+  assert.equal(node(navSelector).href, '/groups?group=new-user-group');
+  assert.deepEqual(Array.from(context.state.groups, group => group.groupId), ['new-user-group']);
+});
+
+test('restoring a cached page rechecks membership and disables the shortcut while that check runs', async () => {
+  const { context, node } = boot();
+  context.PAGE = 'scoring';
+  context.initializeGroupsNavigation();
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  context.apiRequest = () => response;
+  const refresh = context.refreshGroupMemberships;
+  let pending;
+  context.refreshGroupMemberships = () => { pending = refresh(); return pending; };
+  context.window.events.pageshow({ persisted: true });
+  assert.equal(node(navSelector).href, '/groups');
+  assert.equal(context.state.groupsLoaded, false);
+  finish({ groups: [] }); await pending;
+  assert.equal(context.state.groupsLoaded, true);
+  assert.equal(node(navSelector).href, '/groups');
 });
 
 test('saved player rows show only an accessible player name and retain full-row activation', () => {

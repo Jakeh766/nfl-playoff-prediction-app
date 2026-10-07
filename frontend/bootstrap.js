@@ -61,6 +61,7 @@ elements.groupName?.addEventListener("invalid", () => {
 elements.groupName?.addEventListener("input", () => {
   elements.groupName.setCustomValidity("");
 });
+initializeGroupsNavigation();
 if (typeof initializeGroupsPage === "function") initializeGroupsPage();
 elements.classicLeaderboardMode?.addEventListener("click", () => {
   selectLeaderboardScoringMode("classic");
@@ -226,6 +227,8 @@ async function initializeAuthentication() {
       showAuthPanel("signIn");
       return;
     }
+
+    if (PAGE !== "groups") refreshGroupMemberships().catch(() => {});
 
     await refreshProfile();
     if (PAGE === "picks") {
