@@ -2944,7 +2944,7 @@ body .champion-display strong {
 .group-detail #group-leaderboard-table-shell { padding: 0 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; }
 .group-detail #group-leaderboard-table-shell .leaderboard-table { min-width: 650px; }
 .group-detail #group-leaderboard-table-shell thead th { padding-top: 16px; padding-bottom: 16px; background: transparent; }
-.group-detail #group-leaderboard-table-shell tbody th, .group-detail #group-leaderboard-table-shell tbody td { padding-top: 18px; padding-bottom: 18px; }
+.group-detail #group-leaderboard-table-shell tbody th { width: 1%; white-space: nowrap; }
 .group-detail #group-leaderboard-table-shell .leaderboard-rank { width: 60px; color: var(--link); font-family: var(--display); font-size: 1.4rem; }
 .group-detail #group-leaderboard-table-shell .leaderboard-total { font-family: var(--display); font-size: 1.4rem; }
 .group-detail #group-leaderboard-table-shell .leaderboard-player-button span { text-transform: none; letter-spacing: 0; font-size: 0.75rem; }
@@ -3106,6 +3106,12 @@ body .champion-display strong {
   text-align: right;
 }
 
+.leaderboard-table tbody th,
+.leaderboard-table tbody td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 .leaderboard-table th:nth-child(2),
 .leaderboard-table td:nth-child(2),
 .leaderboard-table th:nth-child(3),
@@ -3114,13 +3120,14 @@ body .champion-display strong {
 }
 
 .leaderboard-champion-heading {
-  width: 72px;
-  min-width: 72px;
+  width: 40px;
+  min-width: 40px;
   padding: 0 !important;
   text-align: center !important;
 }
 
 .leaderboard-player-heading {
+  width: 1%;
   padding: 0 18px !important;
   text-align: left !important;
 }
@@ -3223,7 +3230,10 @@ body .champion-display strong {
 }
 
 .leaderboard-table tbody th {
+  width: 1%;
+  padding-right: 8px;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .leaderboard-table tbody tr:last-child th,
@@ -3290,25 +3300,27 @@ body .champion-display strong {
   border-radius: 2px;
 }
 
-.leaderboard-champion {
-  width: 72px;
-  min-width: 72px;
+.leaderboard-table .leaderboard-champion {
+  width: 40px;
+  min-width: 40px;
+  padding-left: 0;
   text-align: center !important;
 }
 
 .leaderboard-champion-pick {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   text-align: left;
 }
 
 .leaderboard-champion-logo {
-  width: 30px;
-  height: 30px;
-  max-width: 30px;
-  max-height: 30px;
-  flex: 0 0 30px;
+  width: 32px;
+  height: 32px;
+  max-width: 32px;
+  max-height: 32px;
+  flex: 0 0 32px;
   display: block;
   object-fit: contain;
 }
@@ -4004,6 +4016,18 @@ footer p {
     padding: 13px 10px;
   }
 
+  .leaderboard-table tbody th,
+  .leaderboard-table tbody td {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .leaderboard-table tbody th {
+    width: auto;
+    padding-right: 8px;
+    white-space: normal;
+  }
+
   .leaderboard-table th:nth-child(4),
   .leaderboard-table td:nth-child(4),
   .leaderboard-table th:nth-child(5),
@@ -4012,6 +4036,7 @@ footer p {
   }
 
   .leaderboard-player-heading {
+    width: auto;
     padding: 0 10px !important;
   }
 
@@ -4020,18 +4045,12 @@ footer p {
     font-size: 16px;
   }
 
-  .leaderboard-champion,
-  .leaderboard-champion-heading {
-    width: 48px;
-    min-width: 48px;
-  }
-
   .leaderboard-champion-logo {
-    width: 26px;
-    height: 26px;
-    max-width: 26px;
-    max-height: 26px;
-    flex-basis: 26px;
+    width: 30px;
+    height: 30px;
+    max-width: 30px;
+    max-height: 30px;
+    flex-basis: 30px;
   }
 
   .leaderboard-sort-button {
