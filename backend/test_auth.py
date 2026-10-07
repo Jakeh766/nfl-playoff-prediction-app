@@ -1552,6 +1552,27 @@ class PublicLeaderboardTests(unittest.TestCase):
         )
         self.assertEqual(missing["statusCode"], 404)
 
+    def test_public_bracket_normalizes_apostrophes_like_profile_registration(self):
+        lambda_app.put_profile("user-123", event("PUT", body={"leaderboardName": "Jake’s Picks"}))
+        for name in ("Jake%E2%80%99s%20Picks", "JAKE%27S%20PICKS"):
+            with self.subTest(name=name):
+                result = lambda_app.handler(
+                    event("GET", user_id=None, path=f"/api/leaderboard/{name}/bracket"), None)
+                self.assertEqual(result["statusCode"], 200)
+                self.assertEqual(json.loads(result["body"])["leaderboardName"], "Jake’s Picks")
+
+        self.profiles.items["user#user-123"]["leaderboardName"] = "Renamed Picks"
+        self.assertIsNone(lambda_app.get_public_bracket("Jake’s Picks"))
+
+    def test_public_bracket_scores_both_modes_from_one_results_snapshot(self):
+        results = lambda_app.load_season_results()
+        with patch.object(lambda_app, "load_season_results", return_value=results) as load, \
+             patch.object(lambda_app, "score_prediction", wraps=lambda_app.score_prediction) as score:
+            lambda_app.get_public_bracket("Jake")
+        load.assert_called_once_with()
+        self.assertEqual(score.call_count, 2)
+        self.assertTrue(all(call.args[1] is results for call in score.call_args_list))
+
 
 if __name__ == "__main__":
     unittest.main()

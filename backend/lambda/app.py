@@ -501,12 +501,13 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
     division_winners = prediction.get("divisionWinners", {})
     seeds = prediction.get("seeds", {})
     picks = prediction.get("picks", {})
-    score = score_prediction(prediction, load_season_results())
+    results = load_season_results()
+    score = score_prediction(prediction, results)
 
     return {
         "leaderboardName": profile["leaderboardName"],
         "savedAt": prediction.get("savedAt"),
-        "vegasScore": score_prediction(prediction, load_season_results(), "vegas"),
+        "vegasScore": score_prediction(prediction, results, "vegas"),
         "divisionWinners": {
             conference: {
                 division: division_winners.get(conference, {}).get(division, "")
@@ -555,7 +556,7 @@ def get_public_bracket(leaderboard_name: str) -> dict | None:
     prediction = get_prediction(owner_id) if isinstance(owner_id, str) else None
     if not profile or not prediction:
         return None
-    if profile.get("leaderboardName", "").casefold() != normalized_name:
+    if normalize_leaderboard_name(profile.get("leaderboardName"))[1] != normalized_name:
         return None
     return public_bracket(profile, prediction)
 
