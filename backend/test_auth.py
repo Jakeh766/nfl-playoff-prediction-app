@@ -189,7 +189,7 @@ class FakeGroupTable:
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
             item["commissionerId"] = values[":newCommissioner"]
-        elif UpdateExpression.startswith("SET sports = :sports"):
+        elif UpdateExpression.startswith(("SET sports = :sports", "SET scoringOptions =", "SET passwordSalt =")):
             if not self.condition_matches(item, ConditionExpression or "", values):
                 raise ConditionalCheckFailed()
             if "commissionerId = :commissioner" in ConditionExpression:
@@ -200,8 +200,8 @@ class FakeGroupTable:
                     raise ConditionalCheckFailed()
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
-            item["sports"] = values[":sports"]
-            item["sportEligibility"] = values[":eligibility"]
+            for attribute, placeholder in re.findall(r"(\w+) = (:\w+)", UpdateExpression):
+                item[attribute] = values[placeholder]
         else:
             raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
         return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
@@ -527,6 +527,88 @@ class LeaderboardProfileTests(unittest.TestCase):
 
 
 class PrivateGroupTests(unittest.TestCase):
+    def test_settings_are_commissioner_only_and_password_is_never_returned(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        for user in (None, "user-456", "outsider"):
+            for body in ({"password": "new-secret"}, {"scoringOption": "vegas"}, {"sports": ["nba"]}):
+                with self.subTest(user=user, body=body):
+                    result = lambda_app.handler(event("PATCH", user_id=user, path=f"/api/groups/{group_id}", body=body), None)
+                    self.assertEqual(result["statusCode"], 401 if user is None else 403)
+        group = self.groups.items[f"group#{group_id}"]
+        old_salt, old_hash = group["passwordSalt"], group["passwordHash"]
+        result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body={"password": "new-secret"}), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertNotEqual(group["passwordSalt"], old_salt)
+        self.assertNotEqual(group["passwordHash"], old_hash)
+        for key in ("password", "passwordHash", "passwordSalt", "passwordIterations"):
+            self.assertNotIn(key, json.loads(result["body"]))
+            self.assertNotIn(key, lambda_app.list_groups("user-456")["groups"][0])
+            self.assertNotIn(key, lambda_app.get_group_leaderboard(group_id, "user-456"))
+        self.assertEqual(self.join(user_id="new-member")["statusCode"], 400)
+        self.assertEqual(self.join(user_id="new-member", password="new-secret")["statusCode"], 200)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(self.join_invite(group_id, group["inviteCode"], user_id="invite-member")["statusCode"], 200)
+
+    def test_invalid_settings_do_not_partially_change_competition(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        original = self.groups.items[f"group#{group_id}"].copy()
+        for body in ({}, {"password": "short"}, {"password": None}, {"scoringOption": "invalid"},
+                     {"commissionerId": "outsider"}, {"scoringOptions": {"nfl": "vegas"}},
+                     {"sports": ["nba"], "password": "bad"}, {"sports": ["nba"], "scoringOption": "vegas"}):
+            with self.subTest(body=body):
+                result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body=body), None)
+                self.assertEqual(result["statusCode"], 400)
+                self.assertEqual(self.groups.items[f"group#{group_id}"], original)
+
+    def test_scoring_is_sport_specific_and_locked_at_exact_deadline_even_on_dev(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        path = f"/api/groups/{group_id}"
+        lambda_app.update_group_settings(group_id, "user-123", event("PATCH", body={"sports": ["nfl", "nba"]}))
+        nfl_lock = "2026-09-01T00:00:00Z"
+        with patch.object(lambda_app, "PREDICTION_LOCK_AT", nfl_lock), patch.object(lambda_app.time, "time", return_value=1788220799):
+            updated = lambda_app.handler(event("PATCH", path=path, body={"scoringOption": "vegas"}), None)
+            self.assertEqual(updated["statusCode"], 200)
+            self.assertEqual(json.loads(updated["body"])["scoringOptions"], {"nfl": "vegas", "nba": "classic"})
+            self.assertEqual(lambda_app.get_group_leaderboard(group_id, "user-123")["scoringOption"], "vegas")
+        with patch.object(lambda_app, "PREDICTION_LOCK_AT", nfl_lock), patch.object(lambda_app.time, "time", return_value=1788220800), \
+             patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "dev"}):
+            self.assertFalse(lambda_app.prediction_window()["locked"])
+            self.assertTrue(lambda_app.get_group_leaderboard(group_id, "user-123")["scoringLock"]["locked"])
+            rejected = lambda_app.handler(event("PATCH", path=path, body={"scoringOption": "classic", "password": "new-secret"}), None)
+            self.assertEqual(rejected["statusCode"], 403)
+            self.assertEqual(self.join(user_id="still-old-password")["statusCode"], 200)
+            nba_event = event("PATCH", path=path, body={"scoringOption": "vegas"})
+            nba_event["queryStringParameters"] = {"sport": "nba"}
+            self.assertEqual(lambda_app.handler(nba_event, None)["statusCode"], 200)
+            self.assertEqual(lambda_app.group_scoring_option(self.groups.items[f"group#{group_id}"], "nfl"), "vegas")
+        nba_deadline = lambda_app.calendar.timegm(lambda_app.time.strptime(lambda_app.NBA["lockAt"], "%Y-%m-%dT%H:%M:%SZ"))
+        with patch.object(lambda_app.time, "time", return_value=nba_deadline):
+            self.assertEqual(lambda_app.handler(nba_event, None)["statusCode"], 403)
+
+    def test_legacy_scoring_defaults_and_concurrent_settings_guards(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        group = self.groups.items[f"group#{group_id}"]
+        self.assertEqual(lambda_app.group_scoring_option(group, "nba"), "classic")
+        self.join()
+        original = self.groups.update_item
+        def transfer(**kwargs):
+            group["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "update_item", side_effect=transfer):
+            with self.assertRaises(PermissionError):
+                lambda_app.update_group_settings(group_id, "user-123", event("PATCH", body={"password": "new-secret"}))
+        self.assertEqual(self.join(user_id="old-password-works")["statusCode"], 200)
+        group["commissionerId"] = "user-123"
+        group["scoringOptions"] = {"nfl": "classic", "nba": "classic"}
+        def concurrent_scoring(**kwargs):
+            group["scoringOptions"] = {"nfl": "classic", "nba": "vegas"}
+            return original(**kwargs)
+        with patch.object(self.groups, "update_item", side_effect=concurrent_scoring):
+            with self.assertRaises(PermissionError):
+                lambda_app.update_group_settings(group_id, "user-123", event("PATCH", body={"scoringOption": "vegas"}))
+        self.assertEqual(group["scoringOptions"], {"nfl": "classic", "nba": "vegas"})
+
     def test_removal_blocks_old_new_invites_password_and_private_routes(self):
         group_id = json.loads(self.create()["body"])["groupId"]
         self.join()

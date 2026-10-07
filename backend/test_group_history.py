@@ -7,6 +7,15 @@ from test_auth import lambda_app as app, FakeGroupTable, event
 
 
 class GroupHistoryTests(unittest.TestCase):
+    def test_history_snapshots_use_each_sports_mode_and_keep_completed_rules(self):
+        self.group["scoringOptions"] = {"nfl": "vegas", "nba": "classic"}
+        app.archive_completed_group_seasons()
+        histories = [item for item in self.table.items.values() if item.get("recordType") == "groupSeason"]
+        self.assertEqual({item["sport"]: item["scoringOption"] for item in histories}, {"nfl": "vegas", "nba": "classic"})
+        self.group["scoringOptions"] = {"nfl": "classic", "nba": "vegas"}
+        app.archive_completed_group_seasons()
+        self.assertEqual({item["sport"]: item["scoringOption"] for item in histories}, {"nfl": "vegas", "nba": "classic"})
+
     def setUp(self):
         self.group_id = "11111111-1111-1111-1111-111111111111"
         self.group = {"groupKey": "group#" + self.group_id, "recordType": "group",

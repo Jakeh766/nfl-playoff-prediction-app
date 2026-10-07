@@ -1184,12 +1184,25 @@ def public_group(
         "groupId": group["groupId"],
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
-        "scoringOption": group.get("scoringOption", "classic"),
+        "scoringOption": group_scoring_option(group),
+        "scoringOptions": {sport: group_scoring_option(group, sport) for sport in group_sports(group)},
         "sports": group_sports(group),
         "isCommissioner": bool(user_id and commissioner_id == user_id),
         # Kept for older deployed clients while commissioner terminology rolls out.
         "isCreator": bool(user_id and commissioner_id == user_id),
     }
+
+
+def group_scoring_option(group: dict, sport: str | None = None) -> str:
+    """Legacy groups retain their shared mode until a sport is explicitly changed."""
+    return group.get("scoringOptions", {}).get(sport or SPORT.get(), group.get("scoringOption", "classic"))
+
+
+def group_scoring_lock() -> dict:
+    """Competition rules lock at the real deadline, even when dev picks are reopened."""
+    window = prediction_window()
+    deadline = calendar.timegm(time.strptime(window["lockAt"], "%Y-%m-%dT%H:%M:%SZ")) * 1000
+    return {"lockAt": window["lockAt"], "locked": window["serverTime"] >= deadline}
 
 
 def prediction_window(now_seconds: float | None = None) -> dict:
@@ -1361,43 +1374,78 @@ def commissioner_condition(group: dict, user_id: str) -> dict:
             "ExpressionAttributeValues": {":commissioner": user_id}}
 
 
-def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
+def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
     group = get_group(group_id)
     if not group:
         raise ValueError("Group not found")
     table = groups_table()
     commissioner_id = group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group_id))
     if commissioner_id != user_id:
-        raise PermissionError("Only the group commissioner can edit its sports")
-    sports = validate_group_sports(parse_body(event).get("sports"))
+        raise PermissionError("Only the group commissioner can change competition settings")
+    body = parse_body(event)
+    if not isinstance(body, dict) or set(body) - {"sports", "scoringOption", "password"}:
+        raise ValueError("Choose sports, scoringOption, or password to change")
+    if not body:
+        raise ValueError("Choose a group setting to change")
+    sports = validate_group_sports(body["sports"]) if "sports" in body else group_sports(group)
+    updates, values = [], {}
+    if "sports" in body:
+        eligibility = json.loads(json.dumps(sport_eligibility(group), default=int))
+        now = int(time.time() * 1000)
+        for sport in GROUP_SPORTS:
+            if sport in sports and sport not in group_sports(group):
+                eligibility.setdefault(sport, []).append({"enabledAt": now})
+            elif sport not in sports and sport in group_sports(group):
+                eligibility[sport][-1]["disabledAt"] = now
+        updates.extend(["sports = :sports", "sportEligibility = :eligibility"])
+        values.update({":sports": sports, ":eligibility": eligibility})
     guard = commissioner_condition(group, user_id)
-    eligibility = json.loads(json.dumps(sport_eligibility(group), default=int))
-    now = int(time.time() * 1000)
-    for sport in GROUP_SPORTS:
-        if sport in sports and sport not in group_sports(group):
-            eligibility.setdefault(sport, []).append({"enabledAt": now})
-        elif sport not in sports and sport in group_sports(group):
-            eligibility[sport][-1]["disabledAt"] = now
-    # Concurrent edits must not overwrite another activation interval.
+    if "scoringOption" in body:
+        mode = body["scoringOption"]
+        if mode not in ("classic", "vegas"):
+            raise ValueError("Choose Classic or Upset Edge scoring")
+        if SPORT.get() not in sports:
+            raise ValueError("Enable this sport before changing its scoring system")
+        if group_scoring_lock()["locked"]:
+            raise PermissionError("Scoring is locked for this sport at the prediction deadline")
+        modes = dict(group.get("scoringOptions", {}))
+        modes[SPORT.get()] = mode
+        updates.append("scoringOptions = :scoringOptions")
+        values[":scoringOptions"] = modes
+        if "scoringOptions" in group:
+            guard["ConditionExpression"] += " AND scoringOptions = :previousScoring"
+            values[":previousScoring"] = group["scoringOptions"]
+        else:
+            guard["ConditionExpression"] += " AND attribute_not_exists(scoringOptions)"
+    if "password" in body:
+        salt, digest = hash_group_password(validate_group_password(body["password"]))
+        updates.extend(["passwordSalt = :salt", "passwordHash = :hash", "passwordIterations = :iterations"])
+        values.update({":salt": salt, ":hash": digest, ":iterations": GROUP_PASSWORD_ITERATIONS})
+    # Preserve concurrent sports/eligibility changes and the current role.
     if "sports" in group:
         guard["ConditionExpression"] += " AND sports = :previousSports"
         guard.setdefault("ExpressionAttributeValues", {})[":previousSports"] = group["sports"]
     else:
         guard["ConditionExpression"] += " AND attribute_not_exists(sports)"
+    if "scoringOption" in body and group_scoring_lock()["locked"]:
+        raise PermissionError("Scoring is locked for this sport at the prediction deadline")
     try:
         updated = table.update_item(
             Key={"groupKey": group_item_key(group_id)},
-            UpdateExpression="SET sports = :sports, sportEligibility = :eligibility",
+            UpdateExpression="SET " + ", ".join(updates),
             ConditionExpression=guard["ConditionExpression"],
-            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}), ":sports": sports,
-                                       ":eligibility": eligibility},
+            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}), **values},
             ReturnValues="ALL_NEW",
         )["Attributes"]
     except Exception as error:
         if is_conditional_failure(error):
-            raise PermissionError("The group commissioner changed. Refresh and try again") from error
+            raise PermissionError("Group settings or commissioner changed. Refresh and try again") from error
         raise
     return public_group(updated, user_id, commissioner_id)
+
+
+def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
+    return update_group_settings(group_id, user_id, event)
 
 
 def join_group(user_id: str, event: dict) -> dict:
@@ -1590,7 +1638,7 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
         raise PermissionError("Group membership required")
     members = list_group_members(group_id, user_id)["members"]
     member_ids = {member["userId"] for member in members}
-    board = build_leaderboard(member_ids, group.get("scoringOption", "classic"))
+    board = build_leaderboard(member_ids, group_scoring_option(group))
     board = {**board, "entries": [dict(entry) for entry in board["entries"]]}
     scored = {entry["memberId"]: entry for entry in board["entries"]}
     for member in members:
@@ -1608,6 +1656,7 @@ def get_group_leaderboard(group_id: str, user_id: str) -> dict:
         "groupId": group_id,
         "groupName": group["groupName"],
         "members": members,
+        "scoringLock": group_scoring_lock(),
         "history": get_group_history(group_id),
     }
 
@@ -1682,7 +1731,7 @@ def archive_completed_group_seasons() -> dict:
                     continue
                 members = {item["userId"] for item in group_memberships(group["groupId"])
                            if item.get("joinedAt", cutoff + 1) <= cutoff}
-                mode = group.get("scoringOption", "classic")
+                mode = group_scoring_option(group, sport)
                 entries = [entry for entry in build_leaderboard(members, mode, history=True, results=results)["entries"]
                            if entry["memberId"] in members]
                 if not entries:
@@ -2002,7 +2051,7 @@ def handle_request(event, context):
     if group_delete_match:
         if method == "PATCH":
             try:
-                return response(200, update_group_sports(group_delete_match.group(1), user_id, event))
+                return response(200, update_group_settings(group_delete_match.group(1), user_id, event))
             except ValueError as error:
                 return response(400 if str(error) != "Group not found" else 404, {"message": str(error)})
             except PermissionError as error:
