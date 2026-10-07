@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=66" />
+    <link rel="stylesheet" href="/styles.css?v=67" />
     <script src="/sports.js?v=4" defer></script>
     <script src="/shell.js?v=21" defer></script>
     <script src="/auth-config.js" defer></script>
@@ -38,7 +38,7 @@
     <script src="/engagement.js?v=1" defer></script>
     <script src="/app.js?v=36" defer></script>
     <script src="/leaderboard.js?v=23" defer></script>
-    <script src="/groups.js?v=5" defer></script>
+    <script src="/groups.js?v=6" defer></script>
     <script src="/bootstrap.js?v=12" defer></script>
   </head>
   <body data-page="groups">
@@ -105,7 +105,7 @@
               <section class="group-setting-section group-competition-section hidden" data-commissioner-only aria-labelledby="group-competition-heading">
                 <h3 id="group-competition-heading">Group</h3>
                 <div class="group-competition-fields">
-                  <div class="group-competition-row"><div><h4>Group name</h4><p id="group-settings-name"></p></div></div>
+                  <div class="group-competition-row"><div><h4>Group name</h4><p id="group-settings-name"></p></div><details id="group-name-editor" class="group-setting-editor"><summary>Change name</summary><form id="group-name-form" class="group-inline-form"><label for="group-new-name">New group name</label><input id="group-new-name" type="text" minlength="3" maxlength="40" required /><button class="button button-secondary" id="save-group-name" type="submit">Save name</button></form></details><p class="dialog-message" id="group-name-message" role="status" aria-live="polite"></p></div>
                   <div class="group-competition-row"><div><h4>Sports</h4><p id="group-settings-sports"></p></div><button class="button button-secondary hidden" id="edit-group-sports" type="button">Change sports</button></div>
                   <div class="group-competition-row">
                     <div><h4 id="group-settings-scoring-label">Scoring</h4><p id="group-settings-scoring"></p><p class="input-hint" id="group-scoring-lock-status"></p></div>
@@ -117,7 +117,7 @@
               </section>
               <section class="group-setting-section group-password-section" aria-labelledby="group-password-heading">
                 <div><h3 id="group-password-heading">Group password</h3><p id="group-current-password" class="group-current-password"></p><p id="group-password-status" role="status" aria-live="polite"></p></div>
-                <div class="group-setting-controls"><button class="button button-secondary" id="copy-group-password" type="button" disabled>Copy password</button><button class="text-link hidden" id="retry-group-password" type="button">Retry password</button><details class="group-setting-editor hidden" data-commissioner-only id="group-password-editor"><summary>Change password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="text" autocomplete="off" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details></div>
+                <div class="group-setting-controls"><button class="text-link hidden" id="retry-group-password" type="button">Retry password</button><details class="group-setting-editor hidden" data-commissioner-only id="group-password-editor"><summary>Change password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="text" autocomplete="off" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details></div>
                 <p class="dialog-message" id="group-competition-message" role="status" aria-live="polite"></p>
               </section>
               <section class="group-setting-section hidden" data-commissioner-only aria-labelledby="group-invites-heading">

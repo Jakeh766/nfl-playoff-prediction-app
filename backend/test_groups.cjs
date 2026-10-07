@@ -167,14 +167,14 @@ test('member list shows everyone and restricts removal controls to commissioner'
   context.renderGroupMembers();
   const list = node('#group-member-list');
   assert.equal(list.children.length, 2);
-  const identity = list.children[0].children[1];
+  const identity = list.children[0].children[0];
   assert.equal(identity.children[0].textContent, 'Alice');
   assert.deepEqual(identity.children[1].children.map(badge => badge.textContent), ['Commissioner', 'You', 'Prediction saved']);
-  assert.equal(list.children[0].children.length, 2);
+  assert.equal(list.children[0].children.length, 1);
   assert.equal(list.children[0].dataset.currentUser, 'true');
-  assert.equal(list.children[1].children[1].children[0].textContent, '<Bob>');
-  assert.equal(list.children[1].children[1].children[1].children[0].textContent, 'No prediction');
-  await list.children[1].children[2].events.click();
+  assert.equal(list.children[1].children[0].children[0].textContent, '<Bob>');
+  assert.equal(list.children[1].children[0].children[1].children[0].textContent, 'No prediction');
+  await list.children[1].children[1].events.click();
   assert.equal(context.requests[0][0], '/api/groups/g/members/b');
   assert.equal(context.requests[0][1].method, 'DELETE');
   assert.equal(context.loaded, 'g');
@@ -209,7 +209,7 @@ test('group standings contain saved predictions only and never append commission
 test('member removal cancellation and failure preserve the roster and usable action', async () => {
   const { context, node } = boot();
   context.renderGroupMembers();
-  const button = node('#group-member-list').children[1].children[2];
+  const button = node('#group-member-list').children[1].children[1];
   context.window.confirm = () => false;
   await button.events.click();
   assert.equal(context.requests.length, 0);
@@ -411,7 +411,7 @@ test('commissioner updates and reloads visible password, clears inputs and keeps
   assert.equal(node('#group-current-password').textContent, '');
 });
 
-test('both roles see the exact password and copy it; errors and legacy passwords stay usable', async () => {
+test('both roles see the exact selectable password without a copy control; errors and legacy passwords stay usable', async () => {
   for (const commissioner of [false, true]) {
     const { context, node } = boot();
     context.state.groups[0].isCommissioner = commissioner;
@@ -419,23 +419,17 @@ test('both roles see the exact password and copy it; errors and legacy passwords
     context.apiRequest = async (...args) => { context.requests.push(args); return { groupPassword: password }; };
     await context.loadGroupSettingsPassword();
     assert.equal(node('#group-current-password').textContent, password);
-    assert.equal(node('#copy-group-password').disabled, false);
-    await context.copyGroupPassword();
-    assert.equal(context.copied, password);
-    assert.equal(node('#group-password-status').textContent, 'Password copied.');
-    context.navigator.clipboard.writeText = async () => { throw new Error('Denied'); };
-    await context.copyGroupPassword();
-    assert.match(node('#group-password-status').textContent, /copy it manually/);
     context.apiRequest = async () => ({ groupPassword: null });
     await context.loadGroupSettingsPassword();
     assert.equal(node('#group-current-password').textContent, '');
-    assert.equal(node('#copy-group-password').disabled, true);
     assert.match(node('#group-password-status').textContent, /commissioner to set a new/);
     context.apiRequest = async () => { throw new Error('Unavailable'); };
     await context.loadGroupSettingsPassword();
     assert.equal(node('#retry-group-password').classes.has('hidden'), false);
   }
   assert.doesNotMatch(read('groups.html'), /group-password-mask|••••|reveal.*password/i);
+  assert.doesNotMatch(read('groups.html'), /copy-group-password/);
+  assert.doesNotMatch(groups, /group-member-avatar/);
 });
 
 test('closing settings, switching groups and sign-out discard late password responses', async () => {
@@ -450,7 +444,6 @@ test('closing settings, switching groups and sign-out discard late password resp
     finish({ groupPassword: 'private-password' });
     await pending;
     assert.equal(node('#group-current-password').textContent, '');
-    assert.equal(node('#copy-group-password').disabled, true);
   }
 });
 
@@ -718,6 +711,33 @@ test('commissioner transfers separately, stays in group and loses management con
   assert.equal(context.refreshed, 'g');
   assert.match(context.toast, /still a member/);
   assert.equal(node('#group-settings-trigger').focused, true);
+});
+
+test('only commissioner can rename; successful PATCH updates header and directory without changing the group ID', async () => {
+  const { context, node } = boot();
+  context.state.groupSummaries.g = board();
+  context.apiRequest = async (...args) => { context.requests.push(args); return { groupName: 'Renamed Crew' }; };
+  node('#group-new-name').value = 'Renamed Crew';
+  await context.submitGroupCompetition({ preventDefault() {} }, 'name');
+  assert.equal(context.requests[0][0], '/api/groups/g');
+  assert.equal(context.requests[0][1].method, 'PATCH');
+  assert.deepEqual(JSON.parse(context.requests[0][1].body), { groupName: 'Renamed Crew' });
+  assert.equal(context.state.groups[0].groupName, 'Renamed Crew');
+  assert.equal(context.state.groups[0].groupId, 'g');
+  assert.equal(context.state.groupLeaderboard.groupName, 'Renamed Crew');
+  assert.equal(node('#active-group-name').textContent, 'Renamed Crew');
+  assert.equal(node('#group-cards').children[0].children[0].textContent, 'Renamed Crew');
+  assert.equal(node('#group-name-editor').open, false);
+  assert.match(node('#group-name-message').textContent, /Invite links still work/);
+  context.apiRequest = async () => { throw new Error('Name already taken'); };
+  node('#group-new-name').value = 'Taken Crew';
+  await context.submitGroupCompetition({ preventDefault() {} }, 'name');
+  assert.equal(node('#group-name-message').textContent, 'Name already taken');
+  assert.equal(context.state.groups[0].groupName, 'Renamed Crew');
+  assert.equal(node('#group-new-name').value, 'Taken Crew');
+  context.state.groups[0].isCommissioner = false;
+  await context.submitGroupCompetition({ preventDefault() {} }, 'name');
+  assert.equal(context.requests.length, 1);
 });
 
 test('transfer only allows another member, handles errors and empty/loading rosters', async () => {

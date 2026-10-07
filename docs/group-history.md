@@ -78,11 +78,11 @@ records, so repeated deployments preserve commissioner edits, kicked members,
 and voluntary departures. It continues initializing new demo groups normally.
 
 Competition settings use the existing `PATCH /api/groups/{id}` route. Only the
-current commissioner may change sports, set a new password, or change the selected
+current commissioner may rename the group, change sports, set a new password, or change the selected
 sport's `scoringOption`. Join validation still uses salted password hashes. New
 and changed passwords also store `shareablePassword` in the group record, protected
 by DynamoDB encryption at rest. The existing member-only `GET /api/groups/{id}/invite`
-returns `groupPassword` for direct display and copying. List, standings, public,
+returns `groupPassword` for direct, selectable display. List, standings, public,
 create, join, and PATCH responses never include the password, salt, or hash.
 Responses are `no-store`; the frontend clears the displayed password on dismissal,
 group navigation, or sign-out and ignores late responses. Legacy hash-only passwords
@@ -98,10 +98,15 @@ change NFL scoring, and immutable season snapshots retain their captured mode.
 Writes check the current commissioner and previous sports/scoring values so
 concurrent edits or commissioner transfers cannot overwrite another change.
 Regular members can share the current invite and leave. Their gear panel contains
-only the visible group password, Copy password, and a separated Leave group action
+only the visible group password and a separated Leave group action
 that opens the existing confirmation dialog. Commissioners use the same gear for
 Group, password, invite options, member management, and confirmed deletion.
-Group name remains read-only, as in the previous settings UI. Password and
+Name edits reserve the new unique name, update the group, and release the old name
+in one transaction. Group IDs, invitations, members, credentials, and history stay
+intact. Case-only name changes retain the existing reservation. Concurrent edits
+or commissioner changes cannot leave partial name reservations; deletion also
+checks the name to avoid orphaning a concurrently renamed group's reservation.
+The member-management list uses names and role labels without avatars. Name, password, and
 scoring editors stay collapsed until needed; locked scoring has no editor.
 Commissioners transfer with `POST /api/groups/{id}/commissioner`, supplying a
 `newCommissionerId` for another current member. The atomic role change preserves

@@ -5,14 +5,11 @@ let groupInviteReturnFocus = null;
 let groupSettingPending = false;
 let groupTransferPending = false;
 let groupPasswordRequest = 0;
-let groupSettingsPassword = null;
 
 function clearGroupSettingsPassword() {
   groupPasswordRequest++;
-  groupSettingsPassword = null;
   document.getElementById("group-current-password").textContent = "";
   document.getElementById("group-password-status").textContent = "";
-  document.getElementById("copy-group-password").disabled = true;
   document.getElementById("retry-group-password").classList.add("hidden");
 }
 
@@ -33,26 +30,13 @@ async function loadGroupSettingsPassword() {
   try {
     const invite = await apiRequest(`/api/groups/${encodeURIComponent(groupId)}/invite`);
     if (!state.signedIn || state.activeGroupId !== groupId || request !== groupPasswordRequest) return;
-    groupSettingsPassword = typeof invite.groupPassword === "string" ? invite.groupPassword : null;
-    document.getElementById("group-current-password").textContent = groupSettingsPassword || "";
-    document.getElementById("copy-group-password").disabled = !groupSettingsPassword;
-    status.textContent = groupSettingsPassword ? "" : "This older password cannot be recovered. Ask the commissioner to set a new group password.";
+    const password = typeof invite.groupPassword === "string" ? invite.groupPassword : null;
+    document.getElementById("group-current-password").textContent = password || "";
+    status.textContent = password ? "" : "This older password cannot be recovered. Ask the commissioner to set a new group password.";
   } catch (error) {
     if (!state.signedIn || state.activeGroupId !== groupId || request !== groupPasswordRequest) return;
     status.textContent = "Password could not be loaded. Try again.";
     document.getElementById("retry-group-password").classList.remove("hidden");
-  }
-}
-
-async function copyGroupPassword() {
-  if (!state.signedIn || !state.activeGroupId || !groupSettingsPassword) return;
-  const request = groupPasswordRequest;
-  const status = document.getElementById("group-password-status");
-  try {
-    await navigator.clipboard.writeText(groupSettingsPassword);
-    if (request === groupPasswordRequest) status.textContent = "Password copied.";
-  } catch (error) {
-    if (request === groupPasswordRequest) status.textContent = "Copy failed. Select the password above and copy it manually.";
   }
 }
 
@@ -213,10 +197,11 @@ function renderGroups() {
   document.querySelector(".group-leave-section").classList.toggle("hidden", !activeGroup || isCommissioner);
   document.getElementById("group-new-password").value = "";
   document.getElementById("group-password-editor").open = false;
-  for (const id of ["group-scoring-editor", "group-invite-options", "group-commissioner-editor"]) {
+  for (const id of ["group-name-editor", "group-scoring-editor", "group-invite-options", "group-commissioner-editor"]) {
     document.getElementById(id).open = false;
   }
   document.getElementById("group-competition-message").textContent = "";
+  document.getElementById("group-name-message").textContent = "";
   document.getElementById("group-commissioner-message").textContent = "";
   document.getElementById("group-new-commissioner").replaceChildren();
   document.querySelector("#group-member-list")?.replaceChildren();
@@ -253,6 +238,7 @@ function renderGroups() {
     elements.activeGroupName.textContent = activeGroup.groupName;
     document.getElementById("active-group-meta").textContent = groupMetadata(activeGroup);
     document.getElementById("group-settings-name").textContent = activeGroup.groupName;
+    document.getElementById("group-new-name").value = activeGroup.groupName;
     renderGroupHub();
     document.title = `${activeGroup.groupName} | Groups | Predict Playoffs`;
     selectGroupView(new URLSearchParams(window.location.search).get("view"), false);
@@ -291,10 +277,10 @@ function initializeGroupSettings() {
     if (event.newState === "closed" && state.activeGroupId && !document.querySelector("dialog[open]") && document.activeElement === document.body) trigger.focus();
   });
   document.getElementById("close-group-settings").addEventListener("click", closeGroupSettings);
-  document.getElementById("copy-group-password").addEventListener("click", copyGroupPassword);
   document.getElementById("retry-group-password").addEventListener("click", loadGroupSettingsPassword);
   document.getElementById("regenerate-group-invite")?.addEventListener("click", regenerateActiveGroupInvite);
   document.getElementById("group-scoring-form")?.addEventListener("submit", event => submitGroupCompetition(event, "scoring"));
+  document.getElementById("group-name-form")?.addEventListener("submit", event => submitGroupCompetition(event, "name"));
   document.getElementById("group-password-form")?.addEventListener("submit", event => submitGroupCompetition(event, "password"));
   document.getElementById("group-commissioner-form")?.addEventListener("submit", submitGroupCommissioner);
   document.getElementById("group-new-commissioner")?.addEventListener("change", () => {
@@ -362,6 +348,7 @@ function renderGroupCompetition() {
   document.getElementById("group-settings-scoring-select").disabled = disabled;
   document.getElementById("save-group-scoring").disabled = disabled;
   document.getElementById("save-group-password").disabled = !commissioner || groupSettingPending;
+  document.getElementById("save-group-name").disabled = !commissioner || groupSettingPending;
 }
 
 async function submitGroupCompetition(event, setting) {
@@ -369,23 +356,37 @@ async function submitGroupCompetition(event, setting) {
   const group = state.groups.find(item => item.groupId === state.activeGroupId);
   if (groupSettingPending || !(group?.isCommissioner ?? group?.isCreator)) return;
   const password = document.getElementById("group-new-password");
-  const message = document.getElementById("group-competition-message");
+  const message = document.getElementById(setting === "name" ? "group-name-message" : "group-competition-message");
   if (setting === "scoring" && state.groupLeaderboard?.scoringLock?.locked !== false) return;
   if (setting === "password" && (password.value.length < 6 || password.value.length > 128)) {
     message.textContent = "Group password must be between 6 and 128 characters.";
     return;
   }
   const body = setting === "password" ? { password: password.value }
+    : setting === "name" ? { groupName: document.getElementById("group-new-name").value }
     : { scoringOption: document.getElementById("group-settings-scoring-select").value };
   groupSettingPending = true;
   if (setting === "password") clearGroupSettingsPassword();
   document.getElementById("save-group-password").disabled = true;
   document.getElementById("save-group-scoring").disabled = true;
+  document.getElementById("save-group-name").disabled = true;
   message.textContent = "Saving…";
   try {
-    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`, { method: "PATCH", body: JSON.stringify(body) });
+    const updated = await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`, { method: "PATCH", body: JSON.stringify(body) });
     password.value = "";
     if (!state.signedIn || state.activeGroupId !== group.groupId) return;
+    if (setting === "name") {
+      group.groupName = updated.groupName;
+      if (state.groupLeaderboard) state.groupLeaderboard.groupName = updated.groupName;
+      if (state.groupSummaries?.[group.groupId]) state.groupSummaries[group.groupId].groupName = updated.groupName;
+      elements.activeGroupName.textContent = updated.groupName;
+      elements.deleteGroup?.setAttribute("aria-label", `Delete ${updated.groupName}`);
+      document.getElementById("group-settings-name").textContent = updated.groupName;
+      document.getElementById("group-new-name").value = updated.groupName;
+      document.title = `${updated.groupName} | Groups | Predict Playoffs`;
+      renderGroupCards();
+      document.getElementById("group-name-editor").open = false;
+    }
     if (setting === "scoring") await refreshGroups(group.groupId);
     if (!state.signedIn || state.activeGroupId !== group.groupId) return;
     if (setting === "password") {
@@ -393,9 +394,9 @@ async function submitGroupCompetition(event, setting) {
       if (document.getElementById("group-settings-panel").matches(":popover-open")) await loadGroupSettingsPassword();
     }
     if (!state.signedIn || state.activeGroupId !== group.groupId) return;
-    document.querySelector(`#group-${setting === "password" ? "password" : "scoring"}-editor > summary`)?.focus();
-    message.textContent = setting === "password" ? "Password updated. The old password no longer works." : "Scoring system updated.";
-    showToast(setting === "password" ? "Group password updated." : "Group scoring updated.");
+    document.querySelector(`#group-${setting}-editor > summary`)?.focus();
+    message.textContent = setting === "password" ? "Password updated. The old password no longer works." : setting === "name" ? "Group name updated. Invite links still work." : "Scoring system updated.";
+    showToast(setting === "password" ? "Group password updated." : setting === "name" ? "Group name updated." : "Group scoring updated.");
   } catch (error) {
     password.value = "";
     if (state.signedIn && state.activeGroupId === group.groupId) {
@@ -529,10 +530,6 @@ function renderGroupMembers() {
     const item = document.createElement("li");
     item.className = "group-member";
     item.dataset.currentUser = String(Boolean(member.isCurrentUser));
-    const avatar = document.createElement("span");
-    avatar.className = "group-member-avatar";
-    avatar.setAttribute("aria-hidden", "true");
-    avatar.textContent = member.displayName.trim().split(/\s+/).slice(0, 2).map(part => Array.from(part)[0] || "").join("").toUpperCase();
     const identity = document.createElement("div");
     identity.className = "group-member-identity";
     const name = document.createElement("strong");
@@ -554,7 +551,7 @@ function renderGroupMembers() {
     prediction.textContent = member.hasPrediction ? "Prediction saved" : "No prediction";
     badges.appendChild(prediction);
     identity.append(name, badges);
-    item.append(avatar, identity);
+    item.append(identity);
     if ((group?.isCommissioner ?? group?.isCreator) && !member.isCommissioner && !member.isCurrentUser) {
       const button = document.createElement("button");
       button.type = "button";

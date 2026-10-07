@@ -2973,14 +2973,12 @@ body .champion-display strong {
 .group-detail .group-member-list { padding: 0 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
 .group-detail .group-member-list .group-member { gap: 16px; padding: 18px 0; justify-content: flex-start; }
 .group-detail .group-member-list .group-member:last-child { border-bottom: 0; }
-.group-detail .group-member-avatar { display: grid; flex: 0 0 42px; place-items: center; width: 42px; height: 42px; color: var(--link); background: var(--soft-blue); border-radius: 50%; font-weight: 700; font-size: 0.875rem; }
 .group-member-identity { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .group-member-identity strong { display: block; font-size: 0.9375rem; }
 .group-member-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 6px; }
 .group-detail .group-member-badges span { font-size: 0.75rem; }
 .group-you-badge { color: var(--link); font-weight: 700; }
 .group-member-prediction { color: var(--muted); }
-.group-member[data-current-user="true"] .group-member-avatar { color: var(--card); background: var(--link); }
 .group-detail .text-link { min-height: 44px; padding: 8px 0; border: 0; background: transparent; font: inherit; font-size: 0.875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
 .group-detail .text-link:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 4px; }
 .group-detail .group-destructive { color: var(--danger-text); }
@@ -3038,7 +3036,6 @@ body .champion-display strong {
   .group-detail .group-member-list { padding-inline: 14px; }
   .group-detail .group-member-list .group-member { gap: 12px; }
   .group-member-badges { gap: 6px 8px; }
-  .group-detail .group-member-avatar { width: 34px; height: 34px; flex-basis: 34px; font-size: 0.75rem; }
   .group-setting-section { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 20px; }
   .group-competition-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .group-setting-controls { gap: 8px; }
