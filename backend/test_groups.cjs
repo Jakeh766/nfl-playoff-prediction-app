@@ -707,23 +707,54 @@ test('group cards show metadata, commissioner role, all members and tied persona
   assert.match(node('#group-cards').children[0].children[2].textContent, /No rank yet/);
 });
 
-test('the directory deduplicates both sports and gets summaries using each group’s eligible sport', async () => {
-  const { context, node } = boot();
-  const dual = context.state.groups[0];
-  const nba = { groupId: 'basketball', groupName: 'Basketball crew', sports: ['nba'], scoringOption: 'vegas' };
-  context.apiRequest = async (path, options) => {
-    context.requests.push([path, options]);
-    if (path === '/api/groups') return { groups: options.sport === 'nfl' ? [dual] : [dual, nba] };
-    return board();
-  };
-  await context.refreshGroups('');
-  assert.deepEqual(Array.from(context.state.groups, group => group.groupId), ['basketball', 'g']);
-  assert.equal(context.state.activeGroupId, '');
-  assert.equal(node('#group-cards').children.length, 2);
-  assert.equal(node('#group-cards').children[0].href, '/groups?sport=nba&group=basketball');
-  assert.equal(context.requests.find(([path]) => path.includes('/basketball/'))[1].sport, 'nba');
-  assert.equal(context.requests.find(([path]) => path.includes('/g/'))[1].sport, 'nfl');
-  assert.equal(context.requests.length, 4);
+test('Groups directory copy stays sport-neutral and is excluded from NBA text replacement', () => {
+  const paragraph = read('groups.html').match(/<p\b[^>]*class="groups-directory-copy"[^>]*>([^<]+)<\/p>/)[0];
+  assert.match(paragraph, /\bdata-no-sport-copy\b/);
+  const copy = paragraph.match(/>([^<]+)<\/p>/)[1];
+  assert.equal(copy, 'All your groups in one place. Open a group to follow the season or manage your competition.');
+  const protectedNode = { nodeValue: copy, parentElement: { closest: selector => selector.includes('[data-no-sport-copy]') ? {} : null } };
+  const sportNode = { nodeValue: 'NFL Leaderboard', parentElement: { closest: () => null } };
+  const walker = { nextNode() { this.currentNode = this.nodes.shift(); return Boolean(this.currentNode); } };
+  const context = vm.createContext({ pageName: 'groups', window: { location: { pathname: '/groups' } }, NodeFilter: { SHOW_TEXT: 4 },
+    document: { body: { dataset: {} }, createTreeWalker: () => walker, querySelector: () => null, querySelectorAll: () => [] } });
+  const shell = read('shell.js');
+  vm.runInContext(shell.slice(shell.indexOf('function applyNbaPresentation()')), context);
+  walker.nodes = [protectedNode, sportNode];
+  context.applyNbaPresentation();
+  assert.equal(protectedNode.nodeValue, copy);
+  assert.equal(sportNode.nodeValue, 'NBA Leaderboard');
+  // Future sport names in this paragraph must also stay untouched.
+  protectedNode.nodeValue = 'NFL and NBA';
+  walker.nodes = [protectedNode];
+  context.applyNbaPresentation();
+  assert.equal(protectedNode.nodeValue, 'NFL and NBA');
+});
+
+test('the directory shows NFL-only, NBA-only and dual-sport groups in both selected sports', async () => {
+  for (const sport of ['nfl', 'nba']) {
+    const { context, node } = boot();
+    context.SPORT = sport; context.IS_NBA = sport === 'nba';
+    const dual = context.state.groups[0];
+    const nfl = { groupId: 'football', groupName: 'Football crew', sports: ['nfl'], scoringOption: 'classic' };
+    const nba = { groupId: 'basketball', groupName: 'Basketball crew', sports: ['nba'], scoringOption: 'vegas' };
+    context.apiRequest = async (path, options) => {
+      context.requests.push([path, options]);
+      if (path === '/api/groups') return { groups: options.sport === 'nfl' ? [dual, nfl] : [dual, nba] };
+      return board();
+    };
+    await context.refreshGroups('');
+    assert.deepEqual(Array.from(context.state.groups, group => group.groupId), ['basketball', 'g', 'football']);
+    assert.equal(context.state.activeGroupId, '');
+    const cards = node('#group-cards').children;
+    assert.equal(cards.length, 3);
+    assert.equal(cards[0].href, '/groups?sport=nba&group=basketball');
+    assert.equal(cards[1].href, sport === 'nba' ? '/groups?sport=nba&group=g' : '/groups?group=g');
+    assert.equal(cards[2].href, '/groups?group=football');
+    assert.equal(context.requests.find(([path]) => path.includes('/basketball/'))[1].sport, 'nba');
+    assert.equal(context.requests.find(([path]) => path.includes('/football/'))[1].sport, 'nfl');
+    assert.equal(context.requests.find(([path]) => path.includes('/g/'))[1].sport, sport);
+    assert.equal(context.requests.length, 5);
+  }
 });
 
 test('summary requests use bounded concurrency and one failed board does not hide other groups', async () => {
