@@ -16,6 +16,7 @@
   --divider: #ebe8e2;
   --field-border: #c9c8c2;
   --link: #0d3972;
+  --link-hover: #082b58;
   --accent-text: #e33b3f;
   --danger-text: #b7202d;
   --warning-text: #73520d;
@@ -79,6 +80,7 @@
     --divider: #405368;
     --field-border: #52677b;
     --link: #a4ceff;
+    --link-hover: #8cb8eb;
     --accent-text: #ff727e;
     --danger-text: #ff8b95;
     --warning-text: #ffd584;
@@ -1120,8 +1122,15 @@ body.account-modal-open {
   color: var(--danger-text);
 }
 
-.text-button--muted {
-  color: var(--muted);
+.text-button:any-link {
+  color: var(--link);
+  text-underline-offset: 3px;
+}
+
+.text-button:any-link:focus-visible,
+.group-card:focus-visible .group-card-action {
+  color: var(--link-hover);
+  text-decoration: underline;
 }
 
 .text-button:focus-visible {
@@ -1129,8 +1138,7 @@ body.account-modal-open {
   outline-offset: 3px;
 }
 
-.text-button:enabled:active,
-.text-button:any-link:active {
+.text-button:enabled:active {
   background: var(--surface-soft);
 }
 
@@ -1142,9 +1150,14 @@ body.account-modal-open {
 /* Touch taps must not leave an emulated hover highlight behind. */
 @media (hover: hover) and (pointer: fine) {
   .text-button:enabled:hover,
-  .text-button:any-link:hover,
   summary.text-button:hover {
     background: var(--surface-hover);
+  }
+
+  .text-button:any-link:hover,
+  .group-card:hover .group-card-action {
+    color: var(--link-hover);
+    text-decoration: underline;
   }
 
   .group-card:hover {
@@ -2952,7 +2965,7 @@ body .champion-display strong {
 .group-card p { margin: 0; line-height: 1.6; }
 .group-card-meta, .group-card-stats { color: var(--muted); font-size: 0.875rem; }
 .group-card-stats { margin-top: auto !important; padding-top: 12px; font-variant-numeric: tabular-nums; }
-.group-card-action { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 0.875rem; font-weight: 600; }
+.group-card-action { display: inline-flex; align-items: center; gap: 8px; color: var(--link); font-size: 0.875rem; font-weight: 600; text-underline-offset: 3px; }
 .group-card-action::after { content: ""; width: 7px; height: 7px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); }
 .commissioner-badge { padding: 4px 9px; font-size: 0.75rem; font-weight: 700; color: var(--link); background: var(--soft-blue); border-radius: 4px; }
 .groups-back { margin-bottom: 12px; }

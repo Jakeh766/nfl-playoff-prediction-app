@@ -59,7 +59,7 @@ test('text actions retain touch targets and focus, and hover is gated to mouse-l
     'no ungated text-action hover rules');
   assert.doesNotMatch(css.replace(gated[0], ''), /\.group-card:hover\s*\{/,
     'no sticky group-card hover on touch devices');
-  assert.doesNotMatch(css, /\.group-card-action\s*\{[^}]*text-decoration:\s*underline/);
+  assert.doesNotMatch(css, /^\.group-card-action\s*\{[^}]*text-decoration:\s*underline/m);
 });
 
 test('content and legal links retain traditional link markup', () => {
@@ -83,10 +83,29 @@ test('standalone navigation uses the shared appearance but preserves real destin
     const html = read(file);
     assert.match(html, /<a class="text-button" href="\/scoring" data-clean-route="\/scoring">See how scoring works<\/a>/);
     assert.match(html, /<a class="text-button" href="\/groups" data-clean-route="\/groups">View groups<\/a>/);
-    assert.match(html, /<a class="text-button text-button--muted" href="(?:\/nba|\/)" data-no-sport-copy>Looking for (?:NBA|NFL) playoff predictions\?<\/a>/);
+    assert.match(html, /<a class="text-button" href="(?:\/nba|\/)" data-no-sport-copy>Looking for (?:NBA|NFL) playoff predictions\?<\/a>/);
     assert.doesNotMatch(html, /<a\b[^>]*role="button"/);
   }
   for (const file of ['index.html', 'nba.html', 'leaderboard.html']) {
     assert.match(read(file), /<a class="text-button" href="\/scoring" data-clean-route="\/scoring">Scoring rules<\/a>/);
   }
+});
+
+test('navigation links use color and underlines for feedback without button backgrounds', () => {
+  const css = read('styles.css');
+  assert.match(css, /\.text-button:any-link\s*\{[^}]*color:\s*var\(--link\)/);
+  const focus = css.match(/\.text-button:any-link:focus-visible,\s*\.group-card:focus-visible \.group-card-action\s*\{([^}]+)\}/)[1];
+  assert.match(focus, /color:\s*var\(--link-hover\)/);
+  assert.match(focus, /text-decoration:\s*underline/);
+  const hover = css.match(/\.text-button:any-link:hover,\s*\.group-card:hover \.group-card-action\s*\{([^}]+)\}/)[1];
+  assert.match(hover, /color:\s*var\(--link-hover\)/);
+  assert.match(hover, /text-decoration:\s*underline/);
+  for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!match[1].includes('.text-button:any-link')) continue;
+    assert.doesNotMatch(match[2], /background|box-shadow|padding|font-weight/,
+      'link states must not introduce boxes or change spacing/weight');
+  }
+  // Buttons still retain their existing background feedback and dark text.
+  assert.match(css, /\.text-button:enabled:active\s*\{[^}]*background:\s*var\(--surface-soft\)/);
+  assert.match(css, /\.text-button:enabled:hover,\s*summary\.text-button:hover\s*\{[^}]*background:\s*var\(--surface-hover\)/);
 });
