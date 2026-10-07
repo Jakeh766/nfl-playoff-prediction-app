@@ -828,26 +828,12 @@ async function submitCreateAccount(event) {
     if (error.code === "UsernameExistsException") {
       pendingAccountCredentials = null;
       elements.createPassword.value = "";
-      try {
-        await requestConfirmationCode(email);
-        elements.confirmEmail.value = email;
-        showAuthPanel(
-          "confirmAccount",
-          "You started creating an account with this email earlier. We sent you a new verification code.",
-        );
-        elements.confirmationCode.focus();
-      } catch (resendError) {
-        if (accountIsAlreadyConfirmed(resendError)) {
-          elements.loginEmail.value = email;
-          showAuthPanel(
-            "signIn",
-            "An account already exists for this email. Sign in, or use Forgot password if you need a new password.",
-          );
-          elements.loginPassword.focus();
-        } else {
-          elements.authMessage.textContent = cognitoErrorMessage(resendError);
-        }
-      }
+      elements.loginEmail.value = email;
+      showAuthPanel(
+        "signIn",
+        "An account already exists for this email. Sign in, or use Forgot password if you need a new password.",
+      );
+      elements.loginPassword.focus();
       return;
     }
     elements.authMessage.textContent = cognitoErrorMessage(error);

@@ -142,7 +142,7 @@ class LoginFormTests(unittest.TestCase):
             self.app_javascript,
         )
 
-    def test_existing_unconfirmed_signup_resends_without_reusing_new_password(self):
+    def test_existing_signup_returns_to_sign_in_without_sending_a_code(self):
         create_flow = self.app_javascript[
             self.app_javascript.index("async function submitCreateAccount") :
             self.app_javascript.index("async function submitConfirmAccount")
@@ -151,15 +151,11 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('error.code === "UsernameExistsException"', create_flow)
         self.assertIn("pendingAccountCredentials = null;", create_flow)
         self.assertIn('elements.createPassword.value = "";', create_flow)
-        self.assertIn("await requestConfirmationCode(email);", create_flow)
-        self.assertIn("elements.confirmEmail.value = email;", create_flow)
+        self.assertNotIn("await requestConfirmationCode(email);", create_flow)
+        self.assertIn("elements.loginEmail.value = email;", create_flow)
         self.assertIn(
-            "You started creating an account with this email earlier.",
+            "An account already exists for this email. Sign in, or use Forgot password",
             create_flow,
-        )
-        self.assertLess(
-            create_flow.index("pendingAccountCredentials = null;"),
-            create_flow.index("await requestConfirmationCode(email);"),
         )
 
         confirm_flow = self.app_javascript[
