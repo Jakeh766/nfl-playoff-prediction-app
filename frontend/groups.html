@@ -56,7 +56,7 @@
           <p class="empty-groups" id="empty-groups">Sign in to see your groups, or create or join a group to get started.</p>
         </div>
         <section class="group-detail hidden" id="group-leaderboard" aria-labelledby="active-group-name">
-          <button class="text-button groups-back" id="groups-back" type="button">Back to Groups</button>
+          <button class="text-link groups-back" id="groups-back" type="button">Back to Groups</button>
           <header class="group-hub-header">
             <div class="group-hub-title">
               <div><h1 id="active-group-name" tabindex="-1"></h1><p id="active-group-meta" data-no-sport-copy></p></div>
@@ -117,18 +117,18 @@
                   </div>
                   <div class="group-competition-row">
                     <div><h4>Password</h4><p class="group-password-mask" aria-label="Group password is hidden">••••••••</p><p class="input-hint">The current password cannot be viewed or recovered.</p></div>
-                    <details class="group-password-editor hidden" data-commissioner-only id="group-password-editor"><summary class="text-button">Set a new password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details>
+                    <details class="group-password-editor hidden" data-commissioner-only id="group-password-editor"><summary>Set a new password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details>
                   </div>
                 </div>
                 <p class="dialog-message" id="group-competition-message" role="status" aria-live="polite"></p>
               </section>
               <section class="group-setting-section" aria-labelledby="group-invites-heading">
                 <div><h3 id="group-invites-heading">Invites</h3><p>Bring your people into the competition with a private invite link.</p><p class="input-hint hidden" data-commissioner-only>Regenerating creates a new link and stops all previous links from working.</p></div>
-                <div class="group-setting-controls"><button class="button button-secondary" id="settings-share-group-invite" type="button">Copy or share invite</button><button class="text-button hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button></div>
+                <div class="group-setting-controls"><button class="button button-secondary" id="settings-share-group-invite" type="button">Copy or share invite</button><button class="text-link hidden" id="regenerate-group-invite" type="button">Regenerate invite link</button></div>
               </section>
               <section class="group-setting-section" aria-labelledby="group-membership-heading">
                 <div><h3 id="group-membership-heading">Membership</h3><p id="group-membership-description"></p></div>
-                <div class="group-setting-controls"><button class="button button-secondary" id="settings-group-members" type="button">View members</button><button class="text-button text-button--danger" id="leave-group" type="button">Leave group</button></div>
+                <div class="group-setting-controls"><button class="button button-secondary" id="settings-group-members" type="button">View members</button><button class="text-link group-destructive" id="leave-group" type="button">Leave group</button></div>
               </section>
               <section class="group-setting-section group-danger-zone hidden" data-commissioner-only aria-labelledby="group-danger-heading">
                 <div><h3 id="group-danger-heading">Danger Zone</h3><p>Permanently delete the group for everyone.</p><p class="input-hint">Deleting removes the group and its history. This cannot be undone.</p></div>

@@ -16,7 +16,6 @@
   --divider: #ebe8e2;
   --field-border: #c9c8c2;
   --link: #0d3972;
-  --link-hover: #082b58;
   --accent-text: #e33b3f;
   --danger-text: #b7202d;
   --warning-text: #73520d;
@@ -80,7 +79,6 @@
     --divider: #405368;
     --field-border: #52677b;
     --link: #a4ceff;
-    --link-hover: #8cb8eb;
     --accent-text: #ff727e;
     --danger-text: #ff8b95;
     --warning-text: #ffd584;
@@ -383,7 +381,6 @@ h1 {
 
 .auth-links {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   margin-top: 18px;
@@ -391,19 +388,36 @@ h1 {
   font-weight: 700;
 }
 
-.auth-links .text-button {
-  font-size: 13px;
+.auth-links a,
+.auth-links button,
+.auth-back {
+  padding: 0;
+  color: var(--link);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.auth-back.text-button {
+.auth-back {
   margin-top: 18px;
   font-size: 13px;
 }
 
-.delete-account-button.text-button {
+.delete-account-button {
   display: block;
   margin: 20px auto 0;
+  padding: 0;
+  color: var(--danger-text);
+  background: none;
+  border: 0;
   font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .auth-message {
@@ -1055,7 +1069,7 @@ body.has-group-invite .home-hero {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0;
+  gap: 16px;
 }
 
 .account-modal {
@@ -1086,84 +1100,17 @@ body.account-modal-open {
 
 .hero-actions .button-hero {
   width: 100%;
-  margin-bottom: 8px;
 }
 
-.hero-actions .text-button {
+.hero-actions .text-link {
   align-self: flex-start;
-  margin-inline-start: -10px;
-  font-size: 13px;
-  text-align: left;
 }
 
-/* Standalone UI actions and navigation share this style; links in prose keep underlines. */
-.text-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text);
-  background: transparent;
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.5;
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.text-button--danger {
-  color: var(--danger-text);
-}
-
-.text-button:any-link {
+.text-link {
   color: var(--link);
-  text-underline-offset: 3px;
-}
-
-.text-button:any-link:focus-visible,
-.group-card:focus-visible .group-card-action {
-  color: var(--link-hover);
-  text-decoration: underline;
-}
-
-.text-button:focus-visible {
-  outline: 2px solid var(--focus-outline);
-  outline-offset: 3px;
-}
-
-.text-button:enabled:active {
-  background: var(--surface-soft);
-}
-
-.text-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Touch taps must not leave an emulated hover highlight behind. */
-@media (hover: hover) and (pointer: fine) {
-  .text-button:enabled:hover,
-  summary.text-button:hover {
-    background: var(--surface-hover);
-  }
-
-  .text-button:any-link:hover,
-  .group-card:hover .group-card-action {
-    color: var(--link-hover);
-    text-decoration: underline;
-  }
-
-  .group-card:hover {
-    border-color: var(--link);
-    background: var(--surface-hover);
-  }
+  font-size: 13px;
+  font-weight: 700;
+  text-underline-offset: 4px;
 }
 
 .hero-field-mark {
@@ -1382,7 +1329,7 @@ body.predictions-locked .predictor .final-actions button {
   gap: 10px;
 }
 
-.home-group-actions .text-button {
+.home-group-actions .text-link {
   margin-left: 8px;
 }
 
@@ -2742,8 +2689,11 @@ body .champion-display strong {
   margin-bottom: 10px;
 }
 
-.leaderboard-score-toolbar > .text-button {
+.leaderboard-score-toolbar > a {
+  color: var(--link);
   font-size: 12px;
+  font-weight: 700;
+  text-underline-offset: 3px;
 }
 
 .leaderboard-scoring-toggle {
@@ -2956,8 +2906,8 @@ body .champion-display strong {
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.group-card:active { background: var(--surface-soft); }
-.group-card:focus-visible, .group-detail-tab:focus-visible {
+.group-card:hover { border-color: var(--link); background: var(--surface-hover); }
+.group-card:focus-visible, .group-detail-tab:focus-visible, .groups-back:focus-visible {
   outline: 2px solid var(--focus-outline);
   outline-offset: 4px;
 }
@@ -2965,10 +2915,9 @@ body .champion-display strong {
 .group-card p { margin: 0; line-height: 1.6; }
 .group-card-meta, .group-card-stats { color: var(--muted); font-size: 0.875rem; }
 .group-card-stats { margin-top: auto !important; padding-top: 12px; font-variant-numeric: tabular-nums; }
-.group-card-action { display: inline-flex; align-items: center; gap: 8px; color: var(--link); font-size: 0.875rem; font-weight: 600; text-underline-offset: 3px; }
-.group-card-action::after { content: ""; width: 7px; height: 7px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); }
+.group-card-action { color: var(--link); font-size: 0.875rem; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
 .commissioner-badge { padding: 4px 9px; font-size: 0.75rem; font-weight: 700; color: var(--link); background: var(--soft-blue); border-radius: 4px; }
-.groups-back { margin-bottom: 12px; }
+.groups-back { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 12px; padding: 0; border: 0; background: transparent; color: var(--link); font: inherit; font-size: 0.875rem; font-weight: 700; cursor: pointer; }
 .groups-back::before { content: ""; width: 7px; height: 7px; border-left: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
 .group-hub-header { padding: 28px 32px 24px; color: #fffefa; background: var(--ink); border-radius: 12px 12px 0 0; }
 .group-hub-title { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
@@ -3016,6 +2965,9 @@ body .champion-display strong {
 .group-you-badge { color: var(--link); font-weight: 700; }
 .group-member-prediction { color: var(--muted); }
 .group-member[data-current-user="true"] .group-member-avatar { color: var(--card); background: var(--link); }
+.group-detail .text-link { min-height: 44px; padding: 8px 0; border: 0; background: transparent; font: inherit; font-size: 0.875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.group-detail .text-link:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 4px; }
+.group-detail .group-destructive { color: var(--danger-text); }
 .group-removal-note { margin-top: 16px; font-size: 0.75rem; }
 .group-settings-actions { display: flex; flex-direction: column; gap: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .group-setting-section { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 28px; padding: 24px; border-bottom: 1px solid var(--line); }
@@ -3034,8 +2986,8 @@ body .champion-display strong {
 .group-inline-form label { font-size: 0.75rem; font-weight: 600; }
 .group-inline-form input, .group-inline-form select { width: 100%; min-height: 44px; padding: 10px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px; font: inherit; font-size: 0.875rem; }
 .group-inline-form .button { justify-self: start; }
-.group-password-editor summary { display: list-item; width: fit-content; }
-.group-inline-form input:focus-visible, .group-inline-form select:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 3px; }
+.group-password-editor summary { min-height: 44px; padding: 10px 0; color: var(--link); font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+.group-password-editor summary:focus-visible, .group-inline-form input:focus-visible, .group-inline-form select:focus-visible { outline: 2px solid var(--focus-outline); outline-offset: 3px; }
 .group-detail .group-inline-form button:disabled, .group-detail .group-inline-form select:disabled { opacity: 0.6; cursor: not-allowed; }
 .group-password-mask { letter-spacing: 0.15em; }
 #group-competition-message:empty { display: none; }
@@ -3277,9 +3229,10 @@ body .champion-display strong {
 }
 
 .leaderboard-player-button {
-  display: block;
-  padding: 4px 8px;
-  line-height: 1.3;
+  padding: 0;
+  color: var(--link);
+  background: none;
+  border: 0;
   text-align: left;
 }
 
@@ -3297,7 +3250,20 @@ body .champion-display strong {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   text-transform: uppercase;
+}
+
+.leaderboard-player-button:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.leaderboard-player-button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 4px;
+  border-radius: 2px;
 }
 
 .leaderboard-champion {
@@ -3927,11 +3893,11 @@ footer p {
   }
 
   .home-group-actions .button,
-  .home-group-actions .text-button {
+  .home-group-actions .text-link {
     width: 100%;
   }
 
-  .home-group-actions .text-button {
+  .home-group-actions .text-link {
     margin: 8px 0 0;
     text-align: center;
   }

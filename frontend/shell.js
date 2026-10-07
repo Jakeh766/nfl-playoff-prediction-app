@@ -75,8 +75,8 @@ if (dialogs) {
             <button class="button button-primary auth-button" id="sign-in" type="submit">Sign in</button>
           </form>
           <div class="auth-links">
-            <button class="text-button" id="forgot-password" type="button">Forgot password?</button>
-            <button class="text-button" id="create-account" type="button">Create account</button>
+            <a href="#" id="forgot-password">Forgot password?</a>
+            <a href="#" id="create-account">Create account</a>
           </div>
         </div>
 
@@ -95,7 +95,7 @@ if (dialogs) {
             </div>
             <button class="button button-primary auth-button" type="submit">Create account</button>
           </form>
-          <button class="text-button auth-back" id="create-account-back" type="button">Back to sign in</button>
+          <button class="auth-back" id="create-account-back" type="button">Back to sign in</button>
         </div>
 
         <div class="hidden" id="confirm-account-panel">
@@ -108,8 +108,8 @@ if (dialogs) {
             <button class="button button-primary auth-button" type="submit">Confirm account</button>
           </form>
           <div class="auth-links">
-            <button class="text-button" id="resend-confirmation" type="button">Resend code</button>
-            <button class="text-button" id="confirm-account-back" type="button">Back to sign in</button>
+            <button id="resend-confirmation" type="button">Resend code</button>
+            <button id="confirm-account-back" type="button">Back to sign in</button>
           </div>
         </div>
 
@@ -121,7 +121,7 @@ if (dialogs) {
             <input id="forgot-email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
             <button class="button button-primary auth-button" type="submit">Send reset code</button>
           </form>
-          <button class="text-button auth-back" id="forgot-password-back" type="button">Back to sign in</button>
+          <button class="auth-back" id="forgot-password-back" type="button">Back to sign in</button>
         </div>
 
         <div class="hidden" id="reset-password-panel">
@@ -141,7 +141,7 @@ if (dialogs) {
             </div>
             <button class="button button-primary auth-button" type="submit">Save new password</button>
           </form>
-          <button class="text-button auth-back" id="reset-password-back" type="button">Back to sign in</button>
+          <button class="auth-back" id="reset-password-back" type="button">Back to sign in</button>
         </div>
 
         <div class="hidden" id="signed-in-panel">
@@ -161,7 +161,7 @@ if (dialogs) {
           <button class="button button-secondary" id="change-leaderboard-name" type="button">Change leaderboard name</button>
           <button class="button button-ghost" id="account-sign-out" type="button">Sign out</button>
         </div>
-        <button class="text-button text-button--danger delete-account-button" id="delete-account" type="button">Delete account</button>
+        <button class="delete-account-button" id="delete-account" type="button">Delete account</button>
       </div>
       </div>
     </div>
