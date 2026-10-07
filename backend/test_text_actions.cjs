@@ -49,28 +49,44 @@ test('text actions retain touch targets and focus, and hover is gated to mouse-l
   assert.match(css, /\.text-button--danger\s*\{[^}]*color:\s*var\(--danger-text\)/);
   assert.match(css, /\.text-button:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-outline\)/);
   assert.match(css, /\.text-button:disabled\s*\{[^}]*cursor:\s*not-allowed/);
-  const gated = css.match(/@media\s*\(hover:\s*hover\)\s*and\s*\(pointer:\s*fine\)\s*\{\s*\.text-button:enabled:hover,\s*summary\.text-button:hover\s*\{[^}]*background:[^}]+\}\s*\}/);
+  const gated = css.match(/@media\s*\(hover:\s*hover\)\s*and\s*\(pointer:\s*fine\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(gated, 'hover feedback must exclude coarse/touch-only devices and disabled buttons');
+  assert.match(gated[1], /\.text-button:enabled:hover/);
+  assert.match(gated[1], /\.text-button:any-link:hover/);
+  assert.match(gated[1], /\.group-card:hover/);
+  assert.match(gated[1], /background:\s*var\(--surface-hover\)/);
   assert.doesNotMatch(css.replace(gated[0], ''), /[^{}]*\.text-button[^{}]*:hover[^{}]*\{/,
     'no ungated text-action hover rules');
-  // Only the directory card's navigation cue intentionally forces an underline.
-  const underlines = [...css.matchAll(/([^{}]+)\{[^{}]*text-decoration:\s*underline[^{}]*\}/g)];
-  assert.deepEqual(underlines.map(match => match[1].trim()), ['.group-card-action']);
+  assert.doesNotMatch(css.replace(gated[0], ''), /\.group-card:hover\s*\{/,
+    'no sticky group-card hover on touch devices');
+  assert.doesNotMatch(css, /\.group-card-action\s*\{[^}]*text-decoration:\s*underline/);
 });
 
-test('content, legal and destination links remain anchors outside the text-button style', () => {
+test('content and legal links retain traditional link markup', () => {
   for (const file of fs.readdirSync(path.join(__dirname, '../frontend')).filter(file => file.endsWith('.html'))
     .concat(['shell.js', 'scoring.js'])) {
     const source = read(file);
     assert.doesNotMatch(source, /<(?:button|summary)\b[^>]*class="[^"]*\btext-link\b/, file);
-    assert.doesNotMatch(source, /<a\b[^>]*class="[^"]*\btext-button\b/, file);
     assert.doesNotMatch(source, /<a\b[^>]*href="#"/, file);
   }
   assert.match(read('privacy.html'), /<a href="mailto:contact@predictplayoffs.com">/);
   assert.match(read('scoring.html'), /<a href="https:\/\/www.vegasinsider.com\/nfl\/odds\/win-totals\/">/);
   assert.match(read('scoring.js'), /<a href="\$\{NBA_SEASON.sourceUrl\}">BetMGM snapshot<\/a>/);
+  for (const file of ['index.html', 'nba.html', 'groups.html', 'leaderboard.html', 'picks.html', 'privacy.html', 'scoring.html']) {
+    assert.match(read(file), /<a href="\/privacy">Privacy policy<\/a>/);
+    assert.match(read(file), /<a href="mailto:contact@predictplayoffs.com">Contact<\/a>/);
+  }
+});
+
+test('standalone navigation uses the shared appearance but preserves real destinations', () => {
   for (const file of ['index.html', 'nba.html']) {
-    assert.match(read(file), /<a class="text-link" href="\/scoring"/);
-    assert.match(read(file), /<a class="text-link" href="\/groups"/);
+    const html = read(file);
+    assert.match(html, /<a class="text-button" href="\/scoring" data-clean-route="\/scoring">See how scoring works<\/a>/);
+    assert.match(html, /<a class="text-button" href="\/groups" data-clean-route="\/groups">View groups<\/a>/);
+    assert.match(html, /<a class="text-button text-button--muted" href="(?:\/nba|\/)" data-no-sport-copy>Looking for (?:NBA|NFL) playoff predictions\?<\/a>/);
+    assert.doesNotMatch(html, /<a\b[^>]*role="button"/);
+  }
+  for (const file of ['index.html', 'nba.html', 'leaderboard.html']) {
+    assert.match(read(file), /<a class="text-button" href="\/scoring" data-clean-route="\/scoring">Scoring rules<\/a>/);
   }
 });

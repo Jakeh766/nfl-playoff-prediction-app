@@ -1053,7 +1053,7 @@ body.has-group-invite .home-hero {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 16px;
+  gap: 0;
 }
 
 .account-modal {
@@ -1084,20 +1084,17 @@ body.account-modal-open {
 
 .hero-actions .button-hero {
   width: 100%;
+  margin-bottom: 8px;
 }
 
-.hero-actions .text-link {
+.hero-actions .text-button {
   align-self: flex-start;
-}
-
-.text-link {
-  color: var(--link);
+  margin-inline-start: -10px;
   font-size: 13px;
-  font-weight: 700;
-  text-underline-offset: 4px;
+  text-align: left;
 }
 
-/* UI actions share this style; content and navigation links keep .text-link. */
+/* Standalone UI actions and navigation share this style; links in prose keep underlines. */
 .text-button {
   display: inline-flex;
   align-items: center;
@@ -1123,12 +1120,17 @@ body.account-modal-open {
   color: var(--danger-text);
 }
 
+.text-button--muted {
+  color: var(--muted);
+}
+
 .text-button:focus-visible {
   outline: 2px solid var(--focus-outline);
   outline-offset: 3px;
 }
 
-.text-button:enabled:active {
+.text-button:enabled:active,
+.text-button:any-link:active {
   background: var(--surface-soft);
 }
 
@@ -1140,7 +1142,13 @@ body.account-modal-open {
 /* Touch taps must not leave an emulated hover highlight behind. */
 @media (hover: hover) and (pointer: fine) {
   .text-button:enabled:hover,
+  .text-button:any-link:hover,
   summary.text-button:hover {
+    background: var(--surface-hover);
+  }
+
+  .group-card:hover {
+    border-color: var(--link);
     background: var(--surface-hover);
   }
 }
@@ -1361,7 +1369,7 @@ body.predictions-locked .predictor .final-actions button {
   gap: 10px;
 }
 
-.home-group-actions .text-link {
+.home-group-actions .text-button {
   margin-left: 8px;
 }
 
@@ -2721,11 +2729,8 @@ body .champion-display strong {
   margin-bottom: 10px;
 }
 
-.leaderboard-score-toolbar > a {
-  color: var(--link);
+.leaderboard-score-toolbar > .text-button {
   font-size: 12px;
-  font-weight: 700;
-  text-underline-offset: 3px;
 }
 
 .leaderboard-scoring-toggle {
@@ -2938,7 +2943,7 @@ body .champion-display strong {
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.group-card:hover { border-color: var(--link); background: var(--surface-hover); }
+.group-card:active { background: var(--surface-soft); }
 .group-card:focus-visible, .group-detail-tab:focus-visible {
   outline: 2px solid var(--focus-outline);
   outline-offset: 4px;
@@ -2947,7 +2952,8 @@ body .champion-display strong {
 .group-card p { margin: 0; line-height: 1.6; }
 .group-card-meta, .group-card-stats { color: var(--muted); font-size: 0.875rem; }
 .group-card-stats { margin-top: auto !important; padding-top: 12px; font-variant-numeric: tabular-nums; }
-.group-card-action { color: var(--link); font-size: 0.875rem; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+.group-card-action { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 0.875rem; font-weight: 600; }
+.group-card-action::after { content: ""; width: 7px; height: 7px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); }
 .commissioner-badge { padding: 4px 9px; font-size: 0.75rem; font-weight: 700; color: var(--link); background: var(--soft-blue); border-radius: 4px; }
 .groups-back { margin-bottom: 12px; }
 .groups-back::before { content: ""; width: 7px; height: 7px; border-left: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
@@ -3908,11 +3914,11 @@ footer p {
   }
 
   .home-group-actions .button,
-  .home-group-actions .text-link {
+  .home-group-actions .text-button {
     width: 100%;
   }
 
-  .home-group-actions .text-link {
+  .home-group-actions .text-button {
     margin: 8px 0 0;
     text-align: center;
   }
