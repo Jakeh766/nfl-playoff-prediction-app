@@ -1,4 +1,4 @@
-const TEAMS = {
+const TEAMS = IS_NBA ? NBA_SEASON.teams : {
   AFC: [
     "Baltimore Ravens",
     "Buffalo Bills",
@@ -100,7 +100,7 @@ const DIVISION_TEAMS = {
   },
 };
 
-const TEAM_LOGO_CODES = {
+const TEAM_LOGO_CODES = IS_NBA ? NBA_LOGOS : {
   "Arizona Cardinals": "ari",
   "Atlanta Falcons": "atl",
   "Baltimore Ravens": "bal",
@@ -135,7 +135,74 @@ const TEAM_LOGO_CODES = {
   "Washington Commanders": "wsh",
 };
 
-const FALLBACK_WIN_TOTALS = {
+// Seed-row accents use recognizable team palette colors.
+const TEAM_COLORS = IS_NBA ? {
+  "Atlanta Hawks": "#c8102e",
+  "Boston Celtics": "#007a33",
+  "Brooklyn Nets": "#777777",
+  "Charlotte Hornets": "#1d1160",
+  "Chicago Bulls": "#ce1141",
+  "Cleveland Cavaliers": "#860038",
+  "Dallas Mavericks": "#00538c",
+  "Denver Nuggets": "#0e2240",
+  "Detroit Pistons": "#1d42ba",
+  "Golden State Warriors": "#1d428a",
+  "Houston Rockets": "#ce1141",
+  "Indiana Pacers": "#002d62",
+  "Los Angeles Clippers": "#c8102e",
+  "Los Angeles Lakers": "#552583",
+  "Memphis Grizzlies": "#5d76a9",
+  "Miami Heat": "#98002e",
+  "Milwaukee Bucks": "#00471b",
+  "Minnesota Timberwolves": "#0c2340",
+  "New Orleans Pelicans": "#0c2340",
+  "New York Knicks": "#f58426",
+  "Oklahoma City Thunder": "#007ac1",
+  "Orlando Magic": "#0077c0",
+  "Philadelphia 76ers": "#006bb6",
+  "Phoenix Suns": "#fa4b0a",
+  "Portland Trail Blazers": "#e03a3e",
+  "Sacramento Kings": "#5a2d81",
+  "San Antonio Spurs": "#c4ced4",
+  "Toronto Raptors": "#ce1141",
+  "Utah Jazz": "#5b2b82",
+  "Washington Wizards": "#e31837",
+} : {
+  "Arizona Cardinals": "#97233f",
+  "Atlanta Falcons": "#a71930",
+  "Baltimore Ravens": "#241773",
+  "Buffalo Bills": "#00338d",
+  "Carolina Panthers": "#0085ca",
+  "Chicago Bears": "#c83803",
+  "Cincinnati Bengals": "#fb4f14",
+  "Cleveland Browns": "#ff3c00",
+  "Dallas Cowboys": "#003594",
+  "Denver Broncos": "#fb4f14",
+  "Detroit Lions": "#0076b6",
+  "Green Bay Packers": "#203731",
+  "Houston Texans": "#03202f",
+  "Indianapolis Colts": "#002c5f",
+  "Jacksonville Jaguars": "#006778",
+  "Kansas City Chiefs": "#e31837",
+  "Las Vegas Raiders": "#000000",
+  "Los Angeles Chargers": "#0080c6",
+  "Los Angeles Rams": "#003594",
+  "Miami Dolphins": "#008e97",
+  "Minnesota Vikings": "#4f2683",
+  "New England Patriots": "#002244",
+  "New Orleans Saints": "#b49f61",
+  "New York Giants": "#0b2265",
+  "New York Jets": "#125740",
+  "Philadelphia Eagles": "#004c54",
+  "Pittsburgh Steelers": "#ffb612",
+  "San Francisco 49ers": "#aa0000",
+  "Seattle Seahawks": "#002244",
+  "Tampa Bay Buccaneers": "#d50a0a",
+  "Tennessee Titans": "#4b92db",
+  "Washington Commanders": "#5a1414",
+};
+
+const FALLBACK_WIN_TOTALS = IS_NBA ? NBA_SEASON.totals : {
   "Arizona Cardinals": 4.5,
   "Atlanta Falcons": 7.5,
   "Baltimore Ravens": 11.5,
@@ -171,6 +238,7 @@ const FALLBACK_WIN_TOTALS = {
 };
 
 function createEmptyDivisionWinners() {
+  if (IS_NBA) return { East: {}, West: {} };
   return {
     AFC: { North: "", South: "", East: "", West: "" },
     NFC: { North: "", South: "", East: "", West: "" },
@@ -184,17 +252,18 @@ const state = {
   winTotals: { ...FALLBACK_WIN_TOTALS },
   oddsSource: "2026 sportsbook snapshot",
   divisionWinners: createEmptyDivisionWinners(),
-  seeds: { AFC: Array(7).fill(""), NFC: Array(7).fill("") },
-  picks: { AFC: {}, NFC: {}, superBowl: "" },
+  seeds: emptySeeds(),
+  picks: { [CONFERENCES[0]]: {}, [CONFERENCES[1]]: {}, superBowl: "" },
   bracketBuilt: false,
   savedAt: null,
   savedPrediction: null,
   leaderboard: null,
   leaderboardScoringMode: "classic",
-  leaderboardView: "public",
   groups: [],
+  groupsLoaded: false,
   activeGroupId: "",
   groupLeaderboard: null,
+  groupSummaries: {},
   predictionWindow: null,
   predictionsLocked: !LOCAL_PREVIEW,
   predictionClockOffset: 0,
@@ -273,11 +342,7 @@ const elements = {
   savedSection: document.querySelector("#saved-section"),
   savedGrid: document.querySelector("#saved-grid"),
   emptyLocker: document.querySelector("#empty-locker"),
-  publicLeaderboardTab: document.querySelector("#public-leaderboard-tab"),
-  groupsLeaderboardTab: document.querySelector("#groups-leaderboard-tab"),
-  publicLeaderboardPanel: document.querySelector("#public-leaderboard-panel"),
-  groupsLeaderboardPanel: document.querySelector("#groups-leaderboard-panel"),
-  groupTabs: document.querySelector("#group-tabs"),
+  groupCards: document.querySelector("#group-cards"),
   emptyGroups: document.querySelector("#empty-groups"),
   groupLeaderboard: document.querySelector("#group-leaderboard"),
   activeGroupName: document.querySelector("#active-group-name"),
@@ -300,10 +365,21 @@ const elements = {
   groupDialogDescription: document.querySelector("#group-dialog-description"),
   groupName: document.querySelector("#group-name"),
   groupPassword: document.querySelector("#group-password"),
+  groupSportsField: document.querySelector("#group-sports-field"),
+  groupSportNfl: document.querySelector("#group-sport-nfl"),
+  groupSportNba: document.querySelector("#group-sport-nba"),
   groupDialogMessage: document.querySelector("#group-dialog-message"),
   cancelGroup: document.querySelector("#cancel-group"),
   submitGroup: document.querySelector("#submit-group"),
   shareGroupInvite: document.querySelector("#share-group-invite"),
+  editGroupSports: document.querySelector("#edit-group-sports"),
+  editGroupSportsDialog: document.querySelector("#edit-group-sports-dialog"),
+  editGroupSportsForm: document.querySelector("#edit-group-sports-form"),
+  editGroupSportNfl: document.querySelector("#edit-group-sport-nfl"),
+  editGroupSportNba: document.querySelector("#edit-group-sport-nba"),
+  editGroupSportsMessage: document.querySelector("#edit-group-sports-message"),
+  cancelEditGroupSports: document.querySelector("#cancel-edit-group-sports"),
+  saveGroupSports: document.querySelector("#save-group-sports"),
   leaveGroup: document.querySelector("#leave-group"),
   deleteGroup: document.querySelector("#delete-group"),
   groupInviteDialog: document.querySelector("#group-invite-dialog"),
@@ -317,8 +393,6 @@ const elements = {
   leaveGroupForm: document.querySelector("#leave-group-form"),
   leaveGroupTitle: document.querySelector("#leave-group-title"),
   leaveGroupDescription: document.querySelector("#leave-group-description"),
-  newCommissionerField: document.querySelector("#new-commissioner-field"),
-  newCommissioner: document.querySelector("#new-commissioner"),
   leaveGroupMessage: document.querySelector("#leave-group-message"),
   cancelLeaveGroup: document.querySelector("#cancel-leave-group"),
   confirmLeaveGroup: document.querySelector("#confirm-leave-group"),
@@ -343,6 +417,8 @@ const elements = {
   closePublicBracket: document.querySelector("#close-public-bracket"),
   toast: document.querySelector("#toast"),
   kickoffCountdown: document.querySelector("#kickoff-countdown"),
+  kickoffCountdownLabel: document.querySelector("#kickoff-countdown-label"),
+  devUnlockHeadline: document.querySelector("#dev-unlock-headline"),
   countdownDays: document.querySelector("#countdown-days"),
   countdownHours: document.querySelector("#countdown-hours"),
   countdownMinutes: document.querySelector("#countdown-minutes"),
@@ -436,7 +512,7 @@ if (!TEST_MODE && elements.randomizeBracket) {
 }
 
 function createEmptyPicks() {
-  return { AFC: {}, NFC: {}, superBowl: "" };
+  return { [CONFERENCES[0]]: {}, [CONFERENCES[1]]: {}, superBowl: "" };
 }
 
 function clone(value) {
@@ -509,7 +585,7 @@ function loadAuthSession() {
     }
     return session;
   } catch (error) {
-    console.warn("Discarding an invalid authentication session.", error);
+    console.warn("Discarding an invalid authentication session.");
     localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     return null;
@@ -541,7 +617,7 @@ function decodeJwtPayload(token) {
     const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
     return JSON.parse(atob(padded));
   } catch (error) {
-    console.warn("Could not decode the Cognito token.", error);
+    console.warn("Could not decode the Cognito token.");
     return {};
   }
 }
@@ -553,6 +629,9 @@ async function requestCognito(operation, parameters) {
   }
   const response = await fetch(config.cognitoEndpoint, {
     method: "POST",
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/x-amz-json-1.1",
       "X-Amz-Target": `AWSCognitoIdentityProviderService.${operation}`,
@@ -561,7 +640,12 @@ async function requestCognito(operation, parameters) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.message || "Cognito rejected the request.");
+    // Never render a provider response that could echo credentials or tokens.
+    const alreadyConfirmed = operation === "ResendConfirmationCode" &&
+      /already\s+confirmed|confirmed\s+user/i.test(payload.message || "");
+    const error = new Error(alreadyConfirmed
+      ? "This account is already confirmed."
+      : "Cognito rejected the request. Please try again.");
     error.code = String(payload.__type || "").split("#").at(-1);
     throw error;
   }
@@ -597,13 +681,14 @@ async function finishPasswordSignIn(email, password) {
   elements.loginPassword.value = "";
   elements.authMessage.textContent = "";
   renderAuthentication(true);
+  if (PAGE !== "groups") refreshGroupMemberships().catch(() => {});
   closeAccountModal();
 
   await refreshProfile();
   if (PAGE === "picks") {
     await refreshSavedPrediction();
     if (loadAuthSession() && !state.bracketBuilt) openPrediction();
-  } else if (PAGE === "leaderboard") {
+  } else if (PAGE === "groups") {
     await refreshGroups();
   }
   if (typeof resumePendingGroupAction === "function") {
@@ -648,7 +733,7 @@ async function submitSignIn(event) {
   try {
     await finishPasswordSignIn(email, password);
   } catch (error) {
-    console.error("Could not sign in with Cognito.", error);
+    console.error("Could not sign in with Cognito.");
     if (error.code === "UserNotConfirmedException") {
       pendingAccountCredentials = { email, password };
       elements.loginPassword.value = "";
@@ -745,26 +830,12 @@ async function submitCreateAccount(event) {
     if (error.code === "UsernameExistsException") {
       pendingAccountCredentials = null;
       elements.createPassword.value = "";
-      try {
-        await requestConfirmationCode(email);
-        elements.confirmEmail.value = email;
-        showAuthPanel(
-          "confirmAccount",
-          "You started creating an account with this email earlier. We sent you a new verification code.",
-        );
-        elements.confirmationCode.focus();
-      } catch (resendError) {
-        if (accountIsAlreadyConfirmed(resendError)) {
-          elements.loginEmail.value = email;
-          showAuthPanel(
-            "signIn",
-            "An account already exists for this email. Sign in, or use Forgot password if you need a new password.",
-          );
-          elements.loginPassword.focus();
-        } else {
-          elements.authMessage.textContent = cognitoErrorMessage(resendError);
-        }
-      }
+      elements.loginEmail.value = email;
+      showAuthPanel(
+        "signIn",
+        "An account already exists for this email. Sign in, or use Forgot password if you need a new password.",
+      );
+      elements.loginPassword.focus();
       return;
     }
     elements.authMessage.textContent = cognitoErrorMessage(error);
@@ -802,7 +873,7 @@ async function submitConfirmAccount(event) {
   try {
     await finishPasswordSignIn(credentials.email, credentials.password);
   } catch (error) {
-    console.error("Could not sign in after confirming the account.", error);
+    console.error("Could not sign in after confirming the account.");
     showAuthPanel(
       "signIn",
       `Email confirmed. ${signInErrorMessage(error)}`,
@@ -906,7 +977,7 @@ async function getValidAccessToken() {
       session,
     ).accessToken;
   } catch (error) {
-    console.warn("The Cognito session could not be refreshed.", error);
+    console.warn("The Cognito session could not be refreshed.");
     clearAuthSession();
     return null;
   }
@@ -917,34 +988,6 @@ function currentUserEmail() {
   return String(decodeJwtPayload(session?.idToken || "").email || "");
 }
 
-function renderLeaderboardView(view = state.leaderboardView) {
-  if (!elements.publicLeaderboardTab) return;
-  const nextView = view === "groups" && state.signedIn ? "groups" : "public";
-  const publicActive = nextView === "public";
-  state.leaderboardView = nextView;
-
-  elements.groupsLeaderboardTab.classList.toggle("hidden", !state.signedIn);
-  elements.publicLeaderboardTab.classList.toggle("active", publicActive);
-  elements.publicLeaderboardTab.setAttribute("aria-selected", String(publicActive));
-  elements.publicLeaderboardTab.tabIndex = publicActive ? 0 : -1;
-  elements.groupsLeaderboardTab.classList.toggle("active", !publicActive);
-  elements.groupsLeaderboardTab.setAttribute("aria-selected", String(!publicActive));
-  elements.groupsLeaderboardTab.tabIndex = publicActive ? -1 : 0;
-  elements.publicLeaderboardPanel.classList.toggle("hidden", !publicActive);
-  elements.groupsLeaderboardPanel.classList.toggle("hidden", publicActive);
-}
-
-function handleLeaderboardViewKeydown(event) {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-  event.preventDefault();
-  const view = event.key === "ArrowLeft" || event.key === "Home" ? "public" : "groups";
-  renderLeaderboardView(view);
-  (state.leaderboardView === "public"
-    ? elements.publicLeaderboardTab
-    : elements.groupsLeaderboardTab
-  ).focus();
-}
-
 function renderLeaderboardProfile() {
   elements.signedInPanel?.classList.toggle("hidden", !state.signedIn);
   elements.accountLeaderboardName.textContent =
@@ -953,7 +996,6 @@ function renderLeaderboardProfile() {
     ? "Change leaderboard name"
     : "Choose leaderboard name";
   elements.savedSection?.classList.toggle("hidden", !state.signedIn);
-  renderLeaderboardView();
 }
 
 function renderAuthentication(signedIn) {
@@ -977,13 +1019,17 @@ function renderAuthentication(signedIn) {
     state.leaderboardName = "";
     pendingPredictionSave = false;
     state.savedPrediction = null;
-    state.leaderboardView = "public";
     state.groups = [];
+    state.groupsLoaded = false;
+    groupMembershipRequest++;
     state.activeGroupId = "";
     state.groupLeaderboard = null;
+    state.groupSummaries = {};
     elements.savedSection?.classList.add("hidden");
   }
   renderLeaderboardProfile();
+  if (!signedIn && typeof renderGroups === "function") renderGroups();
+  updateGroupsNavigation();
 }
 
 async function refreshProfile() {
@@ -1032,7 +1078,7 @@ async function submitLeaderboardName(event) {
           : `Leaderboard name set to ${state.leaderboardName}.`,
       );
       if (elements.leaderboardBody) await loadLeaderboard();
-      if (PAGE === "leaderboard" && state.activeGroupId) await loadGroupLeaderboard();
+      if (PAGE === "groups" && state.activeGroupId) await loadGroupLeaderboard();
     }
   } catch (error) {
     elements.leaderboardNameMessage.textContent = error.message;
@@ -1075,7 +1121,19 @@ async function signOut() {
         AccessToken: session.accessToken,
       });
     } catch (error) {
-      console.warn("The Cognito session could not be invalidated remotely.", error);
+      console.warn("The Cognito session could not be invalidated remotely.");
+    }
+  }
+  // Attempt global sign-out first: revoking this grant can invalidate its access
+  // token. Still revoke the refresh token when that access token has expired.
+  if (session?.refreshToken) {
+    try {
+      await requestCognito("RevokeToken", {
+        ClientId: authConfig().clientId,
+        Token: session.refreshToken,
+      });
+    } catch (_error) {
+      console.warn("The Cognito refresh token could not be revoked remotely.");
     }
   }
 }
@@ -1117,20 +1175,11 @@ async function submitDeleteAccount(event) {
     const accessToken = await getValidAccessToken();
     if (!accessToken) throw new Error("Your session expired. Please sign in again.");
 
-    const groupsPayload = await apiRequest("/api/groups");
-    const managedGroups = (groupsPayload.groups || []).filter(
-      (group) => group.isCommissioner ?? group.isCreator,
-    );
-    if (managedGroups.length) {
-      const groupNames = managedGroups.map((group) => group.groupName).join(", ");
-      throw new Error(
-        `Before deleting your account, leave each group you manage and appoint a new commissioner: ${groupNames}`,
-      );
-    }
-
-    await apiRequest("/api/prediction", { method: "DELETE" });
+    // The profile endpoint checks commissioner roles across both sports before
+    // removing memberships, predictions, and the profile.
     await apiRequest("/api/profile", { method: "DELETE" });
     await requestCognito("DeleteUser", { AccessToken: accessToken });
+    window.siteAnalytics?.track("account_deleted");
 
     clearAuthSession();
     state.savedPrediction = null;
@@ -1151,6 +1200,79 @@ async function submitDeleteAccount(event) {
   }
 }
 
+let groupMembershipRequest = 0;
+
+function groupPageUrl(groupId = "", view = "standings", sport = SPORT) {
+  const url = new URL(routeHref("/groups"), window.location.origin);
+  if (sport === "nba") url.searchParams.set("sport", "nba");
+  else url.searchParams.delete("sport");
+  if (groupId) {
+    url.searchParams.set("group", groupId);
+    if (view !== "standings") url.searchParams.set("view", view);
+  }
+  return url.pathname + url.search;
+}
+
+function groupDisplaySport(group) {
+  const sports = group.sports || ["nfl"];
+  return sports.includes(SPORT) ? SPORT : sports[0];
+}
+
+function singleNavigationGroup() {
+  return state.signedIn && state.groupsLoaded && state.groups.length === 1 ? state.groups[0] : null;
+}
+
+function updateGroupsNavigation() {
+  const link = document.querySelector('.primary-nav [data-nav-page="groups"]');
+  if (!link) return;
+  const group = singleNavigationGroup();
+  link.href = group ? groupPageUrl(group.groupId, "standings", groupDisplaySport(group)) : groupPageUrl();
+}
+
+function initializeGroupsNavigation() {
+  const link = document.querySelector('.primary-nav [data-nav-page="groups"]');
+  if (!link) return;
+  updateGroupsNavigation();
+  link.addEventListener("click", event => {
+    updateGroupsNavigation();
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button > 0) return;
+    if (PAGE !== "groups" || !state.signedIn) return;
+    const group = singleNavigationGroup();
+    if (group && groupDisplaySport(group) !== SPORT) return; // Native navigation loads the correct sport.
+    event.preventDefault();
+    if (group) openGroupDetail(group.groupId);
+    else showGroupsDirectory();
+  });
+  window.addEventListener("pageshow", event => {
+    if (event.persisted && state.signedIn) {
+      const refresh = PAGE === "groups" ? refreshGroups : refreshGroupMemberships;
+      refresh().catch(() => {});
+    }
+  });
+}
+
+async function refreshGroupMemberships() {
+  const request = ++groupMembershipRequest;
+  state.groupsLoaded = false;
+  updateGroupsNavigation();
+  if (!state.signedIn) return false;
+  try {
+    // Count memberships across both sports; a dual-sport group counts once.
+    const payloads = await Promise.all(["nfl", "nba"].map(sport => apiRequest("/api/groups", { sport })));
+    if (!state.signedIn || request !== groupMembershipRequest) return false;
+    state.groups = [...new Map(payloads.flatMap(payload => payload.groups || []).map(group => [group.groupId, group])).values()]
+      .sort((a, b) => a.groupName.localeCompare(b.groupName));
+    state.groupsLoaded = true;
+    updateGroupsNavigation();
+    return true;
+  } catch (error) {
+    if (!state.signedIn || request !== groupMembershipRequest) return false;
+    state.groupsLoaded = false;
+    updateGroupsNavigation();
+    throw error;
+  }
+}
+
 async function apiRequest(path, options = {}) {
   const protectedRequest =
     ["/api/prediction", "/api/profile"].includes(path) ||
@@ -1163,9 +1285,12 @@ async function apiRequest(path, options = {}) {
     throw error;
   }
 
-  const response = await fetch(path, {
+  const { sport: requestSport, ...requestOptions } = options;
+  const url = new URL(sportUrl(path), window.location.origin);
+  if (requestSport) url.searchParams.set("sport", requestSport);
+  const response = await fetch(url.pathname + url.search + url.hash, {
     cache: "no-store",
-    ...options,
+    ...requestOptions,
     headers: {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -1233,6 +1358,16 @@ function setPredictionEditingLocked(locked, message = "") {
 function renderPredictionCountdown() {
   if (!state.predictionWindow || !elements.kickoffCountdown) return;
 
+  if (state.predictionWindow.devNflUnlocked) {
+    elements.kickoffCountdown.classList.add("dev-unlocked");
+    elements.kickoffCountdownLabel.textContent = "DEV BRACKETS OPEN";
+    elements.devUnlockHeadline.classList.remove("hidden");
+    elements.kickoffLockTime.dateTime = state.predictionWindow.lockAt;
+    elements.kickoffLockTime.textContent = `Original deadline: ${predictionLockDateLabel(state.predictionWindow.lockAt)}`;
+    elements.countdownStatus.textContent = "NFL picks are open for testing on dev. Production remains locked.";
+    return;
+  }
+
   const lockTime = new Date(state.predictionWindow.lockAt).getTime();
   const now = Date.now() + state.predictionClockOffset;
   const remaining = Math.max(0, lockTime - now);
@@ -1249,18 +1384,18 @@ function renderPredictionCountdown() {
 
   if (!remaining && !state.predictionsLocked) {
     state.predictionWindow.locked = true;
-    setPredictionEditingLocked(true, "The NFL regular season has kicked off. Saved brackets are now read-only.");
+    setPredictionEditingLocked(true, "The regular season has started. Saved brackets are now read-only.");
   }
 
   elements.countdownStatus.textContent = remaining
-    ? "Finish and save your bracket before kickoff."
-    : "Kickoff has arrived. All saved brackets are read-only.";
+    ? "Finish and save your bracket before the season starts."
+    : "The season has started. All saved brackets are read-only.";
   elements.kickoffCountdown.classList.toggle("locked", !remaining);
 }
 
 async function initializePredictionWindow() {
   try {
-    const response = await fetch("/api/prediction-window", { cache: "no-store" });
+    const response = await fetch(sportUrl("/api/prediction-window"), { cache: "no-store" });
     if (!response.ok) throw new Error("Prediction deadline unavailable");
     const windowState = await response.json();
     if (!windowState.lockAt || !Number.isFinite(windowState.serverTime)) {
@@ -1270,22 +1405,26 @@ async function initializePredictionWindow() {
     state.predictionWindow = windowState;
     state.predictionClockOffset = windowState.serverTime - Date.now();
     const label = predictionLockDateLabel(windowState.lockAt);
-    if (elements.kickoffLockTime) {
+    if (elements.kickoffLockTime && !windowState.devNflUnlocked) {
       elements.kickoffLockTime.dateTime = windowState.lockAt;
       elements.kickoffLockTime.textContent = `Deadline: ${label}`;
     }
     setPredictionEditingLocked(
       Boolean(windowState.locked),
-      windowState.locked
-        ? `The ${windowState.season} NFL regular season has kicked off. Saved brackets are read-only.`
+      windowState.devNflUnlocked
+        ? "NFL brackets are open for testing on dev. Production remains locked."
+        : windowState.locked
+        ? `The ${SPORT.toUpperCase()} regular season has started. Saved brackets are read-only.`
         : `Create or change your bracket until ${label}.`,
     );
     renderPredictionCountdown();
     clearInterval(predictionCountdownTimer);
-    predictionCountdownTimer = setInterval(renderPredictionCountdown, 1000);
+    if (!windowState.devNflUnlocked) {
+      predictionCountdownTimer = setInterval(renderPredictionCountdown, 1000);
+    }
   } catch (error) {
     if (elements.countdownStatus) {
-      elements.countdownStatus.textContent = "The kickoff countdown is temporarily unavailable.";
+      elements.countdownStatus.textContent = "The season countdown is temporarily unavailable.";
       elements.countdownStatus.title = error.message;
     }
     if (!LOCAL_PREVIEW) {
@@ -1302,7 +1441,7 @@ function getTeamNickname(teamName) {
 }
 
 function teamLogoUrl(teamName) {
-  return `https://a.espncdn.com/i/teamlogos/nfl/500/${TEAM_LOGO_CODES[teamName]}.png`;
+  return `https://a.espncdn.com/i/teamlogos/${SPORT}/500/${TEAM_LOGO_CODES[teamName]}.png`;
 }
 
 function createTeamLogo(teamName, className = "team-logo") {
@@ -1310,7 +1449,14 @@ function createTeamLogo(teamName, className = "team-logo") {
   logo.className = className;
   logo.src = teamLogoUrl(teamName);
   logo.alt = `${teamName} logo`;
+  logo.width = 32;
+  logo.height = 32;
+  logo.decoding = "async";
   logo.loading = "lazy";
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
   return logo;
+}
+
+function setTeamRowColor(row, teamName) {
+  row.style.setProperty("--team-color", TEAM_COLORS[teamName] || "#1859a9");
 }

@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-05T14:41:10Z",
+  "title": "Design System: Predict Playoffs admin analytics",
+  "extensions": {
+    "colorMeta": {
+      "red": {
+        "role": "primary",
+        "displayName": "Predict Playoffs red"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cream paper"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Page title",
+        "purpose": "Shared uppercase title treatment."
+      },
+      "title": {
+        "displayName": "Provider heading",
+        "purpose": "Names each independent report."
+      },
+      "metric": {
+        "displayName": "Metric value",
+        "purpose": "Prominent tabular aggregate values."
+      }
+    },
+    "shadows": [
+      {
+        "name": "primary-rest",
+        "value": "0 6px 14px rgba(227, 59, 63, 0.18)",
+        "purpose": "Shared primary button."
+      },
+      {
+        "name": "primary-hover",
+        "value": "0 8px 18px rgba(183, 32, 45, 0.22)",
+        "purpose": "Shared primary hover."
+      },
+      {
+        "name": "field-focus",
+        "value": "0 0 0 3px var(--focus-halo)",
+        "purpose": "Inherited input/select focus halo."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-state",
+        "value": "150ms ease",
+        "purpose": "Transform, box-shadow, and background transitions; disabled by inherited reduced-motion rule."
+      },
+      {
+        "name": "field-state",
+        "value": "160ms ease",
+        "purpose": "Inherited input/select transitions; disabled by inherited reduced-motion rule."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "provider-stack",
+        "value": "850px"
+      },
+      {
+        "name": "shared-header-wrap",
+        "value": "760px"
+      },
+      {
+        "name": "mobile-metrics",
+        "value": "540px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Update reports",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary submit action inside the analytics main region.",
+      "html": "<button class=\"ds-button ds-primary\" type=\"button\">Update reports</button>",
+      "css": ".ds-button{min-height:42px;padding:0 18px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;font:800 12px/1 var(--body,\"DM Sans\",system-ui,sans-serif);letter-spacing:.035em;cursor:pointer;transition:transform 150ms ease,box-shadow 150ms ease,background 150ms ease}.ds-button:hover{transform:translateY(-1px)}.ds-button:active{transform:translateY(0)}.ds-button:disabled{cursor:not-allowed;opacity:.72;transform:none}.ds-primary{color:white;background:var(--red,#e33b3f);box-shadow:0 6px 14px rgba(227,59,63,.18)}.ds-primary:hover{background:var(--red-dark,#b7202d);box-shadow:0 8px 18px rgba(183,32,45,.22)}.ds-primary:focus-visible,.ds-field:focus-visible{outline:2px solid var(--focus-outline,#1859a9);outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}"
+    },
+    {
+      "name": "Sign out",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Shared ghost action in the header.",
+      "html": "<button class=\"ds-button ds-ghost\" type=\"button\">Sign out</button>",
+      "css": ".ds-button{min-height:42px;padding:0 18px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;font:800 12px/1 var(--body,\"DM Sans\",system-ui,sans-serif);letter-spacing:.035em;cursor:pointer;transition:transform 150ms ease,box-shadow 150ms ease,background 150ms ease}.ds-button:hover{transform:translateY(-1px)}.ds-button:active{transform:translateY(0)}.ds-button:disabled{cursor:not-allowed;opacity:.72;transform:none}.ds-ghost{color:var(--text,#10223a);background:transparent;border-color:var(--button-ghost-border,rgba(16,34,58,.25))}.ds-ghost:focus-visible{outline:3px solid var(--focus-ring,rgba(24,89,169,.3));outline-offset:3px}@media(prefers-reduced-motion:reduce){.ds-button{transition:none}}"
+    },
+    {
+      "name": "Date field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Labelled custom report boundary.",
+      "html": "<label class=\"ds-label\">Start date<input class=\"ds-field\" type=\"date\" value=\"2026-09-07\"></label>",
+      "css": ".ds-label{display:grid;gap:8px;font:600 14px var(--body,\"DM Sans\",system-ui,sans-serif);color:var(--text,#10223a)}.ds-field{min-height:44px;padding:10px 12px;border:1px solid var(--field-border,#c9c8c2);border-radius:8px;background:var(--surface,#fff);color:var(--text,#10223a);font:inherit;caret-color:var(--red,#e33b3f);transition:160ms ease}.ds-field:focus{border-color:var(--blue,#1859a9);box-shadow:0 0 0 3px var(--focus-halo,rgba(24,89,169,.13))}.ds-primary:focus-visible,.ds-field:focus-visible{outline:2px solid var(--focus-outline,#1859a9);outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-field{transition:none}}"
+    },
+    {
+      "name": "Admin navigation",
+      "kind": "nav",
+      "description": "Existing shared nav states; header branding is retained in the actual page.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Admin navigation\"><a href=\"/\">Back to site</a><a href=\"/admin/analytics\" aria-current=\"page\">Analytics</a></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:clamp(18px,3vw,42px);font-family:var(--body,\"DM Sans\",system-ui,sans-serif)}.ds-nav a{padding:29px 0 25px;color:var(--muted,#647084);border-bottom:3px solid transparent;font-size:12px;font-weight:700;letter-spacing:.04em;text-decoration:none;text-transform:uppercase}.ds-nav a:hover,.ds-nav a[aria-current=\"page\"]{color:var(--text,#10223a);border-bottom-color:var(--red,#e33b3f)}@media(max-width:760px){.ds-nav{justify-content:space-between}.ds-nav a{padding:12px 0}}"
+    },
+    {
+      "name": "Metric definition list",
+      "kind": "custom",
+      "description": "Provider-local aggregate labels and values; illustrative data only.",
+      "html": "<dl class=\"ds-metrics\"><div><dt>Sessions</dt><dd>1,240<span class=\"ds-note\">Reported by this provider.</span></dd></div><div><dt>Unavailable metric</dt><dd>Unavailable</dd></div></dl>",
+      "css": ".ds-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 16px;margin:24px 0;color:var(--text,#10223a)}.ds-metrics div{min-width:0}.ds-metrics dt{font:13px/1.5 var(--body,\"DM Sans\",system-ui,sans-serif);color:var(--muted,#647084)}.ds-metrics dd{margin:6px 0 0;font:500 28px/1.2 var(--display,\"Oswald\",Impact,sans-serif);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.ds-note{display:block;font:400 12px/1.5 var(--body,\"DM Sans\",system-ui,sans-serif);color:var(--muted,#647084);margin-top:8px;max-width:28ch}@media(max-width:540px){.ds-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}"
+    },
+    {
+      "name": "Aggregate table",
+      "kind": "custom",
+      "description": "Captioned provider report with local horizontal scrolling; illustrative data only.",
+      "html": "<div class=\"ds-table-wrap\"><table class=\"ds-table\"><caption>Top pages</caption><thead><tr><th scope=\"col\">Page</th><th scope=\"col\">Views</th></tr></thead><tbody><tr><td>/</td><td>1,240</td></tr></tbody></table></div>",
+      "css": ".ds-table-wrap{margin:28px 0;overflow-x:auto}.ds-table{border-collapse:collapse;width:100%;font:14px var(--body,\"DM Sans\",system-ui,sans-serif);font-variant-numeric:tabular-nums;color:var(--text,#10223a)}.ds-table caption{text-align:left;font-weight:600;padding-bottom:14px}.ds-table th{font-weight:600;color:var(--muted,#647084);background:var(--table-header-tint,rgba(16,34,58,.035))}.ds-table th,.ds-table td{border-bottom:1px solid var(--line,#dcd9d1);padding:12px;text-align:right;white-space:nowrap}.ds-table th:first-child,.ds-table td:first-child{text-align:left;white-space:normal;overflow-wrap:anywhere;max-width:320px}.ds-table tbody tr:hover{background:var(--row-hover,rgba(24,89,169,.04))}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Predict Playoffs incumbent system",
+    "overview": "This bounded record describes the completed admin surface, not a replacement identity. The page inherits the public application's cream grid, ink text, red action emphasis, condensed headings, and shared header/button primitives. Provider reports use flat sections, definition lists, and tables to keep dense information legible.",
+    "keyCharacteristics": [
+      "Incumbent branding and controls.",
+      "Provider-labelled information hierarchy.",
+      "Flat report sections and tabular numbers.",
+      "Responsive local table overflow."
+    ],
+    "rules": [
+      {
+        "name": "The Shared Palette Rule",
+        "body": "Use the shared theme variables for this surface; do not introduce a separate provider palette.",
+        "section": "colors"
+      },
+      {
+        "name": "The Definition Beside Value Rule",
+        "body": "Keep metric definitions and provider notes adjacent to the values they qualify.",
+        "section": "typography"
+      },
+      {
+        "name": "The Provider Boundary Rule",
+        "body": "Preserve separate provider sections and their range/state labels at every viewport size.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "Do retain shared theme variables, fonts, branding, and button states.",
+      "Do preserve source labels, definitions, and tabular numeric alignment.",
+      "Do keep horizontal table overflow local and metric grids responsive."
+    ],
+    "donts": [
+      "Don't introduce a separate admin visual identity or colored provider cards.",
+      "Don't replace metric definitions with decorative icons or unlabeled numbers.",
+      "Don't treat the default light palette as a reason to remove inherited dark mode."
+    ]
+  }
+}

@@ -1,17 +1,26 @@
 const pageName = document.body.dataset.page || "home";
 const localPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-const routeHref = (path) => localPreview && path !== "/" ? `${path}.html` : path;
+const routeHref = (path) => sportUrl(localPreview && path !== "/" ? `${path}.html` : path);
+
+if (pageName === "leaderboard" && window.location.hash === "#groups") {
+  window.location.replace(routeHref("/groups"));
+}
 
 const header = document.querySelector("#site-header");
 if (header) {
   header.className = "site-header";
   header.innerHTML = `
-    <a class="brand" href="/" aria-label="Predict Playoffs home">
-      <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
+    <a class="brand" href="${sportUrl("/")}" aria-label="Predict Playoffs home">
+      <img class="brand-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
       <span class="brand-name">PREDICT PLAYOFFS</span>
     </a>
+    <div class="sport-selector" role="group" aria-label="Sport">
+      <button type="button" data-sport="nfl" aria-pressed="${!IS_NBA}">NFL</button>
+      <button type="button" data-sport="nba" aria-pressed="${IS_NBA}">NBA</button>
+    </div>
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="${routeHref("/picks")}" data-nav-page="picks">My Picks</a>
+      <a href="${routeHref("/groups")}" data-nav-page="groups">Groups</a>
       <a href="${routeHref("/leaderboard")}" data-nav-page="leaderboard">Leaderboard</a>
       <a href="${routeHref("/scoring")}" data-nav-page="scoring">Scoring</a>
     </nav>
@@ -25,7 +34,7 @@ if (header) {
 const dialogs = document.querySelector("#site-dialogs");
 if (dialogs) {
   dialogs.innerHTML = `
-    ${["home", "leaderboard"].includes(pageName) ? `
+    ${["home", "leaderboard", "groups"].includes(pageName) ? `
       <dialog class="account-dialog public-bracket-dialog" id="public-bracket-dialog" aria-labelledby="public-bracket-title">
         <div class="dialog-heading">
           <div>
@@ -52,7 +61,7 @@ if (dialogs) {
       <div id="account-auth-view">
         <div id="signed-out-panel">
           <h3>Sign in to your bracket.</h3>
-          <p class="auth-description">Keep one prediction synced across your devices.</p>
+          <p class="auth-description">Keep one prediction per sport synced across your devices.</p>
           <form class="sign-in-form" id="sign-in-form" method="post">
             <label for="login-email">Email address</label>
             <input id="login-email" name="username" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required />
@@ -173,7 +182,7 @@ if (dialogs) {
       </form>
     </dialog>
 
-    ${["home", "leaderboard"].includes(pageName) ? `
+    ${["home", "groups"].includes(pageName) ? `
       <dialog class="account-dialog" id="group-dialog" aria-labelledby="group-dialog-title" aria-describedby="group-dialog-description">
         <form id="group-form" method="post">
           <p class="card-kicker" id="group-dialog-kicker">PRIVATE GROUP</p>
@@ -190,6 +199,11 @@ if (dialogs) {
             </select>
             <p class="input-hint" id="group-scoring-hint">Upset Edge multiplies each correct pick by the team’s fixed preseason win-total weight. An 8.5-win team is neutral; each win below or above changes the value by 10%. This choice sets your group’s ranking and cannot be changed.</p>
           </div>
+          <fieldset class="group-sports-field" id="group-sports-field">
+            <legend>Sports</legend>
+            <label><input id="group-sport-nfl" type="checkbox" value="nfl" /> NFL</label>
+            <label><input id="group-sport-nba" type="checkbox" value="nba" /> NBA</label>
+          </fieldset>
           <label for="group-password">Group password</label>
           <div class="password-field">
             <input id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true" required />
@@ -197,11 +211,29 @@ if (dialogs) {
               <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/><path class="password-toggle-slash" d="m4 4 16 16"/></svg>
             </button>
           </div>
-          <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
+          <p class="input-hint">6–128 characters.</p>
           <p class="dialog-message" id="group-dialog-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">
             <button class="button button-secondary" id="cancel-group" type="button">Cancel</button>
             <button class="button button-primary" id="submit-group" type="submit">Create group</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog class="account-dialog" id="edit-group-sports-dialog" aria-labelledby="edit-group-sports-title">
+        <form id="edit-group-sports-form" method="post">
+          <p class="card-kicker">GROUP SETTINGS</p>
+          <h2 id="edit-group-sports-title">Edit group sports.</h2>
+          <p>Select where this group appears. Members and scoring stay the same.</p>
+          <fieldset class="group-sports-field">
+            <legend>Sports</legend>
+            <label><input id="edit-group-sport-nfl" type="checkbox" value="nfl" /> NFL</label>
+            <label><input id="edit-group-sport-nba" type="checkbox" value="nba" /> NBA</label>
+          </fieldset>
+          <p class="dialog-message" id="edit-group-sports-message" role="status" aria-live="polite"></p>
+          <div class="dialog-actions">
+            <button class="button button-secondary" id="cancel-edit-group-sports" type="button">Cancel</button>
+            <button class="button button-primary" id="save-group-sports" type="submit">Save sports</button>
           </div>
         </form>
       </dialog>
@@ -228,11 +260,6 @@ if (dialogs) {
         <form id="leave-group-form" method="post">
           <h2 id="leave-group-title">Leave this group?</h2>
           <p id="leave-group-description"></p>
-          <div class="hidden" id="new-commissioner-field">
-            <label for="new-commissioner">New commissioner</label>
-            <select id="new-commissioner" name="new-commissioner"></select>
-            <p class="input-hint">They will be able to manage and delete the group.</p>
-          </div>
           <p class="dialog-message" id="leave-group-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">
             <button class="button button-secondary" id="cancel-leave-group" type="button">Stay in group</button>
@@ -261,7 +288,7 @@ if (dialogs) {
       <form id="delete-account-form" method="post">
         <p class="card-kicker">PERMANENT ACTION</p>
         <h2 id="delete-account-title">Delete your account?</h2>
-        <p id="delete-account-description">This permanently deletes your account, leaderboard name, group memberships, and saved bracket. This cannot be undone.</p>
+        <p id="delete-account-description">This permanently deletes your account, leaderboard name, group memberships, and saved brackets for both sports. This cannot be undone.</p>
         <label for="delete-account-confirmation">Type <strong>DELETE</strong> to confirm</label>
         <input id="delete-account-confirmation" name="confirmation" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
         <p class="dialog-message" id="delete-account-message" role="status" aria-live="polite"></p>
@@ -274,22 +301,74 @@ if (dialogs) {
   `;
 }
 
-const footer = document.querySelector("#site-footer");
-if (footer) {
-  footer.innerHTML = `
-    <div class="footer-brand">
-      <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" />
-      <div class="footer-wordmark">
-        <span>PREDICT PLAYOFFS</span>
-        <small>CALL IT BEFORE KICKOFF</small>
-      </div>
-    </div>
-    <p>Your account details stay private. Not affiliated with the NFL.</p>
-  `;
-}
+// Footer content and navigation are in the initial HTML for every visitor.
 
-if (localPreview) {
+{
   document.querySelectorAll("a[data-clean-route]").forEach((link) => {
     link.href = routeHref(link.getAttribute("data-clean-route"));
   });
+}
+
+document.querySelectorAll(".sport-selector button").forEach(button => button.addEventListener("click", () => {
+  const sport = button.dataset.sport;
+  if (sport === SPORT) return;
+  if (typeof state !== "undefined" && state.bracketBuilt && !state.savedAt &&
+      !window.confirm("Switch sports and discard your unsaved bracket?")) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  if (["/", "/nba"].includes(url.pathname) && !localPreview) {
+    url.pathname = sport === "nba" ? "/nba" : "/";
+    url.searchParams.delete("sport");
+  } else if (sport === "nba") {
+    url.searchParams.set("sport", sport);
+  } else {
+    url.searchParams.delete("sport");
+  }
+  url.searchParams.delete("invite");
+  window.location.assign(url.href);
+}));
+if (IS_NBA && pageName === "home") {
+  document.querySelector('link[rel="canonical"]')?.setAttribute("href", "https://predictplayoffs.com/nba");
+}
+if (IS_NBA) applyNbaPresentation();
+
+function applyNbaPresentation() {
+  document.body.dataset.sport = "nba";
+  if (pageName === "home") document.title = document.title.replace("NFL", "NBA");
+  const copy = new Map([
+    ["Predict the 2026", "Predict the 2026–27"], ["NFL", "NBA"],
+    ["Super Bowl", "NBA Finals"], ["SUPER BOWL", "NBA FINALS"],
+    ["AFC", "West"], ["NFC", "East"],
+    ["AMERICAN FOOTBALL CONFERENCE", "WESTERN CONFERENCE"],
+    ["NATIONAL FOOTBALL CONFERENCE", "EASTERN CONFERENCE"],
+    ["Choose the 14", "Choose the 16"],
+    ["before kickoff", "before tip-off"], ["BEFORE KICKOFF", "BEFORE TIP-OFF"],
+    ["kickoff deadline", "tip-off deadline"],
+    ["Choose every division winner and wild card.", "Rank eight playoff teams from each conference."],
+    ["Pick each North, South, East, and West winner first. Rank those four teams as seeds 1–4, then choose three wild cards. The No. 1 seeds earn a first-round bye.", "Rank the final eight playoff teams in each conference, after the Play-In. Pick each best-of-seven series winner through the NBA Finals. No byes or reseeding."],
+    ["pick every game", "pick every series"], ["PICK EVERY GAME", "PICK EVERY SERIES"],
+  ]);
+  if (window.location.pathname === "/nba") copy.delete("Predict the 2026");
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement.closest("script, style, select, .sport-selector, [data-no-sport-copy]")) continue;
+    let value = node.nodeValue;
+    for (const [from, to] of copy) value = value.split(from).join(to);
+    node.nodeValue = value;
+  }
+  document.querySelectorAll(".afc-card .conference-logo, .afc-label .bracket-conference-logo").forEach(logo => {
+    logo.src = NBA_CONFERENCE_LOGOS.West;
+    logo.alt = "Western Conference logo";
+  });
+  document.querySelectorAll(".nfc-card .conference-logo, .nfc-label .bracket-conference-logo").forEach(logo => {
+    logo.src = NBA_CONFERENCE_LOGOS.East;
+    logo.alt = "Eastern Conference logo";
+  });
+  document.querySelectorAll(".conference-logo-fallback").forEach((node, index) => node.textContent = index ? "E" : "W");
+  const stats = document.querySelector(".countdown-stats");
+  if (stats) stats.innerHTML = "<span>16 <small>TEAMS</small></span><span>300 <small>CLASSIC POINTS</small></span>";
+  const trophy = document.querySelector(".trophy");
+  if (trophy) trophy.innerHTML = '<circle cx="32" cy="21" r="18"/><path d="M28 40h8v25H28zM17 65h30v9H17zM11 74h42v11H11z"/><path class="trophy-detail" d="M14 21h36M32 3v36M20 8q24 13 0 26M44 8q-24 13 0 26"/>';
 }

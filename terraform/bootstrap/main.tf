@@ -404,6 +404,10 @@ data "aws_iam_policy_document" "github_dev_deploy" {
   statement {
     sid = "ManageDevCognitoUserPool"
     actions = [
+      "cognito-idp:CreateGroup",
+      "cognito-idp:GetGroup",
+      "cognito-idp:UpdateGroup",
+      "cognito-idp:DeleteGroup",
       "cognito-idp:CreateUserPoolClient",
       "cognito-idp:DeleteManagedLoginBranding",
       "cognito-idp:DeleteUserPool",

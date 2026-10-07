@@ -1,0 +1,1 @@
+google-auth[requests,rsa]==2.59.1

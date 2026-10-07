@@ -5,7 +5,19 @@ locals {
 
   analytics_log_group = "/aws/lambda/${local.resource_prefix}-backend"
 
-  frontend_files = {
+  frontend_files = merge({
+    "goatcounter.js" = {
+      source       = "${var.frontend_dir}/goatcounter.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "engagement.js" = {
+      source       = "${var.frontend_dir}/engagement.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "privacy" = {
+      source       = "${var.frontend_dir}/privacy.html"
+      content_type = "text/html; charset=utf-8"
+    }
     "robots.txt" = {
       source       = "${var.frontend_dir}/robots.txt"
       content_type = "text/plain; charset=utf-8"
@@ -16,6 +28,10 @@ locals {
     }
     "index.html" = {
       source       = "${var.frontend_dir}/index.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "nba" = {
+      source       = "${var.frontend_dir}/nba.html"
       content_type = "text/html; charset=utf-8"
     }
     "favicon.ico" = {
@@ -34,12 +50,24 @@ locals {
       source       = "${var.frontend_dir}/leaderboard.html"
       content_type = "text/html; charset=utf-8"
     }
+    "groups" = {
+      source       = "${var.frontend_dir}/groups.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "groups.js" = {
+      source       = "${var.frontend_dir}/groups.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "scoring" = {
       source       = "${var.frontend_dir}/scoring.html"
       content_type = "text/html; charset=utf-8"
     }
     "scoring.js" = {
       source       = "${var.frontend_dir}/scoring.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "sports.js" = {
+      source       = "${var.frontend_dir}/sports.js"
       content_type = "application/javascript; charset=utf-8"
     }
     "shell.js" = {
@@ -82,11 +110,36 @@ locals {
       source       = "${var.frontend_dir}/assets/predict-playoffs-social.png"
       content_type = "image/png"
     }
+    "assets/predict-playoffs-social-v2.png" = {
+      source       = "${var.frontend_dir}/assets/predict-playoffs-social-v2.png"
+      content_type = "image/png"
+    }
+    "assets/nba-western-conference.png" = {
+      source       = "${var.frontend_dir}/assets/nba-western-conference.png"
+      content_type = "image/png"
+    }
+    "assets/nba-eastern-conference.png" = {
+      source       = "${var.frontend_dir}/assets/nba-eastern-conference.png"
+      content_type = "image/png"
+    }
     "assets/predict-playoffs-mark.svg" = {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
       content_type = "image/svg+xml"
     }
-  }
+    }, var.environment == "dev" ? {
+    "admin/analytics" = {
+      source       = "${var.frontend_dir}/admin-analytics.html"
+      content_type = "text/html; charset=utf-8"
+    }
+    "admin-analytics.js" = {
+      source       = "${var.frontend_dir}/admin-analytics.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "admin-analytics.css" = {
+      source       = "${var.frontend_dir}/admin-analytics.css"
+      content_type = "text/css; charset=utf-8"
+    }
+  } : {})
 }
 
 resource "aws_dynamodb_table" "win_totals_cache" {
@@ -141,6 +194,61 @@ resource "aws_dynamodb_table" "groups" {
   attribute {
     name = "groupKey"
     type = "S"
+  }
+
+  attribute {
+    name = "groupId"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "recordType"
+    type = "S"
+  }
+
+  # Existing attributes let DynamoDB backfill legacy records without rewriting them.
+  global_secondary_index {
+    name            = "group-records"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "groupId"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "groupKey"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "user-groups"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "userId"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "groupKey"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "record-types"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "recordType"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "groupKey"
+      key_type       = "RANGE"
+    }
   }
 
   point_in_time_recovery {
@@ -428,7 +536,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem"
         ]
         Resource = aws_dynamodb_table.predictions.arn
       },
@@ -438,7 +547,8 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem"
         ]
         Resource = aws_dynamodb_table.profiles.arn
       },
@@ -448,10 +558,20 @@ resource "aws_iam_role_policy" "lambda_cache" {
           "dynamodb:DeleteItem",
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:Scan",
-          "dynamodb:UpdateItem"
+          "dynamodb:UpdateItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:ConditionCheckItem"
         ]
         Resource = aws_dynamodb_table.groups.arn
+      },
+      {
+        Effect = "Allow"
+        Action = ["dynamodb:Query"]
+        Resource = [
+          "${aws_dynamodb_table.groups.arn}/index/group-records",
+          "${aws_dynamodb_table.groups.arn}/index/user-groups",
+          "${aws_dynamodb_table.groups.arn}/index/record-types"
+        ]
       },
       {
         Effect   = "Allow"
@@ -475,7 +595,7 @@ resource "aws_lambda_function" "backend" {
   memory_size = 256
 
   environment {
-    variables = {
+    variables = merge({
       CACHE_TABLE        = aws_dynamodb_table.win_totals_cache.name
       CACHE_TTL_SECONDS  = tostring(var.cache_ttl_seconds)
       ENVIRONMENT        = var.environment
@@ -485,11 +605,19 @@ resource "aws_lambda_function" "backend" {
       PROFILES_TABLE     = aws_dynamodb_table.profiles.name
       RESULTS_SEASON     = tostring(var.results_season)
       RESULTS_TABLE      = aws_dynamodb_table.season_results.name
-    }
+      }, var.environment == "dev" ? {
+      ADMIN_COGNITO_ISSUER               = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+      ADMIN_COGNITO_CLIENT_ID            = aws_cognito_user_pool_client.browser.id
+      ADMIN_ANALYTICS_CACHE_TABLE        = aws_dynamodb_table.admin_analytics_cache[0].name
+      ADMIN_ANALYTICS_CONFIG_PARAMETER   = "/${local.resource_prefix}/admin-analytics/config"
+      ADMIN_GOOGLE_CREDENTIALS_PARAMETER = "/${local.resource_prefix}/admin-analytics/google-service-account"
+      ADMIN_ANALYTICS_LOG_GROUP          = local.analytics_log_group
+    } : {})
   }
 
   depends_on = [
     aws_iam_role_policy.lambda_cache,
+    aws_iam_role_policy.admin_analytics,
     aws_iam_role_policy_attachment.lambda_logs,
   ]
 }
@@ -510,7 +638,7 @@ resource "aws_cognito_user_pool_client" "browser" {
   prevent_user_existence_errors        = "ENABLED"
   access_token_validity                = 1
   id_token_validity                    = 1
-  refresh_token_validity               = 30
+  refresh_token_validity               = 7
 
   token_validity_units {
     access_token  = "hours"
@@ -658,6 +786,14 @@ resource "aws_apigatewayv2_route" "group_delete" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+resource "aws_apigatewayv2_route" "group_sports_update" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "PATCH /api/groups/{groupId}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_route" "group_invite_get" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "GET /api/groups/{groupId}/invite"
@@ -669,6 +805,30 @@ resource "aws_apigatewayv2_route" "group_invite_get" {
 resource "aws_apigatewayv2_route" "group_members_get" {
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = "GET /api/groups/{groupId}/members"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_member_remove" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "DELETE /api/groups/{groupId}/members/{userId}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_invite_regenerate" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "POST /api/groups/{groupId}/invite"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "group_commissioner_transfer" {
+  api_id             = aws_apigatewayv2_api.api.id
+  route_key          = "POST /api/groups/{groupId}/commissioner"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -705,164 +865,19 @@ resource "aws_cloudwatch_dashboard" "analytics" {
   count = contains(["dev", "prod"], var.environment) ? 1 : 0
 
   dashboard_name = "${local.resource_prefix}-analytics"
-  dashboard_body = jsonencode({
-    start          = "-P7D"
-    periodOverride = "inherit"
-    widgets = [
-      {
-        type   = "text"
-        x      = 0
-        y      = 0
-        width  = 24
-        height = 2
-        properties = {
-          markdown = "# Predict Playoffs — ${title(var.environment)} Analytics\nAnonymous product analytics for the ${var.environment} site. Adjust the dashboard time range to explore a different window. Managed by Terraform."
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Unique visitors"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count_distinct(visitorId) as uniqueVisitors"
-        }
-      },
-      {
-        type   = "log"
-        x      = 6
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Sessions"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count_distinct(sessionId) as sessions"
-        }
-      },
-      {
-        type   = "log"
-        x      = 12
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Page views"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews"
-        }
-      },
-      {
-        type   = "log"
-        x      = 18
-        y      = 2
-        width  = 6
-        height = 4
-        properties = {
-          region = var.aws_region
-          title  = "Predictions saved"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"prediction_saved\"\n| stats count(*) as predictionsSaved"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 6
-        width  = 16
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Traffic over time"
-          view   = "timeSeries"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews, count_distinct(sessionId) as sessions by bin(1h)"
-        }
-      },
-      {
-        type   = "log"
-        x      = 16
-        y      = 6
-        width  = 8
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Popular pages"
-          view   = "pie"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as views by page\n| sort views desc"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 13
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Visitor conversion"
-          view   = "bar"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event in [\"page_view\", \"account_created\", \"prediction_saved\"]\n| stats count_distinct(visitorId) as visitors by event\n| sort visitors desc"
-        }
-      },
-      {
-        type   = "log"
-        x      = 12
-        y      = 13
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Engagement events"
-          view   = "bar"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\"\n| stats count(*) as events by event\n| sort events desc"
-        }
-      },
-      {
-        type   = "log"
-        x      = 0
-        y      = 20
-        width  = 12
-        height = 7
-        properties = {
-          region = var.aws_region
-          title  = "Recent sessions"
-          view   = "table"
-          query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event = \"page_view\"\n| stats count(*) as pageViews, count_distinct(page) as pages, min(@timestamp) as started, max(@timestamp) as lastSeen by sessionId\n| sort lastSeen desc\n| limit 20"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 20
-        width  = 12
-        height = 7
-        properties = {
-          region  = var.aws_region
-          title   = "Backend health"
-          view    = "timeSeries"
-          period  = 300
-          stat    = "Sum"
-          stacked = false
-          metrics = [
-            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.backend.function_name],
-            [".", "Errors", ".", "."],
-          ]
-          yAxis = {
-            left = {
-              min       = 0
-              showUnits = false
-            }
-          }
-        }
-      },
-    ]
-  })
+  dashboard_body = jsonencode({ widgets = [
+    { type = "text", x = 0, y = 0, width = 24, height = 2, properties = {
+      markdown = "# Predict Playoffs — ${title(var.environment)} activity\nCookieless product event counts. GPC/DNT excluded. Traffic is reported by GoatCounter in the private dev admin dashboard."
+    } },
+    { type = "log", x = 0, y = 2, width = 24, height = 8, properties = {
+      region = var.aws_region, title = "Product activity totals", view = "table",
+      query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\" and event != \"leaderboard_viewed\"\n| stats count(*) as events by event, bracketType | sort events desc"
+    } },
+    { type = "log", x = 0, y = 10, width = 24, height = 8, properties = {
+      region = var.aws_region, title = "Daily product activity", view = "timeSeries",
+      query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\" and event != \"leaderboard_viewed\"\n| stats count(*) as events by bin(1d), event"
+    } }
+  ] })
 }
 
 resource "aws_lambda_permission" "api_gateway" {
@@ -886,15 +901,61 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
+locals {
+  # One content-derived release version keeps every page on the same JS/CSS set.
+  frontend_version = substr(sha256(join("", [
+    for key in sort(keys(local.frontend_files)) : filemd5(local.frontend_files[key].source)
+    if endswith(key, ".js") || endswith(key, ".css")
+  ])), 0, 16)
+  frontend_pages = {
+    for key, asset in local.frontend_files : key => replace(
+      file(asset.source), "/\\?v=[0-9]+/", "?v=${local.frontend_version}"
+    ) if startswith(asset.content_type, "text/html")
+  }
+}
+
 resource "aws_s3_object" "frontend" {
-  for_each = local.frontend_files
+  for_each = { for key, asset in local.frontend_files : key => asset if !startswith(asset.content_type, "text/html") }
 
   bucket        = aws_s3_bucket.frontend.id
   key           = each.key
   source        = each.value.source
   etag          = filemd5(each.value.source)
   content_type  = each.value.content_type
-  cache_control = "no-store, no-cache, must-revalidate, max-age=0"
+  cache_control = contains(["robots.txt", "sitemap.xml"], each.key) ? "public, max-age=300, must-revalidate" : "public, max-age=86400, must-revalidate"
+}
+
+# Publish HTML only after assets, so a new version cannot cache the previous release.
+resource "aws_s3_object" "frontend_pages" {
+  for_each      = local.frontend_pages
+  bucket        = aws_s3_bucket.frontend.id
+  key           = each.key
+  content       = each.value
+  etag          = md5(each.value)
+  content_type  = "text/html; charset=utf-8"
+  cache_control = "public, max-age=0, s-maxage=60, must-revalidate"
+  depends_on    = [aws_s3_object.frontend]
+}
+
+moved {
+  from = aws_s3_object.frontend["index.html"]
+  to   = aws_s3_object.frontend_pages["index.html"]
+}
+moved {
+  from = aws_s3_object.frontend["nba"]
+  to   = aws_s3_object.frontend_pages["nba"]
+}
+moved {
+  from = aws_s3_object.frontend["scoring"]
+  to   = aws_s3_object.frontend_pages["scoring"]
+}
+moved {
+  from = aws_s3_object.frontend["leaderboard"]
+  to   = aws_s3_object.frontend_pages["leaderboard"]
+}
+moved {
+  from = aws_s3_object.frontend["picks"]
+  to   = aws_s3_object.frontend_pages["picks"]
 }
 
 locals {
@@ -922,39 +983,115 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_cache_policy" "disabled" {
-  name        = "${local.resource_prefix}-caching-disabled"
+# Reuse the policy ID permitted by the deployment role. The API must first
+# finish migrating to managed CachingDisabled before this policy enables caching.
+moved {
+  from = aws_cloudfront_cache_policy.disabled
+  to   = aws_cloudfront_cache_policy.frontend
+}
+
+resource "aws_cloudfront_cache_policy" "frontend" {
+  name        = "${local.resource_prefix}-frontend-cache"
   min_ttl     = 0
-  default_ttl = 0
-  max_ttl     = 0
+  default_ttl = 60
+  max_ttl     = 86400
 
   parameters_in_cache_key_and_forwarded_to_origin {
-    enable_accept_encoding_brotli = false
-    enable_accept_encoding_gzip   = false
-
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
     cookies_config {
       cookie_behavior = "none"
     }
-
     headers_config {
       header_behavior = "none"
     }
-
     query_strings_config {
-      query_string_behavior = "none"
+      query_string_behavior = "whitelist"
+      query_strings {
+        items = ["v"]
+      }
     }
   }
 }
 
-# Allow crawlers to fetch dev pages and read noindex. Production uses static page metadata.
-resource "aws_cloudfront_response_headers_policy" "noindex" {
-  count = var.environment == "prod" ? 0 : 1
-  name  = "${local.resource_prefix}-noindex"
+# Preserve the existing dev policy identity while adding browser protections.
+moved {
+  from = aws_cloudfront_response_headers_policy.noindex[0]
+  to   = aws_cloudfront_response_headers_policy.security
+}
+
+locals {
+  analytics_connections = var.environment == "dev" ? ["https://predictplayoffs.goatcounter.com"] : []
+  structured_data_hashes = distinct(flatten([
+    for html in values(local.frontend_pages) : [
+      for block in regexall("(?s)<script type=\"application/ld\\+json\">(.*?)</script>", html) :
+      "'sha256-${base64sha256(block[0])}'"
+    ]
+  ]))
+  content_security_policy = join("; ", [
+    "default-src 'self'",
+    "script-src 'self' ${join(" ", local.structured_data_hashes)}${var.environment == "dev" ? " https://gc.zgo.at" : ""}",
+    "script-src-attr 'none'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "connect-src 'self' https://cognito-idp.${var.aws_region}.amazonaws.com ${join(" ", local.analytics_connections)}",
+    "img-src 'self' https://a.espncdn.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ])
+}
+
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name = "${local.resource_prefix}-security"
+  security_headers_config {
+    content_security_policy {
+      content_security_policy = local.content_security_policy
+      override                = true
+    }
+    content_type_options {
+      override = true
+    }
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+    referrer_policy {
+      referrer_policy = "no-referrer"
+      override        = true
+    }
+    dynamic "strict_transport_security" {
+      for_each = var.environment == "prod" && length(var.cloudfront_aliases) > 0 ? [1] : []
+      content {
+        access_control_max_age_sec = 31536000
+        include_subdomains         = false
+        preload                    = false
+        override                   = true
+      }
+    }
+  }
   custom_headers_config {
     items {
-      header   = "X-Robots-Tag"
-      value    = "noindex, nofollow"
+      header   = "Permissions-Policy"
+      value    = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
       override = true
+    }
+    dynamic "items" {
+      for_each = var.environment == "prod" ? [] : [1]
+      content {
+        header   = "X-Robots-Tag"
+        value    = "noindex, nofollow"
+        override = true
+      }
+    }
+  }
+  lifecycle {
+    precondition {
+      condition     = length(local.content_security_policy) <= 1783
+      error_message = "CSP exceeds CloudFront's 1783-character limit."
     }
   }
 }
@@ -1000,12 +1137,12 @@ resource "aws_lambda_function" "results_updater" {
   function_name = "${local.resource_prefix}-results-updater"
   role          = aws_iam_role.results_updater.arn
   runtime       = "python3.12"
-  handler       = "results_updater.handler"
+  handler       = "results_dispatcher.handler"
 
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
-  timeout     = 30
+  timeout     = 120
   memory_size = 256
 
   environment {
@@ -1026,6 +1163,24 @@ resource "aws_cloudwatch_event_rule" "results_update" {
   name                = "${local.resource_prefix}-results-update"
   description         = "Refresh finalized NFL results for leaderboard scoring"
   schedule_expression = var.results_update_schedule
+}
+
+# Share the deployment role's permitted results schedule. The API uses its
+# existing table permissions; conditional snapshots are safe to retry.
+resource "aws_cloudwatch_event_target" "group_history" {
+  rule      = aws_cloudwatch_event_rule.results_update.name
+  target_id = "group-history"
+  arn       = aws_lambda_function.backend.arn
+
+  depends_on = [aws_lambda_permission.eventbridge_group_history]
+}
+
+resource "aws_lambda_permission" "eventbridge_group_history" {
+  statement_id  = "AllowEventBridgeGroupHistory"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.backend.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.results_update.arn
 }
 
 resource "aws_cloudwatch_event_target" "results_updater" {
@@ -1066,23 +1221,23 @@ resource "aws_cloudfront_distribution" "app" {
   }
 
   default_cache_behavior {
-    response_headers_policy_id = var.environment == "prod" ? null : aws_cloudfront_response_headers_policy.noindex[0].id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
     target_origin_id           = "frontend-s3"
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["GET", "HEAD", "OPTIONS"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    cache_policy_id            = aws_cloudfront_cache_policy.frontend.id
     compress                   = true
   }
 
   ordered_cache_behavior {
-    response_headers_policy_id = var.environment == "prod" ? null : aws_cloudfront_response_headers_policy.noindex[0].id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
     path_pattern               = "/api/*"
     target_origin_id           = "backend-api"
     viewer_protocol_policy     = "redirect-to-https"
     allowed_methods            = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods             = ["GET", "HEAD"]
-    cache_policy_id            = aws_cloudfront_cache_policy.disabled.id
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
     origin_request_policy_id   = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
     compress                   = true
   }

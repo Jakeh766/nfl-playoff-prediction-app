@@ -6,6 +6,20 @@ const vm = require('node:vm');
 const context = vm.createContext({});
 vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), context);
 
+test('NBA uses a fixed eight-team bracket and invalidates downstream winners', () => {
+  const nba = vm.createContext({ IS_NBA: true });
+  vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), nba);
+  nba.seeds = { East: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'] };
+  nba.picks = { East: { 'r1-1-8': 'eight', 'r1-4-5': 'four', 'r1-2-7': 'two', 'r1-3-6': 'three', 'div-1': 'eight', 'div-2': 'two', conf: 'eight' } };
+  const games = () => JSON.parse(vm.runInContext('JSON.stringify(buildConferenceGames(seeds, picks, "East"))', nba));
+  assert.equal(games().wildCard.length, 4);
+  assert.deepEqual(games().divisional[0].teams.map(t => t.name), ['eight', 'four']);
+  assert.deepEqual(games().divisional[1].teams.map(t => t.name), ['two', 'three']);
+  nba.picks.East['r1-1-8'] = 'one';
+  assert.equal(games().championship[0].teams[0], null);
+  assert.equal(games().championship[0].teams[1].name, 'two');
+});
+
 test('local preview has enough entries to exercise leaderboard scrolling', () => {
   assert.equal(vm.runInContext('LOCAL_PREVIEW_LEADERBOARD_NAMES.length', context), 16);
 });
@@ -84,4 +98,47 @@ test('private leaderboard reads only its fixed scoring mode', () => {
 
   assert.equal(vm.runInContext(`leaderboardSortValue(privateEntry, 'total', 'vegas')`, context), 60.75);
   assert.equal(vm.runInContext(`leaderboardSortValue(privateEntry, 'total', 'classic')`, context), null);
+});
+
+test('preseason status stops at each sport’s kickoff, including when dev picks stay open', () => {
+  const status = 'Preseason — scoring has not started';
+  const season = vm.createContext({ state: {}, IS_NBA: false, NBA_SEASON: { lockAt: '2026-10-20T19:00:00Z' } });
+  vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), season);
+  const display = time => season.seasonStatusText(status, Date.parse(time));
+  assert.equal(display('2026-09-10T00:19:59Z'), status);
+  assert.equal(display('2026-09-10T00:20:00Z'), '');
+  assert.equal(display('2026-10-07T12:00:00Z'), '');
+  season.IS_NBA = true;
+  assert.equal(display('2026-10-07T12:00:00Z'), status);
+  assert.equal(display('2026-10-20T19:00:00Z'), '');
+  season.IS_NBA = false;
+  season.state.predictionWindow = { lockAt: '2027-09-09T00:20:00Z', devNflUnlocked: true, locked: false };
+  assert.equal(display('2027-09-09T00:19:59Z'), status);
+  assert.equal(display('2027-09-09T00:20:00Z'), '');
+  season.state.predictionClockOffset = 1000;
+  assert.equal(display('2027-09-09T00:19:59Z'), '');
+  for (const message of ['Loading leaderboard…', 'Results unavailable', 'Playoffs in progress']) {
+    assert.equal(season.seasonStatusText(message), message);
+  }
+});
+
+test('bundled NFL preseason cutoff matches both deployment configurations', () => {
+  const source = fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8');
+  for (const environment of ['dev', 'prod']) {
+    const config = fs.readFileSync(`${__dirname}/../terraform/envs/${environment}/terraform.tfvars`, 'utf8');
+    const cutoff = config.match(/prediction_lock_at\s*=\s*"([^"]+)"/)[1];
+    assert.ok(source.includes(`"${cutoff}"`), `${environment} kickoff must match the UI fallback`);
+  }
+});
+
+test('identical scoring results share competition ranks in both scoring modes', () => {
+  context.tied = [
+    { leaderboardName: 'Zoe', scores: { classic: { total: 20, regularSeason: 15, playoffs: 5 }, vegas: { total: 12.5, regularSeason: 10, playoffs: 2.5 } } },
+    { leaderboardName: 'Adam', scores: { classic: { total: 20, regularSeason: 15, playoffs: 5 }, vegas: { total: 12.5, regularSeason: 10, playoffs: 2.5 } } },
+    { leaderboardName: 'Third', scores: { classic: { total: 20, regularSeason: 10, playoffs: 10 }, vegas: { total: 12.5, regularSeason: 9, playoffs: 3.5 } } },
+    { leaderboardName: 'No picks', hasPrediction: false, total: null, regularSeason: null, playoffs: null },
+  ];
+  for (const mode of ['classic', 'vegas']) {
+    assert.deepEqual(Array.from(vm.runInContext(`rankLeaderboardEntries(tied, '${mode}').map(entry => entry.rank)`, context)), [1, 1, 3, null]);
+  }
 });

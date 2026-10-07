@@ -31,38 +31,56 @@ def analytics_event(body):
 
 
 class AnalyticsTests(unittest.TestCase):
-    valid_body = {
-        "event": "page_view",
-        "page": "/picks",
-        "sessionId": "1b46c947-b87a-44c0-8b7c-a1f248645ad9",
-        "visitorId": "23f1dc60-e4a2-4a12-b31c-1be61e25b455",
-    }
-
-    def test_event_is_logged_without_request_metadata(self):
+    def call(self, body, headers=None, environment="dev"):
         output = StringIO()
-        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), redirect_stdout(output):
-            result = lambda_app.handler(analytics_event(self.valid_body), None)
+        event = analytics_event(body)
+        event["headers"] = headers or {}
+        event["requestContext"]["http"].update(sourceIp="192.0.2.1", userAgent="PRIVATE")
+        with patch.dict(os.environ, {"ENVIRONMENT": environment}), redirect_stdout(output):
+            result = lambda_app.handler(event, None)
+        return result, output.getvalue()
 
-        record = json.loads(output.getvalue())
+    def test_all_product_events_accept_identifier_free_payloads(self):
+        for name in lambda_app.ANALYTICS_EVENTS:
+            body = {"event": name, "page": "/picks"}
+            if name in {"bracket_created", "bracket_completed", "prediction_saved"}:
+                body["bracketType"] = "nba"
+            result, output = self.call(body)
+            self.assertEqual(result["statusCode"], 202)
+            self.assertEqual(json.loads(output), {"type": "site_analytics", "environment": "dev", **body})
+            self.assertNotIn("Set-Cookie", result["headers"])
+
+    def test_bracket_type_must_be_allowlisted(self):
+        for kind in (None, "", "private", 123, [], {}):
+            result, output = self.call({"event": "prediction_saved", "page": "/picks", "bracketType": kind})
+            self.assertEqual(result["statusCode"], 400)
+            self.assertEqual(output, "")
+        for kind in ("nfl", "nba"):
+            self.assertEqual(self.call({"event": "bracket_created", "page": "/picks", "bracketType": kind})[0]["statusCode"], 202)
+
+    def test_untrusted_identifiers_and_metadata_never_reach_logs(self):
+        result, output = self.call({"event": "sign_in", "page": "/", "sessionId": "PRIVATE", "visitorId": "PRIVATE",
+                                    "email": "PRIVATE", "ip": "PRIVATE", "bracketType": "PRIVATE"},
+                                   {"cookie": "PRIVATE", "authorization": "PRIVATE"})
         self.assertEqual(result["statusCode"], 202)
-        self.assertEqual(record["type"], "site_analytics")
-        self.assertEqual(record["environment"], "prod")
-        self.assertEqual(record["event"], "page_view")
-        self.assertNotIn("email", record)
-        self.assertNotIn("ip", record)
+        self.assertEqual(json.loads(output), {"type": "site_analytics", "environment": "dev", "event": "sign_in", "page": "/"})
 
-    def test_unknown_event_is_rejected(self):
-        body = {**self.valid_body, "event": "made_up_event"}
-        with patch.dict(os.environ, {"ENVIRONMENT": "dev"}):
-            result = lambda_app.handler(analytics_event(body), None)
+    def test_private_pages_and_nonproduct_events_are_rejected(self):
+        for page in ("/picks?invite=PRIVATE", "/picks#PRIVATE", "/admin/analytics", "/private"):
+            result, output = self.call({"event": "sign_in", "page": page})
+            self.assertEqual(result["statusCode"], 400)
+            self.assertEqual(output, "")
+        for name in ("page_view", "leaderboard_viewed", "made_up"):
+            self.assertEqual(self.call({"event": name, "page": "/"})[0]["statusCode"], 400)
 
-        self.assertEqual(result["statusCode"], 400)
+    def test_privacy_headers_suppress_collection(self):
+        for headers in ({"Sec-GPC": "1"}, {"DNT": "1"}):
+            result, output = self.call({"event": "account_deleted", "page": "/"}, headers)
+            self.assertEqual(result["statusCode"], 202)
+            self.assertEqual(output, "")
 
-    def test_analytics_route_is_disabled_for_unknown_environment(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "preview"}):
-            result = lambda_app.handler(analytics_event(self.valid_body), None)
-
-        self.assertEqual(result["statusCode"], 404)
+    def test_unknown_environment_is_disabled(self):
+        self.assertEqual(self.call({"event": "sign_in", "page": "/"}, environment="preview")[0]["statusCode"], 404)
 
 
 if __name__ == "__main__":

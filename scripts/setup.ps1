@@ -57,6 +57,8 @@ try {
     Invoke-NativeCommand -FilePath npm -ArgumentList @("ci", "--prefix", "backend/custom-email-sender")
   }
 
+  Invoke-NativeCommand -FilePath $venvPython -ArgumentList @("-m", "pip", "install", "-r", "backend/admin-requirements.txt")
+
   if (-not $SkipTerraform) {
     foreach ($terraformDirectory in @("terraform/bootstrap", "terraform/envs/dev", "terraform/envs/prod")) {
       if (-not (Test-Path -LiteralPath "$terraformDirectory/.terraform")) {

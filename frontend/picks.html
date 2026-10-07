@@ -13,14 +13,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=38" />
-    <script src="/shell.js?v=13" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=68" />
+    <script src="/sports.js?v=4" defer></script>
+    <script src="/shell.js?v=23" defer></script>
     <script src="/auth-config.js" defer></script>
-    <script src="/monitoring.js?v=1" defer></script>
-    <script src="/app.js?v=27" defer></script>
-    <script src="/leaderboard.js?v=14" defer></script>
-    <script src="/picks.js?v=4" defer></script>
-    <script src="/bootstrap.js?v=8" defer></script>
+    <script src="/goatcounter.js?v=1" defer></script>
+    <script src="/monitoring.js?v=8" defer></script>
+    <script src="/engagement.js?v=1" defer></script>
+    <script src="/app.js?v=37" defer></script>
+    <script src="/leaderboard.js?v=24" defer></script>
+    <script src="/picks.js?v=14" defer></script>
+    <script src="/bootstrap.js?v=13" defer></script>
   </head>
   <body data-page="picks">
     <!-- Keep account fields ahead of dynamically rebuilt selectors so password
@@ -44,21 +47,21 @@
             <p class="eyebrow">01 · SET THE FIELD</p>
             <h2>Seed your playoff teams.</h2>
             <p>Pick each North, South, East, and West winner first. Rank those four teams as seeds 1–4, then choose three wild cards. The No. 1 seeds earn a first-round bye.</p>
-            <p class="odds-status" id="odds-status" role="status">The number in parentheses is each team's projected regular-season win total.</p>
+            <p class="odds-status" id="odds-status" role="status">Teams are ordered by projected regular-season wins.</p>
           </div>
         </div>
 
         <div class="conference-grid">
           <section class="conference-card afc-card">
             <div class="conference-title">
-              <span class="conference-icon"><img class="conference-logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/afc.png" alt="AFC logo" /><span class="conference-logo-fallback">A</span></span>
+              <span class="conference-icon"><img class="conference-logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/afc.png" alt="AFC logo" width="64" height="64" /><span class="conference-logo-fallback">A</span></span>
               <div><p>AMERICAN FOOTBALL CONFERENCE</p><h3>AFC Seeding</h3></div>
             </div>
             <div class="seed-list" id="afc-seeds"></div>
           </section>
           <section class="conference-card nfc-card">
             <div class="conference-title">
-              <span class="conference-icon"><img class="conference-logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/nfc.png" alt="NFC logo" /><span class="conference-logo-fallback">N</span></span>
+              <span class="conference-icon"><img class="conference-logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/nfc.png" alt="NFC logo" width="64" height="64" /><span class="conference-logo-fallback">N</span></span>
               <div><p>NATIONAL FOOTBALL CONFERENCE</p><h3>NFC Seeding</h3></div>
             </div>
             <div class="seed-list" id="nfc-seeds"></div>
@@ -117,6 +120,16 @@
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <footer id="site-footer"></footer>
+    <footer id="site-footer" data-no-sport-copy>
+      <div class="footer-brand">
+        <img class="footer-mark" src="/assets/predict-playoffs-mark.svg" alt="" width="48" height="48" />
+        <div class="footer-wordmark"><span>PREDICT PLAYOFFS</span><small>Call the season.</small></div>
+      </div>
+      <nav class="footer-links" aria-label="Privacy and contact">
+        <a href="/privacy">Privacy policy</a>
+        <a href="mailto:contact@predictplayoffs.com">Contact</a>
+      </nav>
+      <p>Predict Playoffs is an independent playoff prediction and bracket competition app. Not affiliated with the NFL or NBA.</p>
+    </footer>
   </body>
 </html>

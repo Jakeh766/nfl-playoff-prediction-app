@@ -33,7 +33,7 @@ function projectedWins(team) {
 }
 
 const PROJECTION_HELP_TEXT =
-  "The number in parentheses is each team's projected regular-season win total.";
+  "Teams are ordered by projected regular-season wins.";
 
 function sortTeamsByProjection(teams) {
   return [...teams].sort(
@@ -41,59 +41,19 @@ function sortTeamsByProjection(teams) {
   );
 }
 
-function appendDivisionGroupedOptions(select, conference, teams, selectedTeam) {
-  const teamSet = new Set(teams);
-
-  DIVISION_ORDER.forEach((division) => {
-    const divisionTeams = sortTeamsByProjection(
-      DIVISION_TEAMS[conference][division].filter((team) => teamSet.has(team)),
-    );
-    if (!divisionTeams.length) return;
-
-    const group = document.createElement("optgroup");
-    group.label = `${conference} ${division}`;
-
-    divisionTeams.forEach((team) => {
-      const option = document.createElement("option");
-      option.value = team;
-      option.textContent =
-        selectedTeam === team
-          ? team
-          : `${team} (${projectedWins(team).toFixed(1)})`;
-      option.selected = selectedTeam === team;
-      group.appendChild(option);
-    });
-
-    select.appendChild(group);
-  });
-}
-
-function appendProjectedOptions(select, teams, selectedTeam) {
-  sortTeamsByProjection(teams).forEach((team) => {
-    const option = document.createElement("option");
-    option.value = team;
-    option.textContent =
-      selectedTeam === team
-        ? team
-        : `${team} (${projectedWins(team).toFixed(1)})`;
-    option.selected = selectedTeam === team;
-    select.appendChild(option);
-  });
-}
-
 async function loadWinTotals() {
   elements.oddsStatus.textContent =
-    `${PROJECTION_HELP_TEXT} Using the bundled 2026 sportsbook snapshot while live odds load…`;
+    `${PROJECTION_HELP_TEXT} Using the bundled preseason sportsbook snapshot while live odds load…`;
 
   try {
-    const response = await fetch("/api/win-totals", { cache: "no-store" });
+    const response = await fetch(sportUrl("/api/win-totals"), { cache: "no-store" });
     if (!response.ok) throw new Error("Odds endpoint unavailable");
 
     const data = await response.json();
     if (data.apiVersion !== 2) {
       throw new Error("The odds API version does not match this frontend.");
     }
-    if (!data.totals || Object.keys(data.totals).length < 32) {
+    if (!data.totals || Object.keys(data.totals).length < (IS_NBA ? 30 : 32)) {
       throw new Error("Incomplete odds response");
     }
 
@@ -111,7 +71,7 @@ async function loadWinTotals() {
     const isMismatchedApi = error.message.includes("does not match");
     elements.oddsStatus.textContent = isMismatchedApi
       ? `${PROJECTION_HELP_TEXT} The odds API and frontend versions do not match. Deploy the latest dev build.`
-      : `${PROJECTION_HELP_TEXT} Live odds are unavailable; using the bundled 2026 sportsbook snapshot.`;
+      : `${PROJECTION_HELP_TEXT} Live odds are unavailable; using the bundled preseason sportsbook snapshot.`;
     elements.oddsStatus.title = error.message;
   }
 
@@ -121,11 +81,38 @@ async function loadWinTotals() {
 }
 
 function renderSeedSelectors() {
-  renderConferenceSeeds("AFC", elements.afcSeeds);
-  renderConferenceSeeds("NFC", elements.nfcSeeds);
+  renderConferenceSeeds(CONFERENCES[0], elements.afcSeeds);
+  renderConferenceSeeds(CONFERENCES[1], elements.nfcSeeds);
+}
+
+function completeSeedRow(row, selectedTeam, control, placeholder) {
+  const logoSlot = document.createElement("span");
+  logoSlot.className = "seed-logo-slot";
+  if (selectedTeam) {
+    const logo = createTeamLogo(selectedTeam, "seed-team-logo");
+    logo.alt = "";
+    logo.setAttribute("aria-hidden", "true");
+    logoSlot.append(logo);
+  }
+
+  const name = document.createElement("span");
+  name.className = "seed-team-name";
+  name.textContent = selectedTeam || placeholder;
+
+  const chevron = document.createElement("span");
+  chevron.className = "seed-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+
+  row.append(logoSlot, name, chevron, control);
+  if (selectedTeam) {
+    row.classList.add("has-team");
+    setTeamRowColor(row, selectedTeam);
+  }
 }
 
 function renderConferenceSeeds(conference, container) {
+  if (IS_NBA) return renderNbaSeeds(conference, container);
+  closeTeamCombobox();
   container.innerHTML = "";
 
   const divisionHeading = document.createElement("div");
@@ -137,43 +124,51 @@ function renderConferenceSeeds(conference, container) {
   const divisionGrid = document.createElement("div");
   divisionGrid.className = "division-winner-grid";
   DIVISION_ORDER.forEach((division) => {
-    const field = document.createElement("label");
+    const field = document.createElement("div");
     field.className = "division-winner-field";
 
     const label = document.createElement("span");
     label.textContent = `${conference} ${division}`;
 
-    const select = document.createElement("select");
-    select.dataset.conference = conference;
-    select.dataset.division = division;
-    select.setAttribute("aria-label", `${conference} ${division} winner`);
-
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = `Select ${division} winner`;
-    select.appendChild(placeholder);
-
-    appendDivisionGroupedOptions(
-      select,
-      conference,
-      DIVISION_TEAMS[conference][division],
-      state.divisionWinners[conference][division],
-    );
-
-    select.addEventListener("change", handleDivisionWinnerChange);
-    select.disabled = state.predictionsLocked;
     const control = document.createElement("div");
     control.className = "logo-select-control";
     const selectedTeam = state.divisionWinners[conference][division];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "division-combobox";
+    button.dataset.conference = conference;
+    button.dataset.division = division;
     if (selectedTeam) {
-      control.appendChild(createTeamLogo(selectedTeam, "select-team-logo"));
+      const logo = createTeamLogo(selectedTeam, "select-team-logo");
+      logo.alt = "";
+      logo.setAttribute("aria-hidden", "true");
+      button.appendChild(logo);
     } else {
       const placeholderLogo = document.createElement("span");
       placeholderLogo.className = "select-logo-placeholder";
       placeholderLogo.textContent = "—";
-      control.appendChild(placeholderLogo);
+      button.appendChild(placeholderLogo);
     }
-    control.appendChild(select);
+    const selectedName = document.createElement("span");
+    selectedName.className = `division-combobox-name${selectedTeam ? "" : " is-placeholder"}`;
+    selectedName.textContent = selectedTeam || `Select ${division} winner`;
+    const chevron = document.createElement("span");
+    chevron.className = "seed-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    button.append(selectedName, chevron);
+    control.append(button);
+    createTeamCombobox({
+      anchor: control,
+      button,
+      id: `division-${conference.toLowerCase()}-${division.toLowerCase()}`,
+      label: `${conference} ${division} winner`,
+      placeholder: `Select ${division} winner`,
+      selected: selectedTeam,
+      groups: [{ teams: sortTeamsByProjection(DIVISION_TEAMS[conference][division]) }],
+      disabled: state.predictionsLocked,
+      isUnavailable: () => false,
+      onSelect: (team) => handleDivisionWinnerChange({ target: { dataset: button.dataset, value: team } }),
+    });
     field.append(label, control);
     divisionGrid.appendChild(field);
   });
@@ -185,6 +180,9 @@ function renderConferenceSeeds(conference, container) {
     "<strong>2. Rank Division Winners</strong><span>Choices sorted by projected wins</span>";
   container.appendChild(seedingHeading);
 
+  const divisionPicksComplete = divisionWinnersComplete(conference);
+  const divisionWinnerTeams = new Set(Object.values(state.divisionWinners[conference]).filter(Boolean));
+  const selectedTeams = new Set(state.seeds[conference].filter(Boolean));
   for (let index = 0; index < 7; index += 1) {
     if (index === 4) {
       const group = document.createElement("div");
@@ -194,63 +192,28 @@ function renderConferenceSeeds(conference, container) {
       container.appendChild(group);
     }
 
-    const row = document.createElement("div");
-    row.className = "seed-row";
-    if (index >= 4) row.classList.add("wild-card-seed");
-
-    const number = document.createElement("span");
-    number.className = "seed-number";
-    number.textContent = index + 1;
-
-    const logoSlot = document.createElement("span");
-    logoSlot.className = "seed-logo-slot";
     const selectedSeedTeam = state.seeds[conference][index];
-    if (selectedSeedTeam) {
-      logoSlot.appendChild(createTeamLogo(selectedSeedTeam, "seed-team-logo"));
-    }
-
-    const select = document.createElement("select");
-    select.dataset.conference = conference;
-    select.dataset.seedIndex = index;
-    select.setAttribute("aria-label", `${conference} seed ${index + 1}`);
-
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent =
-      "Pick division winners first";
-    select.appendChild(placeholder);
-
-    const availableTeams =
-      index < 4
-        ? Object.values(state.divisionWinners[conference]).filter(Boolean)
-        : TEAMS[conference];
-    if (index < 4) {
-      appendProjectedOptions(
-        select,
-        availableTeams,
-        state.seeds[conference][index],
-      );
-    } else {
-      appendDivisionGroupedOptions(
-        select,
-        conference,
-        availableTeams,
-        state.seeds[conference][index],
-      );
-    }
-
-    select.addEventListener("change", handleSeedChange);
-
-    const note = document.createElement("span");
-    note.className = "seed-note";
-    note.textContent =
-      index === 0 ? "Division winner · bye" : index < 4 ? "Division winner" : "Wild card";
-
-    row.append(number, logoSlot, select, note);
-    container.appendChild(row);
+    const groups = index < 4
+      ? [{ teams: sortTeamsByProjection([...divisionWinnerTeams]) }]
+      : DIVISION_ORDER.map((division) => ({
+          label: `${conference} ${division}`,
+          teams: sortTeamsByProjection(DIVISION_TEAMS[conference][division]),
+        }));
+    appendSeedRow({
+      conference,
+      container,
+      index,
+      selected: selectedSeedTeam,
+      groups,
+      disabled: state.predictionsLocked || !divisionPicksComplete,
+      placeholder: !divisionPicksComplete
+        ? "Pick all division winners first"
+        : index < 4 ? `Select seed ${index + 1}` : "Select a wild-card team",
+      isUnavailable: (team) =>
+        (team !== selectedSeedTeam && selectedTeams.has(team)) ||
+        (index >= 4 && divisionWinnerTeams.has(team)),
+    });
   }
-
-  updateDisabledTeamOptions(conference);
 }
 
 function handleSeedChange(event) {
@@ -266,7 +229,7 @@ function handleSeedChange(event) {
   updateSaveState(false);
   renderConferenceSeeds(
     conference,
-    conference === "AFC" ? elements.afcSeeds : elements.nfcSeeds,
+    conference === CONFERENCES[0] ? elements.afcSeeds : elements.nfcSeeds,
   );
 }
 
@@ -295,7 +258,7 @@ function handleDivisionWinnerChange(event) {
   updateSaveState(false);
   renderConferenceSeeds(
     conference,
-    conference === "AFC" ? elements.afcSeeds : elements.nfcSeeds,
+    conference === CONFERENCES[0] ? elements.afcSeeds : elements.nfcSeeds,
   );
 }
 
@@ -314,53 +277,17 @@ function divisionSeedingComplete(conference) {
   );
 }
 
-function updateDisabledTeamOptions(conference) {
-  const selectedTeams = new Set(state.seeds[conference].filter(Boolean));
-  document
-    .querySelectorAll(
-      `select[data-conference="${conference}"][data-seed-index]`,
-    )
-    .forEach((select) => {
-      const ownValue = select.value;
-      const seedIndex = Number(select.dataset.seedIndex);
-      const isDivisionWinner = seedIndex < 4;
-      const divisionPicksComplete = divisionWinnersComplete(conference);
-      const wildCardsUnlocked = divisionPicksComplete;
-      const divisionWinnerTeams = new Set(
-        Object.values(state.divisionWinners[conference]).filter(Boolean),
-      );
-
-      select.disabled =
-        state.predictionsLocked ||
-        (isDivisionWinner ? !divisionPicksComplete : !wildCardsUnlocked);
-      select.closest(".seed-row").classList.toggle("locked", select.disabled);
-      select.options[0].textContent = select.disabled
-        ? "Pick all division winners first"
-        : isDivisionWinner
-          ? `Select seed ${seedIndex + 1}`
-          : "Select a wild-card team";
-
-      Array.from(select.options).forEach((option) => {
-        if (!option.value) return;
-        const duplicateTeam = option.value !== ownValue && selectedTeams.has(option.value);
-        const selectedDivisionWinner =
-          !isDivisionWinner && divisionWinnerTeams.has(option.value);
-        option.disabled = duplicateTeam || selectedDivisionWinner;
-      });
-    });
-}
-
 function validateSeeding() {
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
     const selections = state.seeds[conference];
-    if (!divisionWinnersComplete(conference)) {
+    if (!IS_NBA && !divisionWinnersComplete(conference)) {
       return `Choose the ${conference} North, South, East, and West winners first.`;
     }
-    if (!divisionSeedingComplete(conference)) {
+    if (!IS_NBA && !divisionSeedingComplete(conference)) {
       return `Rank all four ${conference} division winners as seeds 1–4.`;
     }
     if (selections.some((team) => !team)) {
-      return `Choose all seven ${conference} playoff teams first.`;
+      return `Choose all ${SEED_COUNT} ${conference} playoff teams first.`;
     }
     if (new Set(selections).size !== selections.length) {
       return `Each ${conference} team can only be seeded once.`;
@@ -380,6 +307,7 @@ function buildBracket() {
 
   if (!state.bracketBuilt) {
     state.picks = createEmptyPicks();
+    window.siteAnalytics?.track("bracket_created", { bracketType: SPORT });
   }
   state.bracketBuilt = true;
   state.savedAt = null;
@@ -395,10 +323,14 @@ function randomizeBracket() {
   if (!TEST_MODE || state.predictionsLocked) return;
 
   state.divisionWinners = createEmptyDivisionWinners();
-  state.seeds = { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
+  state.seeds = emptySeeds();
   state.picks = createEmptyPicks();
 
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
+    if (IS_NBA) {
+      state.seeds[conference] = shuffled(TEAMS[conference]).slice(0, 8);
+      continue;
+    }
     for (const division of DIVISION_ORDER) {
       state.divisionWinners[conference][division] = randomTeam(
         DIVISION_TEAMS[conference][division],
@@ -415,7 +347,7 @@ function randomizeBracket() {
   state.bracketBuilt = true;
   state.savedAt = null;
 
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
     let games = getConferenceGames(conference);
     games.wildCard.forEach((game) => {
       state.picks[conference][game.id] = randomTeam(game.teams).name;
@@ -434,8 +366,8 @@ function randomizeBracket() {
   }
 
   state.picks.superBowl = randomTeam([
-    getConferenceWinner("AFC"),
-    getConferenceWinner("NFC"),
+    getConferenceWinner(CONFERENCES[0]),
+    getConferenceWinner(CONFERENCES[1]),
   ]).name;
 
   elements.seedingMessage.textContent = "";
@@ -466,7 +398,7 @@ function clearInvalidDownstreamPicks(conference, games) {
   const conferenceWinner = getConferenceWinner(conference, games);
   if (
     state.picks.superBowl &&
-    !["AFC", "NFC"].some((side) => {
+    !CONFERENCES.some((side) => {
       const winner = side === conference ? conferenceWinner : getConferenceWinner(side);
       return winner?.name === state.picks.superBowl;
     })
@@ -482,21 +414,21 @@ function getConferenceWinner(conference, precomputedGames) {
 }
 
 function renderBracket() {
-  const afcGames = getConferenceGames("AFC");
-  const nfcGames = getConferenceGames("NFC");
-  clearInvalidDownstreamPicks("AFC", afcGames);
-  clearInvalidDownstreamPicks("NFC", nfcGames);
+  const afcGames = getConferenceGames(CONFERENCES[0]);
+  const nfcGames = getConferenceGames(CONFERENCES[1]);
+  clearInvalidDownstreamPicks(CONFERENCES[0], afcGames);
+  clearInvalidDownstreamPicks(CONFERENCES[1], nfcGames);
 
-  renderConferenceBracket("AFC", elements.afcBracket, getConferenceGames("AFC"));
-  renderConferenceBracket("NFC", elements.nfcBracket, getConferenceGames("NFC"));
+  renderConferenceBracket(CONFERENCES[0], elements.afcBracket, getConferenceGames(CONFERENCES[0]));
+  renderConferenceBracket(CONFERENCES[1], elements.nfcBracket, getConferenceGames(CONFERENCES[1]));
   renderSuperBowl();
 }
 
 function renderConferenceBracket(conference, container, games) {
   container.innerHTML = "";
   const rounds = [
-    { key: "wildCard", label: "Wild Card" },
-    { key: "divisional", label: "Divisional" },
+    { key: "wildCard", label: IS_NBA ? "First Round" : "Wild Card" },
+    { key: "divisional", label: IS_NBA ? "Conference Semifinals" : "Divisional" },
     { key: "championship", label: `Pick ${conference} Champion` },
   ];
 
@@ -529,7 +461,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
     ? state.picks.superBowl
     : state.picks[conference][game.id];
 
-  game.teams.forEach((team, index) => {
+  teamsInBracketDisplayOrder(game.teams).forEach((team, index) => {
     const button = document.createElement("button");
     button.className = "team-pick";
     button.type = "button";
@@ -541,7 +473,7 @@ function createGameCard(conference, game, isSuperBowl = false) {
       button.setAttribute(
         "aria-label",
         isSuperBowl
-          ? `Choose ${team.name} as Super Bowl champion`
+          ? `Choose ${team.name} as ${FINAL_NAME} champion`
           : `Choose ${team.name} to win ${game.title}`,
       );
       if (isSelected) button.classList.add("selected");
@@ -587,8 +519,9 @@ function createGameCard(conference, game, isSuperBowl = false) {
 
 function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   if (state.predictionsLocked) return;
+  const wasComplete = allGamesPicked();
   const hadBothFinalists = Boolean(
-    getConferenceWinner("AFC") && getConferenceWinner("NFC"),
+    getConferenceWinner(CONFERENCES[0]) && getConferenceWinner(CONFERENCES[1]),
   );
 
   if (isSuperBowl) {
@@ -600,8 +533,12 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   updateSaveState(false);
   renderBracket();
 
+  if (!wasComplete && allGamesPicked()) {
+    window.siteAnalytics?.track("bracket_completed", { bracketType: SPORT });
+  }
+
   const hasBothFinalists = Boolean(
-    getConferenceWinner("AFC") && getConferenceWinner("NFC"),
+    getConferenceWinner(CONFERENCES[0]) && getConferenceWinner(CONFERENCES[1]),
   );
   if (!isSuperBowl && gameId === "conf" && !hadBothFinalists && hasBothFinalists) {
     requestAnimationFrame(() => {
@@ -611,11 +548,11 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
 }
 
 function renderSuperBowl() {
-  const afcWinner = getConferenceWinner("AFC");
-  const nfcWinner = getConferenceWinner("NFC");
+  const afcWinner = getConferenceWinner(CONFERENCES[0]);
+  const nfcWinner = getConferenceWinner(CONFERENCES[1]);
   const missingFinalists = [
-    !afcWinner ? "AFC champion" : "",
-    !nfcWinner ? "NFC champion" : "",
+    !afcWinner ? `${CONFERENCES[0]} champion` : "",
+    !nfcWinner ? `${CONFERENCES[1]} champion` : "",
   ].filter(Boolean);
 
   elements.superBowlStatus.textContent = missingFinalists.length
@@ -624,7 +561,7 @@ function renderSuperBowl() {
 
   const game = {
     id: "super-bowl",
-    title: afcWinner && nfcWinner ? "Pick the Super Bowl champion" : "Super Bowl",
+    title: afcWinner && nfcWinner ? `Pick the ${FINAL_NAME} champion` : FINAL_NAME,
     teams: [afcWinner, nfcWinner],
   };
   elements.superBowlGame.innerHTML = "";
@@ -646,9 +583,9 @@ function renderSuperBowl() {
 }
 
 function allGamesPicked() {
-  for (const conference of ["AFC", "NFC"]) {
+  for (const conference of CONFERENCES) {
     const picks = state.picks[conference];
-    const required = ["wc-2-7", "wc-3-6", "wc-4-5", "div-1", "div-2", "conf"];
+    const required = IS_NBA ? ["r1-1-8", "r1-4-5", "r1-2-7", "r1-3-6", "div-1", "div-2", "conf"] : ["wc-2-7", "wc-3-6", "wc-4-5", "div-1", "div-2", "conf"];
     if (required.some((id) => !picks[id])) return false;
   }
   return Boolean(state.picks.superBowl);
@@ -693,7 +630,7 @@ async function savePrediction() {
     });
     state.savedAt = saved.savedAt;
     state.savedPrediction = saved;
-    window.siteAnalytics?.track("prediction_saved");
+    window.siteAnalytics?.track("prediction_saved", { bracketType: SPORT });
     updateSaveState(true);
     renderSavedPrediction();
     if (elements.leaderboardBody) await loadLeaderboard();
@@ -717,20 +654,20 @@ function updateSaveState(saved) {
 
 function openPrediction(scrollToPredictor = true) {
   if (PAGE !== "picks") {
-    window.location.assign(LOCAL_PREVIEW ? "/picks.html" : "/picks");
+    window.location.assign(sportUrl(LOCAL_PREVIEW ? "/picks.html" : "/picks"));
     return;
   }
   closeAccountModal();
   const stored = state.savedPrediction;
   state.seeds = stored?.seeds
     ? clone(stored.seeds)
-    : { AFC: Array(7).fill(""), NFC: Array(7).fill("") };
+    : emptySeeds();
   state.divisionWinners = stored?.divisionWinners
     ? clone(stored.divisionWinners)
     : createEmptyDivisionWinners();
 
   if (stored?.seeds && !stored?.divisionWinners) {
-    for (const conference of ["AFC", "NFC"]) {
+    for (const conference of CONFERENCES) {
       stored.seeds[conference].slice(0, 4).forEach((team) => {
         const division = TEAM_DIVISIONS[team]?.split(" ")[1];
         if (division) state.divisionWinners[conference][division] = team;
@@ -792,7 +729,7 @@ function createScoreSummary(score) {
 
   const status = document.createElement("p");
   status.className = "score-summary-status";
-  status.textContent = score.status;
+  status.textContent = seasonStatusText(score.status);
 
   const splits = document.createElement("div");
   splits.className = "score-splits";
@@ -879,4 +816,224 @@ async function deletePrediction() {
   } catch (error) {
     showToast(`Could not delete: ${error.message}`);
   }
+}
+
+let openTeamCombobox = null;
+
+function closeTeamCombobox() {
+  if (!openTeamCombobox) return;
+  const { button, listbox, anchor } = openTeamCombobox;
+  button.setAttribute("aria-expanded", "false");
+  button.removeAttribute("aria-activedescendant");
+  listbox.hidden = true;
+  anchor.classList.remove("is-open", "opens-up");
+  anchor.closest(".conference-card")?.classList.remove("has-open-seed");
+  openTeamCombobox = null;
+}
+
+document.addEventListener("pointerdown", (event) => {
+  if (openTeamCombobox && !openTeamCombobox.anchor.contains(event.target)) {
+    closeTeamCombobox();
+  }
+});
+
+document.addEventListener("focusin", (event) => {
+  if (openTeamCombobox && !openTeamCombobox.anchor.contains(event.target)) {
+    closeTeamCombobox();
+  }
+});
+
+function createTeamCombobox({
+  anchor, button, id, label, placeholder, selected, groups, disabled, isUnavailable, onSelect,
+}) {
+  button.id = `${id}-button`;
+  button.disabled = disabled;
+  button.setAttribute("role", "combobox");
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", `${label}: ${selected || placeholder}`);
+
+  const listbox = document.createElement("div");
+  listbox.className = "seed-listbox";
+  listbox.id = `${id}-options`;
+  listbox.setAttribute("role", "listbox");
+  listbox.setAttribute("aria-label", `${label} teams, ordered by projected wins`);
+  listbox.hidden = true;
+  button.setAttribute("aria-controls", listbox.id);
+  anchor.append(listbox);
+
+  const options = [];
+  groups.forEach((group) => {
+    if (!group.teams.length) return;
+    let parent = listbox;
+    if (group.label) {
+      parent = document.createElement("div");
+      parent.className = "seed-option-group";
+      parent.setAttribute("role", "group");
+      parent.setAttribute("aria-label", group.label);
+      const heading = document.createElement("div");
+      heading.className = "seed-option-group-label";
+      heading.setAttribute("aria-hidden", "true");
+      heading.textContent = group.label;
+      parent.append(heading);
+      listbox.append(parent);
+    }
+
+    group.teams.forEach((team) => {
+      const option = document.createElement("div");
+      const optionIndex = options.length;
+      const wins = projectedWins(team).toFixed(1);
+      const unavailable = isUnavailable(team);
+      option.className = "seed-option";
+      option.id = `${listbox.id}-option-${optionIndex}`;
+      option.dataset.team = team;
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(team === selected));
+      option.setAttribute("aria-label", `${team}, ${wins} projected wins`);
+      if (unavailable) option.setAttribute("aria-disabled", "true");
+      const logo = createTeamLogo(team, "seed-option-logo");
+      logo.alt = "";
+      logo.setAttribute("aria-hidden", "true");
+      const teamName = document.createElement("span");
+      teamName.className = "seed-option-name";
+      teamName.textContent = team;
+      const winTotal = document.createElement("span");
+      winTotal.className = "seed-option-wins";
+      winTotal.textContent = wins;
+      option.append(logo, teamName, winTotal);
+      parent.append(option);
+      options.push(option);
+      option.addEventListener("pointermove", (event) => {
+        if (event.pointerType === "mouse" && openTeamCombobox?.button === button && !unavailable) {
+          setActiveOption(optionIndex);
+        }
+      });
+      option.addEventListener("click", () => {
+        if (!unavailable) chooseTeam(team);
+      });
+    });
+  });
+
+  let activeIndex = -1;
+
+  function setActiveOption(nextIndex) {
+    if (activeIndex >= 0) options[activeIndex].classList.remove("is-active");
+    activeIndex = nextIndex;
+    const active = options[activeIndex];
+    active.classList.add("is-active");
+    button.setAttribute("aria-activedescendant", active.id);
+    active.scrollIntoView({ block: "nearest" });
+  }
+
+  function moveActive(direction) {
+    let next = activeIndex;
+    do {
+      next = (next + direction + options.length) % options.length;
+    } while (options[next].getAttribute("aria-disabled") === "true" && next !== activeIndex);
+    if (options[next].getAttribute("aria-disabled") !== "true") setActiveOption(next);
+  }
+
+  function openListbox(direction = 0) {
+    if (button.disabled || !options.length) return;
+    closeTeamCombobox();
+    listbox.hidden = false;
+    anchor.classList.add("is-open");
+    anchor.closest(".conference-card")?.classList.add("has-open-seed");
+    const below = window.innerHeight - anchor.getBoundingClientRect().bottom;
+    const above = anchor.getBoundingClientRect().top;
+    if (below < 300 && above > below) anchor.classList.add("opens-up");
+    const space = anchor.classList.contains("opens-up") ? above : below;
+    listbox.style.maxHeight = `${Math.max(120, Math.min(360, space - 16))}px`;
+    button.setAttribute("aria-expanded", "true");
+    openTeamCombobox = { button, listbox, anchor };
+    const selectedIndex = options.findIndex((option) => option.dataset.team === selected);
+    const enabled = options.filter((option) => option.getAttribute("aria-disabled") !== "true");
+    const initial = selectedIndex >= 0 ? options[selectedIndex] : direction < 0 ? enabled.at(-1) : enabled[0];
+    setActiveOption(options.indexOf(initial));
+    if (direction && selectedIndex >= 0) moveActive(direction);
+  }
+
+  function chooseTeam(team) {
+    if (isUnavailable(team)) return;
+    closeTeamCombobox();
+    if (team === selected) return;
+    onSelect(team);
+    document.getElementById(button.id)?.focus();
+  }
+
+  button.addEventListener("click", () => {
+    if (openTeamCombobox?.button === button) closeTeamCombobox();
+    else openListbox();
+  });
+  button.addEventListener("keydown", (event) => {
+    const isOpen = openTeamCombobox?.button === button;
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      closeTeamCombobox();
+    } else if (event.key === "Tab" && isOpen) {
+      closeTeamCombobox();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (isOpen) moveActive(event.key === "ArrowDown" ? 1 : -1);
+      else openListbox(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Home" || event.key === "End") {
+      if (!isOpen) return;
+      event.preventDefault();
+      const ordered = event.key === "Home" ? options : [...options].reverse();
+      const target = ordered.find((option) => option.getAttribute("aria-disabled") !== "true");
+      if (target) setActiveOption(options.indexOf(target));
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (isOpen) chooseTeam(options[activeIndex].dataset.team);
+      else openListbox();
+    }
+  });
+}
+
+function appendSeedRow({ conference, container, index, selected, groups, disabled, placeholder, isUnavailable }) {
+  const row = document.createElement("div");
+  row.className = "seed-row";
+  if (!IS_NBA && index >= 4) row.classList.add("wild-card-seed");
+  row.classList.toggle("locked", disabled);
+  const number = document.createElement("span");
+  number.className = "seed-number";
+  number.textContent = index + 1;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "seed-combobox";
+  button.dataset.conference = conference;
+  button.dataset.seedIndex = index;
+  row.append(number);
+  completeSeedRow(row, selected, button, placeholder);
+  createTeamCombobox({
+    anchor: row,
+    button,
+    id: `seed-${conference.toLowerCase()}-${index}`,
+    label: `${conference} seed ${index + 1}`,
+    placeholder,
+    selected,
+    groups,
+    disabled,
+    isUnavailable,
+    onSelect: (team) => handleSeedChange({ target: { dataset: button.dataset, value: team } }),
+  });
+  container.append(row);
+}
+
+function renderNbaSeeds(conference, container) {
+  closeTeamCombobox();
+  container.replaceChildren();
+  const selectedTeams = new Set(state.seeds[conference].filter(Boolean));
+  state.seeds[conference].forEach((selected, index) => {
+    appendSeedRow({
+      conference,
+      container,
+      index,
+      selected,
+      groups: [{ teams: sortTeamsByProjection(TEAMS[conference]) }],
+      disabled: state.predictionsLocked,
+      placeholder: `Select seed ${index + 1}`,
+      isUnavailable: (team) => team !== selected && selectedTeams.has(team),
+    });
+  });
 }

@@ -291,22 +291,11 @@ class PredictionScoringTests(unittest.TestCase):
         self.assertIsNone(after["entries"][1]["rank"])
 
     def test_group_leaderboard_uses_its_selected_upset_edge_method(self):
-        class FakeTable:
-            def __init__(self, items):
-                self.items = items
-
-            def scan(self, **_kwargs):
-                return {"Items": self.items}
-
-        group_rows = FakeTable([
-            {"recordType": "membership", "groupId": "group", "userId": "one"},
-        ])
-        profiles = FakeTable([
-            {"profileKey": "user#one", "recordType": "profile", "leaderboardName": "Alpha"},
-        ])
-        predictions = FakeTable([
-            {"profileKey": "one", "picks": {"AFC": {"wc-2-7": "Miami Dolphins"}}},
-        ])
+        from test_auth import FakeTable, FakeGroupTable
+        membership = {"groupKey": "membership#group#user#one", "recordType": "membership", "groupId": "group", "userId": "one"}
+        group_rows = FakeGroupTable({membership["groupKey"]: membership})
+        profiles = FakeTable({"user#one": {"profileKey": "user#one", "recordType": "profile", "leaderboardName": "Alpha"}})
+        predictions = FakeTable({"one": {"profileKey": "one", "picks": {"AFC": {"wc-2-7": "Miami Dolphins"}}}})
         results = {"season": 2026, "roundWinners": {"wildCard": ["Miami Dolphins"]}}
         with mock.patch.object(lambda_app, "get_group", return_value={
                  "groupName": "Upsets", "scoringOption": "vegas"

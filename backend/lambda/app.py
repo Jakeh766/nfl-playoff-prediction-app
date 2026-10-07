@@ -1,10 +1,13 @@
-"""AWS Lambda API for NFL win totals and saved playoff predictions."""
+"""AWS Lambda API for NFL/NBA predictions, scoring, profiles, and groups."""
 
 from __future__ import annotations
 
 import calendar
+from datetime import datetime
+from contextvars import ContextVar
 import hashlib
 import hmac
+from html import unescape
 import json
 import os
 import re
@@ -28,22 +31,21 @@ PREDICTION_LOCK_AT = os.environ.get(
 )
 RESULTS_PATH = Path(__file__).with_name("season_results.json")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._'’-]*[A-Za-z0-9]")
-ANALYTICS_ID_PATTERN = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
-    re.IGNORECASE,
-)
 ANALYTICS_EVENTS = {
     "account_created",
+    "account_deleted",
+    "bracket_created",
+    "bracket_completed",
     "group_created",
     "group_invite_joined",
     "group_joined",
-    "page_view",
     "prediction_saved",
     "sign_in",
 }
-ANALYTICS_PAGES = {"/", "/leaderboard", "/picks", "/scoring"}
+ANALYTICS_PAGES = {"/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"}
 
 EXACT_SEED_POINTS = (5, 3, 3, 3, 2, 2, 2)
+NBA_EXACT_SEED_POINTS = (6, 4, 4, 4, 3, 3, 3, 3)
 
 SCORING_RULES = {
     "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 70},
@@ -101,6 +103,143 @@ FALLBACK_TOTALS = {
     "Tennessee Titans": 6.5,
     "Washington Commanders": 7.5,
 }
+
+
+# Request-local league selection prevents warm Lambda invocations leaking sports.
+SPORT = ContextVar("sport", default="nfl")
+NBA = json.loads(Path(__file__).with_name("nba_season.json").read_text(encoding="utf-8"))
+
+# Server-owned membership; never infer conferences or divisions from a submission.
+NFL_DIVISIONS = {
+    "AFC": {
+        "North": ("Baltimore Ravens", "Cincinnati Bengals", "Cleveland Browns", "Pittsburgh Steelers"),
+        "South": ("Houston Texans", "Indianapolis Colts", "Jacksonville Jaguars", "Tennessee Titans"),
+        "East": ("Buffalo Bills", "Miami Dolphins", "New England Patriots", "New York Jets"),
+        "West": ("Kansas City Chiefs", "Los Angeles Chargers", "Denver Broncos", "Las Vegas Raiders"),
+    },
+    "NFC": {
+        "North": ("Minnesota Vikings", "Green Bay Packers", "Chicago Bears", "Detroit Lions"),
+        "South": ("Tampa Bay Buccaneers", "Atlanta Falcons", "New Orleans Saints", "Carolina Panthers"),
+        "East": ("Philadelphia Eagles", "Dallas Cowboys", "Washington Commanders", "New York Giants"),
+        "West": ("San Francisco 49ers", "Los Angeles Rams", "Seattle Seahawks", "Arizona Cardinals"),
+    },
+}
+
+
+def require_keys(value, keys, label):
+    if not isinstance(value, dict) or set(value) != set(keys):
+        raise ValueError(f"{label} must contain exactly the expected properties")
+
+
+def validate_nfl_bracket(prediction):
+    seeds = prediction["seeds"]
+    picks = prediction["picks"]
+    divisions = prediction["divisionWinners"]
+    require_keys(divisions, NFL_DIVISIONS, "divisionWinners")
+    finalists = []
+    for conference, membership in NFL_DIVISIONS.items():
+        selected = seeds[conference]
+        teams = {team for division in membership.values() for team in division}
+        if (not isinstance(selected, list) or len(selected) != 7
+                or any(not isinstance(team, str) or team not in teams for team in selected)
+                or len(set(selected)) != 7):
+            raise ValueError(f"Choose seven different {conference} teams")
+        winners = divisions[conference]
+        require_keys(winners, membership, f"{conference} division winners")
+        for division, members in membership.items():
+            if not isinstance(winners[division], str) or winners[division] not in members:
+                raise ValueError(f"Invalid {conference} {division} winner")
+        if set(selected[:4]) != set(winners.values()):
+            raise ValueError("Seeds 1–4 must be the four division winners")
+
+        choices = picks[conference]
+        advanced = [selected[0]]  # The first seed has a Wild Card bye.
+        for game, (a, b) in zip(first_round_games(), ((2, 7), (3, 6), (4, 5))):
+            winner = choices[game]
+            if not isinstance(winner, str) or winner not in (selected[a-1], selected[b-1]):
+                raise ValueError("Wild Card winner must be in its game")
+            advanced.append(winner)
+        advanced.sort(key=selected.index)
+        divisional_winners = []
+        # Reseed: first seed plays the lowest surviving seed; the others meet.
+        for game, participants in (("div-1", (advanced[0], advanced[3])),
+                                   ("div-2", (advanced[1], advanced[2]))):
+            winner = choices[game]
+            if not isinstance(winner, str) or winner not in participants:
+                raise ValueError("Divisional winner must advance into its reseeded game")
+            divisional_winners.append(winner)
+        if not isinstance(choices["conf"], str) or choices["conf"] not in divisional_winners:
+            raise ValueError("Conference champion must win its Divisional game")
+        finalists.append(choices["conf"])
+    if not isinstance(picks["superBowl"], str) or picks["superBowl"] not in finalists:
+        raise ValueError("Super Bowl champion must be an AFC or NFC champion")
+
+
+def conferences():
+    return ("East", "West") if SPORT.get() == "nba" else ("AFC", "NFC")
+
+
+def exact_seed_values():
+    return NBA_EXACT_SEED_POINTS if SPORT.get() == "nba" else EXACT_SEED_POINTS
+
+
+def first_round_games():
+    return ("r1-1-8", "r1-4-5", "r1-2-7", "r1-3-6") if SPORT.get() == "nba" else ("wc-2-7", "wc-3-6", "wc-4-5")
+
+
+def scoring_rules():
+    if SPORT.get() != "nba":
+        return SCORING_RULES
+    return {
+        **SCORING_RULES,
+        "playoffField": {"label": "Correct playoff team", "points": 5, "maximum": 80},
+        "divisionWinners": {"label": "Not scored in NBA", "points": 0, "maximum": 0},
+        "exactSeeds": {"label": "Exact playoff seed", "maximum": sum(NBA_EXACT_SEED_POINTS) * 2},
+        "wildCard": {"label": "Correct first-round winner", "points": 5, "maximum": 40},
+        "divisional": {"label": "Correct conference semifinal winner", "points": 10, "maximum": 40},
+        "superBowlChampion": {"label": "Correct NBA Finals champion", "points": 40, "maximum": 40},
+    }
+
+
+def maximum_score():
+    return sum(rule["maximum"] for rule in scoring_rules().values())
+
+
+def prediction_key(user_id):
+    return f"nba#{NBA['season']}#{user_id}" if SPORT.get() == "nba" else user_id
+
+
+def validate_nba_bracket(prediction):
+    seeds, picks = prediction.get("seeds"), prediction.get("picks")
+    if not isinstance(seeds, dict) or not isinstance(picks, dict):
+        raise ValueError("Seeds and picks must be objects")
+    finalists = []
+    for conference, teams in NBA["teams"].items():
+        selected = seeds.get(conference)
+        if (not isinstance(selected, list) or len(selected) != 8
+                or any(not isinstance(team, str) or team not in teams for team in selected)
+                or len(set(selected)) != 8):
+            raise ValueError(f"Choose eight different {conference} teams")
+        choices = picks.get(conference)
+        if not isinstance(choices, dict):
+            raise ValueError(f"Complete the {conference} bracket")
+        winners = []
+        for game, (a, b) in zip(first_round_games(), ((1, 8), (4, 5), (2, 7), (3, 6))):
+            winner = choices.get(game)
+            if winner not in (selected[a-1], selected[b-1]):
+                raise ValueError("First-round winner must be in its series")
+            winners.append(winner)
+        semifinalists = []
+        for index, game in enumerate(("div-1", "div-2")):
+            winner = choices.get(game)
+            if winner not in winners[index*2:index*2+2]:
+                raise ValueError("Semifinal winner must advance from its fixed bracket")
+            semifinalists.append(winner)
+        if choices.get("conf") not in semifinalists:
+            raise ValueError("Conference champion must win its semifinal")
+        finalists.append(choices["conf"])
+    if picks.get("superBowl") not in finalists:
+        raise ValueError("NBA champion must be a conference champion")
 
 
 def cache_table():
@@ -252,16 +391,57 @@ def scan_all(table) -> list[dict]:
         scan_arguments["ExclusiveStartKey"] = last_key
 
 
-def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic") -> dict:
-    results = load_season_results()
+def query_all(table, **arguments) -> list[dict]:
+    items = []
+    while True:
+        result = table.query(**arguments)
+        items.extend(result.get("Items", []))
+        if not result.get("LastEvaluatedKey"):
+            return items
+        arguments["ExclusiveStartKey"] = result["LastEvaluatedKey"]
+
+
+def batch_get(table, key_name: str, keys) -> list[dict]:
+    """Bound batches and retry throttled keys without returning partial rosters."""
+    keys = list(dict.fromkeys(keys))
+    items = []
+    for offset in range(0, len(keys), 100):
+        pending = {table.name: {"Keys": [{key_name: key} for key in keys[offset:offset + 100]],
+                                "ConsistentRead": True}}
+        for attempt in range(6):
+            result = table.meta.client.batch_get_item(RequestItems=pending)
+            items.extend(result.get("Responses", {}).get(table.name, []))
+            pending = result.get("UnprocessedKeys", {})
+            if not pending:
+                break
+            time.sleep(min(0.05 * 2 ** attempt, 1))
+        else:
+            raise RuntimeError("Group data is temporarily unavailable. Try again")
+    return items
+
+
+def scoring_result(entry: dict) -> tuple:
+    return (entry["total"], entry["regularSeason"], entry["playoffs"])
+
+
+def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = "classic", *, history=False, results=None) -> dict:
+    results = results if results is not None else load_season_results()
     profiles = {
         item["profileKey"].removeprefix("user#"): item
-        for item in scan_all(profiles_table())
+        for item in (scan_all(profiles_table()) if member_ids is None else
+                     batch_get(profiles_table(), "profileKey", [profile_item_key(user) for user in member_ids]))
         if item.get("recordType") == "profile"
         and item.get("profileKey", "").startswith("user#")
     }
     entries = []
-    for prediction in scan_all(predictions_table()):
+    predictions = (scan_all(predictions_table()) if member_ids is None else
+                   batch_get(predictions_table(), "profileKey", [prediction_key(user) for user in member_ids]))
+    for prediction in predictions:
+        if prediction.get("sport", "nfl") != SPORT.get():
+            continue
+        if SPORT.get() == "nba" and prediction.get("season") != NBA["season"]:
+            continue
+        prediction = {**prediction, "profileKey": prediction.get("ownerId", prediction.get("profileKey"))}
         if member_ids is not None and prediction.get("profileKey") not in member_ids:
             continue
         profile = profiles.get(prediction.get("profileKey"))
@@ -275,6 +455,8 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
         entries.append(
             {
                 "leaderboardName": profile["leaderboardName"],
+                **({"memberId": prediction["profileKey"]} if member_ids is not None else {}),
+                "hasPrediction": True,
                 "superBowl": predicted_picks.get("superBowl", ""),
                 "scores": {mode: {key: value.get(key, 0) for key in ("regularSeason", "playoffs", "total")}
                            for mode, value in scores.items()},
@@ -292,15 +474,20 @@ def build_leaderboard(member_ids: set[str] | None = None, scoring_option: str = 
             entry["leaderboardName"].casefold(),
         )
     )
+    previous, rank = None, None
     for position, entry in enumerate(entries, start=1):
-        entry["rank"] = position if entry["total"] > 0 else None
+        result_key = scoring_result(entry)
+        if result_key != previous:
+            rank = position
+        entry["rank"] = rank if entry["total"] > 0 else None
+        previous = result_key
 
     return {
         "season": results.get("season"),
         "status": results.get("status", "Results unavailable"),
         "updatedAt": results.get("updatedAt"),
-        "maximum": MAX_SCORE if scoring_option == "classic" else None,
-        "classicMaximum": MAX_SCORE,
+        "maximum": maximum_score() if scoring_option == "classic" else None,
+        "classicMaximum": maximum_score(),
         "entries": entries,
         "scoringOption": scoring_option,
     }
@@ -314,36 +501,30 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
     division_winners = prediction.get("divisionWinners", {})
     seeds = prediction.get("seeds", {})
     picks = prediction.get("picks", {})
-    score = score_prediction(prediction, load_season_results())
+    results = load_season_results()
+    score = score_prediction(prediction, results)
 
     return {
         "leaderboardName": profile["leaderboardName"],
         "savedAt": prediction.get("savedAt"),
-        "vegasScore": score_prediction(prediction, load_season_results(), "vegas"),
+        "vegasScore": score_prediction(prediction, results, "vegas"),
         "divisionWinners": {
             conference: {
                 division: division_winners.get(conference, {}).get(division, "")
                 for division in ("North", "South", "East", "West")
             }
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
         },
         "seeds": {
-            conference: list(seeds.get(conference, []))[:7]
-            for conference in ("AFC", "NFC")
+            conference: list(seeds.get(conference, []))[:len(exact_seed_values())]
+            for conference in conferences()
         },
         "picks": {
             conference: {
                 game_id: picks.get(conference, {}).get(game_id, "")
-                for game_id in (
-                    "wc-2-7",
-                    "wc-3-6",
-                    "wc-4-5",
-                    "div-1",
-                    "div-2",
-                    "conf",
-                )
+                for game_id in (*first_round_games(), "div-1", "div-2", "conf")
             }
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
         }
         | {"superBowl": picks.get("superBowl", "")},
         "bracketBuilt": bool(prediction.get("bracketBuilt")),
@@ -375,12 +556,14 @@ def get_public_bracket(leaderboard_name: str) -> dict | None:
     prediction = get_prediction(owner_id) if isinstance(owner_id, str) else None
     if not profile or not prediction:
         return None
-    if profile.get("leaderboardName", "").casefold() != normalized_name:
+    if normalize_leaderboard_name(profile.get("leaderboardName"))[1] != normalized_name:
         return None
     return public_bracket(profile, prediction)
 
 
 def load_season_results() -> dict:
+    if SPORT.get() == "nba":
+        return load_nba_results()
     if os.environ.get("RESULTS_TABLE"):
         try:
             item = results_table().get_item(
@@ -419,7 +602,7 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
     actual_playoff_teams = {
         team
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         for team in [
             *results.get("playoffTeams", {}).get(conference, []),
             *actual_seeds.get(conference, []),
@@ -428,14 +611,14 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
     }
     predicted_playoff_teams = {
         team
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         for team in predicted_seeds.get(conference, [])
         if team
     }
     playoff_field_hits = len(actual_playoff_teams & predicted_playoff_teams)
 
     division_hits = 0
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         for division in ("North", "South", "East", "West"):
             actual = actual_divisions.get(conference, {}).get(division)
             predicted = predicted_divisions.get(conference, {}).get(division)
@@ -445,15 +628,15 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
     seed_points = 0
     possible_seed_points = 0
     settled_seed_slots = 0
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         actual_conference_seeds = actual_seeds.get(conference, [])
         predicted_conference_seeds = predicted_seeds.get(conference, [])
         for index, actual in enumerate(actual_conference_seeds):
             if not actual:
                 continue
-            if index >= len(EXACT_SEED_POINTS):
+            if index >= len(exact_seed_values()):
                 continue
-            point_value = EXACT_SEED_POINTS[index]
+            point_value = exact_seed_values()[index]
             settled_seed_slots += 1
             possible_seed_points += point_value
             if index < len(predicted_conference_seeds):
@@ -463,14 +646,14 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
     predicted_wild_card = {
         predicted_picks.get(conference, {}).get(game_id)
-        for conference in ("AFC", "NFC")
-        for game_id in ("wc-2-7", "wc-3-6", "wc-4-5")
+        for conference in conferences()
+        for game_id in first_round_games()
     } - {None, ""}
     actual_wild_card = {team for team in round_winners.get("wildCard", []) if team}
 
     predicted_divisional = {
         predicted_picks.get(conference, {}).get(game_id)
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         for game_id in ("div-1", "div-2")
     } - {None, ""}
     actual_divisional = {
@@ -479,12 +662,12 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
 
     predicted_conference_champions = {
         conference: predicted_picks.get(conference, {}).get("conf")
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
     }
     actual_conference_champions = round_winners.get("conferenceChampions", {})
     conference_hits = sum(
         1
-        for conference in ("AFC", "NFC")
+        for conference in conferences()
         if actual_conference_champions.get(conference)
         and actual_conference_champions[conference]
         == predicted_conference_champions[conference]
@@ -509,7 +692,7 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
         "playoffField": len(actual_playoff_teams),
         "divisionWinners": sum(
             bool(team)
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
             for team in actual_divisions.get(conference, {}).values()
         ),
         "exactSeeds": settled_seed_slots,
@@ -517,13 +700,13 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
         "divisional": len(actual_divisional),
         "conferenceChampions": sum(
             bool(actual_conference_champions.get(conference))
-            for conference in ("AFC", "NFC")
+            for conference in conferences()
         ),
         "superBowlChampion": int(bool(actual_super_bowl_champion)),
     }
 
     breakdown = {}
-    for key, rule in SCORING_RULES.items():
+    for key, rule in scoring_rules().items():
         points = seed_points if key == "exactSeeds" else hit_counts[key] * rule["points"]
         possible = (
             possible_seed_points
@@ -561,20 +744,23 @@ def score_prediction(prediction: dict, results: dict | None = None, scoring_opti
         "playoffs": playoffs,
         "total": regular_season + playoffs,
         "possible": sum(category["possible"] for category in breakdown.values()),
-        "maximum": MAX_SCORE,
+        "maximum": maximum_score(),
     }
 
 
 def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     """Weight each correct pick by its team's frozen preseason win total."""
     classic = score_prediction(prediction, results)
-    with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
-        snapshot = json.load(file)
+    if SPORT.get() == "nba":
+        snapshot = NBA
+    else:
+        with Path(__file__).with_name("scoring_odds.json").open(encoding="utf-8") as file:
+            snapshot = json.load(file)
     if snapshot["season"] != results.get("season"):
         raise ValueError("Upset Edge scoring needs a market snapshot for this season")
     totals = snapshot["totals"]
-    earned = {key: Decimal("0.00") for key in SCORING_RULES}
-    available = {key: Decimal("0.00") for key in SCORING_RULES}
+    earned = {key: Decimal("0.00") for key in scoring_rules()}
+    available = {key: Decimal("0.00") for key in scoring_rules()}
 
     def rounded(value: Decimal) -> Decimal:
         return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -584,8 +770,8 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
             return
         if team not in totals:
             raise ValueError(f"Missing frozen Vegas win total for {team}")
-        multiplier = Decimal("1") + Decimal("0.10") * (
-            Decimal("8.5") - Decimal(str(totals[team]))
+        multiplier = Decimal("1") + Decimal("0.02" if SPORT.get() == "nba" else "0.10") * (
+            Decimal("41" if SPORT.get() == "nba" else "8.5") - Decimal(str(totals[team]))
         )
         points = rounded(Decimal(base) * multiplier)
         available[category] += points
@@ -594,20 +780,20 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
 
     predicted_seeds = prediction.get("seeds", {})
     actual_seeds = results.get("seeds", {})
-    predicted_field = {team for conference in ("AFC", "NFC")
+    predicted_field = {team for conference in conferences()
                        for team in predicted_seeds.get(conference, []) if team}
-    actual_field = {team for conference in ("AFC", "NFC")
+    actual_field = {team for conference in conferences()
                     for team in [
                         *results.get("playoffTeams", {}).get(conference, []),
                         *actual_seeds.get(conference, []),
                     ] if team}
     for team in actual_field:
         add("playoffField", team, team in predicted_field, 5)
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         seeds = predicted_seeds.get(conference, [])
-        for index, team in enumerate(actual_seeds.get(conference, [])[:7]):
+        for index, team in enumerate(actual_seeds.get(conference, [])[:len(exact_seed_values())]):
             add("exactSeeds", team, index < len(seeds) and seeds[index] == team,
-                EXACT_SEED_POINTS[index])
+                exact_seed_values()[index])
         for division in ("North", "South", "East", "West"):
             team = results.get("divisionWinners", {}).get(conference, {}).get(division)
             selected = prediction.get("divisionWinners", {}).get(conference, {}).get(division)
@@ -616,14 +802,14 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
     picks = prediction.get("picks", {})
     winners = results.get("roundWinners", {})
     for category, games, base in (
-        ("wildCard", ("wc-2-7", "wc-3-6", "wc-4-5"), 5),
+        ("wildCard", first_round_games(), 5),
         ("divisional", ("div-1", "div-2"), 10),
     ):
         selected = {picks.get(conference, {}).get(game)
-                    for conference in ("AFC", "NFC") for game in games}
+                    for conference in conferences() for game in games}
         for team in set(winners.get(category, [])):
             add(category, team, team in selected, base)
-    for conference in ("AFC", "NFC"):
+    for conference in conferences():
         team = winners.get("conferenceChampions", {}).get(conference)
         add("conferenceChampions", team, picks.get(conference, {}).get("conf") == team, 20)
     team = winners.get("superBowlChampion")
@@ -656,7 +842,7 @@ def score_vegas_prediction(prediction: dict, results: dict) -> dict:
         "playoffs": float(playoffs),
         "total": float(total),
         "possible": float(possible),
-        "classicMaximum": MAX_SCORE, "maximum": None,
+        "classicMaximum": maximum_score(), "maximum": None,
     }
 
 
@@ -745,6 +931,8 @@ def save_cache(payload: dict) -> None:
 
 
 def get_win_totals() -> dict:
+    if SPORT.get() == "nba":
+        return get_nba_win_totals()
     cached = None
     try:
         cached = load_cache()
@@ -795,7 +983,7 @@ def response(status_code: int, payload: dict) -> dict:
 def parse_body(event) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
-    except (TypeError, json.JSONDecodeError) as error:
+    except (TypeError, json.JSONDecodeError, RecursionError) as error:
         raise ValueError("Request body must be valid JSON") from error
     if not isinstance(body, dict):
         raise ValueError("Request body must be a JSON object")
@@ -808,39 +996,32 @@ def record_analytics_event(event: dict) -> None:
 
     payload = parse_body(event)
     event_name = payload.get("event")
+    if event_name == "active_time":
+        from engagement import record
+        record(event, payload)
+        return
     page = payload.get("page")
-    session_id = payload.get("sessionId")
-    visitor_id = payload.get("visitorId")
-
+    bracket_type = payload.get("bracketType")
     if not isinstance(event_name, str) or event_name not in ANALYTICS_EVENTS:
         raise ValueError("Unknown analytics event")
     if not isinstance(page, str) or page not in ANALYTICS_PAGES:
         raise ValueError("Unknown analytics page")
-    if not isinstance(session_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(
-        session_id
-    ):
-        raise ValueError("Invalid analytics session")
-    if not isinstance(visitor_id, str) or not ANALYTICS_ID_PATTERN.fullmatch(
-        visitor_id
-    ):
-        raise ValueError("Invalid analytics visitor")
-
-    print(
-        json.dumps(
-            {
-                "type": "site_analytics",
-                "environment": os.environ.get("ENVIRONMENT"),
-                "event": event_name,
-                "page": page,
-                "sessionId": session_id,
-                "visitorId": visitor_id,
-            },
-            separators=(",", ":"),
-        )
-    )
+    bracket_event = event_name in {"bracket_created", "bracket_completed", "prediction_saved"}
+    if bracket_event and (not isinstance(bracket_type, str) or bracket_type not in {"nfl", "nba"}):
+        raise ValueError("Unknown bracket type")
+    headers = {key.lower(): value for key, value in (event.get("headers") or {}).items()}
+    if headers.get("sec-gpc") == "1" or headers.get("dnt") == "1":
+        return
+    # Only fixed coarse fields reach logs. Never retain browser/account identifiers.
+    print(json.dumps({"type": "site_analytics", "environment": os.environ.get("ENVIRONMENT"),
+                      "event": event_name, "page": page,
+                      **({"bracketType": bracket_type} if bracket_event else {})}, separators=(",", ":")))
 
 
 def validate_prediction(user_id: str, prediction: dict) -> dict:
+    require_keys(prediction, ("divisionWinners", "seeds", "picks", "bracketBuilt"), "Prediction")
+    if prediction["bracketBuilt"] is not True:
+        raise ValueError("Save a completed bracket")
     division_winners = prediction.get("divisionWinners")
     seeds = prediction.get("seeds")
     picks = prediction.get("picks")
@@ -854,23 +1035,43 @@ def validate_prediction(user_id: str, prediction: dict) -> dict:
     if not isinstance(picks, dict):
         raise ValueError("picks must be an object")
 
-    for conference in ("AFC", "NFC"):
-        if not isinstance(seeds.get(conference), list) or len(seeds[conference]) != 7:
-            raise ValueError(f"{conference} seeds must contain seven teams")
+    require_keys(seeds, conferences(), "Seeds")
+    require_keys(picks, (*conferences(), "superBowl"), "Picks")
+    for conference in conferences():
+        require_keys(picks[conference], (*first_round_games(), "div-1", "div-2", "conf"),
+                     f"{conference} picks")
+
+    if SPORT.get() == "nba":
+        # New NBA brackets use empty conference objects; reopened records use {}.
+        # Neither form may carry division picks or arbitrary nested properties.
+        if division_winners:
+            require_keys(division_winners, conferences(), "NBA division winners")
+            for conference in conferences():
+                require_keys(division_winners[conference], (), f"{conference} division winners")
+        validate_nba_bracket(prediction)
+        seeds = {conference: seeds[conference] for conference in conferences()}
+        picks = {conference: {game: picks[conference][game]
+                              for game in (*first_round_games(), "div-1", "div-2", "conf")}
+                 for conference in conferences()} | {"superBowl": picks["superBowl"]}
+    else:
+        validate_nfl_bracket(prediction)
 
     saved_at = int(time.time() * 1000)
     return {
-        "profileKey": user_id,
-        "divisionWinners": division_winners,
+        "profileKey": prediction_key(user_id),
+        "ownerId": user_id,
+        "sport": SPORT.get(),
+        "season": NBA["season"] if SPORT.get() == "nba" else int(PREDICTION_LOCK_AT[:4]),
+        "divisionWinners": {} if SPORT.get() == "nba" else division_winners,
         "seeds": seeds,
         "picks": picks,
-        "bracketBuilt": bool(prediction.get("bracketBuilt")),
+        "bracketBuilt": True,
         "savedAt": saved_at,
     }
 
 
 def get_prediction(user_id: str) -> dict | None:
-    result = predictions_table().get_item(Key={"profileKey": user_id})
+    result = predictions_table().get_item(Key={"profileKey": prediction_key(user_id)})
     return result.get("Item")
 
 
@@ -881,12 +1082,26 @@ def put_prediction(user_id: str, event: dict) -> dict:
 
 
 def delete_prediction(user_id: str) -> None:
-    predictions_table().delete_item(Key={"profileKey": user_id})
+    predictions_table().delete_item(Key={"profileKey": prediction_key(user_id)})
 
 
 GROUP_PASSWORD_ITERATIONS = 310_000
 GROUP_INVITE_CODE_PATTERN = re.compile(r"[A-Za-z0-9_-]{32}")
 GROUP_ID_PATTERN = re.compile(r"[0-9a-f-]{36}")
+GROUP_SPORTS = ("nfl", "nba")
+
+
+def group_sports(group: dict) -> list[str]:
+    """Groups created before sport selection remain NFL groups."""
+    return group.get("sports", ["nfl"])
+
+
+def validate_group_sports(value) -> list[str]:
+    if not isinstance(value, list) or not value or any(
+        sport not in GROUP_SPORTS for sport in value
+    ) or len(set(value)) != len(value):
+        raise ValueError("Choose NFL, NBA, or both for the group")
+    return [sport for sport in GROUP_SPORTS if sport in value]
 
 
 def normalize_group_name(value) -> tuple[str, str]:
@@ -970,62 +1185,110 @@ def public_group(
         "groupId": group["groupId"],
         "groupName": group["groupName"],
         "createdAt": group["createdAt"],
-        "scoringOption": group.get("scoringOption", "classic"),
+        "scoringOption": group_scoring_option(group),
+        "scoringOptions": {sport: group_scoring_option(group, sport) for sport in group_sports(group)},
+        "sports": group_sports(group),
         "isCommissioner": bool(user_id and commissioner_id == user_id),
         # Kept for older deployed clients while commissioner terminology rolls out.
         "isCreator": bool(user_id and commissioner_id == user_id),
     }
 
 
+def group_scoring_option(group: dict, sport: str | None = None) -> str:
+    """Legacy groups retain their shared mode until a sport is explicitly changed."""
+    return group.get("scoringOptions", {}).get(sport or SPORT.get(), group.get("scoringOption", "classic"))
+
+
+def group_scoring_lock() -> dict:
+    """Competition rules lock at the real deadline, even when dev picks are reopened."""
+    window = prediction_window()
+    deadline = calendar.timegm(time.strptime(window["lockAt"], "%Y-%m-%dT%H:%M:%SZ")) * 1000
+    return {"lockAt": window["lockAt"], "locked": window["serverTime"] >= deadline}
+
+
 def prediction_window(now_seconds: float | None = None) -> dict:
+    lock_at = NBA["lockAt"] if SPORT.get() == "nba" else PREDICTION_LOCK_AT
+    dev_nfl_unlocked = os.environ.get("ENVIRONMENT") == "dev" and SPORT.get() == "nfl"
     try:
         lock_seconds = calendar.timegm(
-            time.strptime(PREDICTION_LOCK_AT, "%Y-%m-%dT%H:%M:%SZ")
+            time.strptime(lock_at, "%Y-%m-%dT%H:%M:%SZ")
         )
     except ValueError as error:
         raise RuntimeError("PREDICTION_LOCK_AT must be an ISO-8601 UTC timestamp") from error
 
     server_seconds = time.time() if now_seconds is None else now_seconds
     return {
-        "lockAt": PREDICTION_LOCK_AT,
-        "locked": server_seconds >= lock_seconds,
+        "lockAt": lock_at,
+        "locked": server_seconds >= lock_seconds and not dev_nfl_unlocked,
+        "devNflUnlocked": dev_nfl_unlocked,
         "serverTime": int(server_seconds * 1000),
-        "season": int(PREDICTION_LOCK_AT[:4]),
+        "season": NBA["season"] if SPORT.get() == "nba" else int(PREDICTION_LOCK_AT[:4]),
     }
 
 
 def get_group(group_id: str) -> dict | None:
-    result = groups_table().get_item(Key={"groupKey": group_item_key(group_id)})
+    result = groups_table().get_item(Key={"groupKey": group_item_key(group_id)}, ConsistentRead=True)
     item = result.get("Item")
     return item if item and item.get("recordType") == "group" else None
 
 
 def is_group_member(group_id: str, user_id: str) -> bool:
     result = groups_table().get_item(
-        Key={"groupKey": membership_item_key(group_id, user_id)}
+        Key={"groupKey": membership_item_key(group_id, user_id)}, ConsistentRead=True
     )
-    return bool(result.get("Item"))
+    return result.get("Item", {}).get("recordType") == "membership"
+
+
+def group_records(group_id: str, prefix: str = "") -> list[dict]:
+    values = {":group": group_id}
+    condition = "groupId = :group"
+    if prefix:
+        condition += " AND begins_with(groupKey, :prefix)"
+        values[":prefix"] = prefix
+    return query_all(groups_table(), IndexName="group-records",
+                     KeyConditionExpression=condition, ExpressionAttributeValues=values)
+
+
+def group_memberships(group_id: str) -> list[dict]:
+    candidates = group_records(group_id, "membership#")
+    # GSIs are eventual. Recheck base records so kicked members cannot linger.
+    return [item for item in batch_get(groups_table(), "groupKey",
+                                      [item["groupKey"] for item in candidates])
+            if item.get("recordType") == "membership"]
+
+
+def user_memberships(user_id: str) -> list[dict]:
+    candidates = query_all(groups_table(), IndexName="user-groups",
+                           KeyConditionExpression="userId = :user",
+                           ExpressionAttributeValues={":user": user_id})
+    return [item for item in batch_get(groups_table(), "groupKey",
+                                      [item["groupKey"] for item in candidates])
+            if item.get("recordType") == "membership"]
+
+
+def sport_eligibility(group: dict) -> dict:
+    # Legacy records have no activation history. Preserve their recorded sports.
+    return group.get("sportEligibility", {
+        sport: [{"enabledAt": group["createdAt"]}] for sport in group_sports(group)
+    })
+
+
+def sport_eligible_at(group: dict, sport: str, cutoff: int) -> bool:
+    return any(period["enabledAt"] <= cutoff < period.get("disabledAt", cutoff + 1)
+               for period in sport_eligibility(group).get(sport, []))
 
 
 def list_groups(user_id: str) -> dict:
     table = groups_table()
-    items = scan_all(table)
-    memberships = [
-        item
-        for item in items
-        if item.get("recordType") == "membership" and item.get("userId") == user_id
-    ]
+    memberships = user_memberships(user_id)
     groups = []
-    for membership in memberships:
-        group = table.get_item(
-            Key={"groupKey": group_item_key(membership["groupId"])}
-        ).get("Item")
-        if group and group.get("recordType") == "group":
+    for group in batch_get(table, "groupKey", [group_item_key(item["groupId"]) for item in memberships]):
+        if group and group.get("recordType") == "group" and SPORT.get() in group_sports(group):
             groups.append(
                 public_group(
                     group,
                     user_id,
-                    group_commissioner_id(group, items),
+                    group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group["groupId"])),
                 )
             )
     groups.sort(key=lambda group: group["groupName"].casefold())
@@ -1037,6 +1300,7 @@ def create_group(user_id: str, event: dict) -> dict:
     group_name, normalized_name = normalize_group_name(body.get("groupName"))
     password = validate_group_password(body.get("password"))
     scoring_option = body.get("scoringOption", "classic")
+    sports = validate_group_sports(body.get("sports", [SPORT.get()]))
     if scoring_option not in ("classic", "vegas"):
         raise ValueError("Choose Classic or Upset Edge scoring")
     group_id = str(uuid.uuid4())
@@ -1070,9 +1334,14 @@ def create_group(user_id: str, event: dict) -> dict:
         "createdBy": user_id,
         "commissionerId": user_id,
         "scoringOption": scoring_option,
+        "sports": sports,
+        "sportEligibility": {sport: [{"enabledAt": created_at}] for sport in sports},
         "passwordSalt": salt,
         "passwordHash": digest,
         "passwordIterations": GROUP_PASSWORD_ITERATIONS,
+        # Shared group credential, readable only through the member-only invite API.
+        # Keep the hash for join validation; DynamoDB encrypts the record at rest.
+        "shareablePassword": password,
         "inviteCode": new_group_invite_code(),
         "createdAt": created_at,
     }
@@ -1095,6 +1364,124 @@ def create_group(user_id: str, event: dict) -> dict:
     return public_group(group, user_id)
 
 
+def commissioner_condition(group: dict, user_id: str) -> dict:
+    """Guard a write against a concurrent role change, including legacy groups."""
+    if group.get("commissionerId"):
+        condition = "commissionerId = :commissioner"
+    elif group.get("createdBy"):
+        condition = "attribute_not_exists(commissionerId) AND createdBy = :commissioner"
+    else:
+        # No placeholder is needed when the commissioner was inferred from members.
+        return {"ConditionExpression": "attribute_exists(groupKey) AND "
+                "attribute_not_exists(commissionerId) AND attribute_not_exists(createdBy)"}
+    return {"ConditionExpression": condition,
+            "ExpressionAttributeValues": {":commissioner": user_id}}
+
+
+def update_group_settings(group_id: str, user_id: str, event: dict) -> dict:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    table = groups_table()
+    commissioner_id = group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group_id))
+    if commissioner_id != user_id:
+        raise PermissionError("Only the group commissioner can change competition settings")
+    body = parse_body(event)
+    if not isinstance(body, dict) or set(body) - {"groupName", "sports", "scoringOption", "password"}:
+        raise ValueError("Choose groupName, sports, scoringOption, or password to change")
+    if not body:
+        raise ValueError("Choose a group setting to change")
+    sports = validate_group_sports(body["sports"]) if "sports" in body else group_sports(group)
+    updates, values = [], {}
+    renamed = False
+    if "groupName" in body:
+        name, normalized = normalize_group_name(body["groupName"])
+        renamed = normalized != group["normalizedName"]
+        updates.extend(["groupName = :name", "normalizedName = :normalized"])
+        values.update({":name": name, ":normalized": normalized,
+                       ":previousName": group["normalizedName"], ":previousLabel": group["groupName"]})
+    if "sports" in body:
+        eligibility = json.loads(json.dumps(sport_eligibility(group), default=int))
+        now = int(time.time() * 1000)
+        for sport in GROUP_SPORTS:
+            if sport in sports and sport not in group_sports(group):
+                eligibility.setdefault(sport, []).append({"enabledAt": now})
+            elif sport not in sports and sport in group_sports(group):
+                eligibility[sport][-1]["disabledAt"] = now
+        updates.extend(["sports = :sports", "sportEligibility = :eligibility"])
+        values.update({":sports": sports, ":eligibility": eligibility})
+    guard = commissioner_condition(group, user_id)
+    if "groupName" in body:
+        guard["ConditionExpression"] += " AND normalizedName = :previousName AND groupName = :previousLabel"
+    if "scoringOption" in body:
+        mode = body["scoringOption"]
+        if mode not in ("classic", "vegas"):
+            raise ValueError("Choose Classic or Upset Edge scoring")
+        if SPORT.get() not in sports:
+            raise ValueError("Enable this sport before changing its scoring system")
+        if group_scoring_lock()["locked"]:
+            raise PermissionError("Scoring is locked for this sport at the prediction deadline")
+        modes = dict(group.get("scoringOptions", {}))
+        modes[SPORT.get()] = mode
+        updates.append("scoringOptions = :scoringOptions")
+        values[":scoringOptions"] = modes
+        if "scoringOptions" in group:
+            guard["ConditionExpression"] += " AND scoringOptions = :previousScoring"
+            values[":previousScoring"] = group["scoringOptions"]
+        else:
+            guard["ConditionExpression"] += " AND attribute_not_exists(scoringOptions)"
+    if "password" in body:
+        salt, digest = hash_group_password(validate_group_password(body["password"]))
+        updates.extend(["passwordSalt = :salt", "passwordHash = :hash", "passwordIterations = :iterations", "shareablePassword = :password"])
+        values.update({":salt": salt, ":hash": digest, ":iterations": GROUP_PASSWORD_ITERATIONS,
+                       ":password": body["password"]})
+    # Preserve concurrent sports/eligibility changes and the current role.
+    if "sports" in group:
+        guard["ConditionExpression"] += " AND sports = :previousSports"
+        guard.setdefault("ExpressionAttributeValues", {})[":previousSports"] = group["sports"]
+    else:
+        guard["ConditionExpression"] += " AND attribute_not_exists(sports)"
+    if "scoringOption" in body and group_scoring_lock()["locked"]:
+        raise PermissionError("Scoring is locked for this sport at the prediction deadline")
+    try:
+        if renamed:
+            # Reserve the new name, release the old name, and update the group
+            # together. A duplicate name or concurrent edit leaves all three intact.
+            table.meta.client.transact_write_items(TransactItems=[
+                {"Update": {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                            "UpdateExpression": "SET " + ", ".join(updates),
+                            "ConditionExpression": guard["ConditionExpression"],
+                            "ExpressionAttributeValues": {**guard.get("ExpressionAttributeValues", {}), **values}}},
+                {"Put": {"TableName": table.name,
+                         "Item": {"groupKey": group_name_item_key(normalized), "recordType": "groupName",
+                                  "normalizedName": normalized, "groupId": group_id},
+                         "ConditionExpression": "attribute_not_exists(groupKey)"}},
+                {"Delete": {"TableName": table.name,
+                            "Key": {"groupKey": group_name_item_key(group["normalizedName"])},
+                            "ConditionExpression": "groupId = :groupId",
+                            "ExpressionAttributeValues": {":groupId": group_id}}},
+            ])
+            return public_group(get_group(group_id), user_id, commissioner_id)
+        updated = table.update_item(
+            Key={"groupKey": group_item_key(group_id)},
+            UpdateExpression="SET " + ", ".join(updates),
+            ConditionExpression=guard["ConditionExpression"],
+            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}), **values},
+            ReturnValues="ALL_NEW",
+        )["Attributes"]
+    except Exception as error:
+        if renamed and group_transaction_conflict(error):
+            raise ValueError("That group name is already taken or group settings changed. Refresh and try again") from error
+        if is_conditional_failure(error):
+            raise PermissionError("Group settings or commissioner changed. Refresh and try again") from error
+        raise
+    return public_group(updated, user_id, commissioner_id)
+
+
+def update_group_sports(group_id: str, user_id: str, event: dict) -> dict:
+    return update_group_settings(group_id, user_id, event)
+
+
 def join_group(user_id: str, event: dict) -> dict:
     body = parse_body(event)
     _group_name, normalized_name = normalize_group_name(body.get("groupName"))
@@ -1115,24 +1502,108 @@ def join_group(user_id: str, event: dict) -> dict:
     if not hmac.compare_digest(digest, group["passwordHash"]):
         raise ValueError("Group name or password is incorrect")
 
-    add_group_membership(group["groupId"], user_id)
+    add_group_membership(group["groupId"], user_id, {"passwordHash": group["passwordHash"]})
     return public_group(group, user_id)
 
 
-def add_group_membership(group_id: str, user_id: str) -> None:
+def add_group_membership(group_id: str, user_id: str, credentials: dict | None = None) -> None:
     if is_group_member(group_id, user_id):
         return
 
-    groups_table().put_item(
-        Item={
-            "groupKey": membership_item_key(group_id, user_id),
-            "recordType": "membership",
-            "groupId": group_id,
-            "userId": user_id,
-            "joinedAt": int(time.time() * 1000),
-        },
-        ConditionExpression="attribute_not_exists(groupKey)",
-    )
+    try:
+        table = groups_table()
+        item = {
+                "groupKey": membership_item_key(group_id, user_id),
+                "recordType": "membership",
+                "groupId": group_id,
+                "userId": user_id,
+                "joinedAt": int(time.time() * 1000),
+            }
+        values = {f":{key}": value for key, value in (credentials or {}).items()}
+        condition = "attribute_exists(groupKey)" + "".join(f" AND {key} = :{key}" for key in (credentials or {}))
+        check = {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                 "ConditionExpression": condition}
+        if values:
+            check["ExpressionAttributeValues"] = values
+        table.meta.client.transact_write_items(TransactItems=[
+            {"ConditionCheck": check},
+            {"Put": {"TableName": table.name, "Item": item,
+                     "ConditionExpression": "attribute_not_exists(groupKey)"}},
+        ])
+    except Exception as error:
+        # A second join can win the race after the membership read. Keep its
+        # original joinedAt and treat this request as an already successful join.
+        if not group_transaction_conflict(error):
+            raise
+        current = groups_table().get_item(Key={"groupKey": membership_item_key(group_id, user_id)},
+                                          ConsistentRead=True).get("Item", {})
+        if current.get("recordType") != "membership":
+            raise PermissionError("You cannot join this group. Ask the commissioner for help") from error
+
+
+def group_transaction_conflict(error) -> bool:
+    if is_conditional_failure(error):
+        return True
+    response = getattr(error, "response", {})
+    return (response.get("Error", {}).get("Code") == "TransactionCanceledException"
+            and any(reason.get("Code") == "ConditionalCheckFailed"
+                    for reason in response.get("CancellationReasons", [])))
+
+
+def require_commissioner(group_id: str, user_id: str) -> dict:
+    group = get_group(group_id)
+    if not group:
+        raise ValueError("Group not found")
+    commissioner = group_commissioner_id(group) or group_commissioner_id(group, group_memberships(group_id))
+    if commissioner != user_id or not is_group_member(group_id, user_id):
+        raise PermissionError("Only the group commissioner can manage this group")
+    return group
+
+
+def remove_group_member(group_id: str, user_id: str, member_id: str) -> dict:
+    group = require_commissioner(group_id, user_id)
+    if member_id == user_id:
+        raise ValueError("Transfer commissioner before leaving this group")
+    if not is_group_member(group_id, member_id):
+        raise ValueError("That user is not a current group member")
+    table = groups_table()
+    try:
+        table.meta.client.transact_write_items(TransactItems=[
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": group_item_key(group_id)},
+                                **commissioner_condition(group, user_id)}},
+            {"Put": {"TableName": table.name,
+                     "Item": {"groupKey": membership_item_key(group_id, member_id),
+                              "recordType": "removedMembership", "groupId": group_id,
+                              "userId": member_id, "removedAt": int(time.time() * 1000)},
+                     "ConditionExpression": "recordType = :membership",
+                     "ExpressionAttributeValues": {":membership": "membership"}}},
+        ])
+    except Exception as error:
+        if group_transaction_conflict(error):
+            raise PermissionError("Group membership or commissioner changed. Refresh and try again") from error
+        raise
+    return {"removed": True}
+
+
+def change_group_invite(group_id: str, user_id: str) -> dict:
+    group = require_commissioner(group_id, user_id)
+    code = new_group_invite_code()
+    guard = commissioner_condition(group, user_id)
+    try:
+        groups_table().update_item(
+            Key={"groupKey": group_item_key(group_id)},
+            UpdateExpression="SET inviteCode = :inviteCode, inviteRevoked = :revoked",
+            ConditionExpression=guard["ConditionExpression"],
+            ExpressionAttributeValues={**guard.get("ExpressionAttributeValues", {}),
+                                       ":inviteCode": code, ":revoked": False},
+        )
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise PermissionError("The group commissioner changed. Refresh and try again") from error
+        raise
+    return {"groupId": group_id, "groupName": group["groupName"],
+            "inviteCode": code}
 
 
 def get_group_invite(group_id: str, user_id: str) -> dict:
@@ -1141,6 +1612,9 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
         raise PermissionError("Group membership required")
 
     invite_code = group.get("inviteCode")
+    if group.get("inviteRevoked"):
+        return {"groupId": group_id, "groupName": group["groupName"], "inviteCode": None,
+                "revoked": True, "groupPassword": group.get("shareablePassword")}
     if not isinstance(invite_code, str) or not GROUP_INVITE_CODE_PATTERN.fullmatch(
         invite_code
     ):
@@ -1149,7 +1623,7 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
             updated = groups_table().update_item(
                 Key={"groupKey": group_item_key(group_id)},
                 UpdateExpression="SET inviteCode = :inviteCode",
-                ConditionExpression="attribute_not_exists(inviteCode)",
+                ConditionExpression="attribute_exists(groupKey) AND attribute_not_exists(inviteCode) AND attribute_not_exists(inviteRevoked)",
                 ExpressionAttributeValues={":inviteCode": invite_code},
                 ReturnValues="ALL_NEW",
             )
@@ -1168,6 +1642,7 @@ def get_group_invite(group_id: str, user_id: str) -> dict:
         "groupId": group_id,
         "groupName": group["groupName"],
         "inviteCode": invite_code,
+        "groupPassword": group.get("shareablePassword"),
     }
 
 
@@ -1189,25 +1664,133 @@ def join_group_by_invite(user_id: str, event: dict) -> dict:
     ):
         raise ValueError("That group invite link is invalid")
 
-    add_group_membership(group_id, user_id)
+    add_group_membership(group_id, user_id, {"inviteCode": invite_code})
     return public_group(group, user_id)
 
 
 def get_group_leaderboard(group_id: str, user_id: str) -> dict:
     group = get_group(group_id)
-    if not group or not is_group_member(group_id, user_id):
+    if not group or not is_group_member(group_id, user_id) or SPORT.get() not in group_sports(group):
         raise PermissionError("Group membership required")
-    member_ids = {
-        item["userId"]
-        for item in scan_all(groups_table())
-        if item.get("recordType") == "membership"
-        and item.get("groupId") == group_id
-    }
+    members = list_group_members(group_id, user_id)["members"]
+    member_ids = {member["userId"] for member in members}
+    board = build_leaderboard(member_ids, group_scoring_option(group))
+    board = {**board, "entries": [dict(entry) for entry in board["entries"]]}
+    scored = {entry["memberId"]: entry for entry in board["entries"]}
+    for member in members:
+        entry = scored.get(member["userId"])
+        member["hasPrediction"] = entry is not None
+        if entry is None:
+            entry = {"leaderboardName": member["displayName"], "hasPrediction": False,
+                     "rank": None, "superBowl": "", "regularSeason": None,
+                     "playoffs": None, "total": None}
+            board["entries"].append(entry)
+        entry["isCommissioner"] = member["isCommissioner"]
+        entry.pop("memberId", None)
     return {
-        **build_leaderboard(member_ids, group.get("scoringOption", "classic")),
+        **board,
         "groupId": group_id,
         "groupName": group["groupName"],
+        "members": members,
+        "scoringLock": group_scoring_lock(),
+        "history": get_group_history(group_id),
     }
+
+
+def get_group_history(group_id: str) -> dict:
+    """Only called after the caller's group membership has been verified."""
+    seasons = sorted((item for item in group_records(group_id, f"history#{group_id}#{SPORT.get()}#")
+                      if item.get("recordType") == "groupSeason"
+                      and item.get("groupId") == group_id
+                      and item.get("sport") == SPORT.get()),
+                     key=lambda item: item["season"], reverse=True)
+    totals = {}
+    public_seasons = []
+    for season in seasons:
+        champions = []
+        for entry in season["entries"]:
+            # Stable identity keeps name changes from splitting career records.
+            member = totals.setdefault(entry["memberId"], {
+                "leaderboardName": entry["leaderboardName"],
+                "seasons": 0, "titles": 0, "total": 0,
+            })
+            member["seasons"] += 1
+            member["total"] += entry["total"]
+            if entry["champion"]:
+                member["titles"] += 1
+                champions.append(entry["leaderboardName"])
+        public_seasons.append({"season": season["season"], "champions": champions,
+                               "scoringOption": season["scoringOption"]})
+    standings = sorted(totals.values(), key=lambda row: (
+        -row["titles"], -row["total"], row["leaderboardName"].casefold()))
+    previous = None
+    for index, row in enumerate(standings, 1):
+        score = (row["titles"], row["total"])
+        row["rank"] = index if score != previous else standings[index - 2]["rank"]
+        previous = score
+    return {"seasons": public_seasons, "standings": standings}
+
+
+def archive_completed_group_seasons() -> dict:
+    """Scheduled, idempotent snapshots; never infer history from live standings."""
+    table = groups_table()
+    groups = query_all(table, IndexName="record-types",
+                       KeyConditionExpression="recordType = :type",
+                       ExpressionAttributeValues={":type": "group"})
+    saved = 0
+    for sport in ("nfl", "nba"):
+        token = SPORT.set(sport)
+        try:
+            results = load_season_results()
+            if not results.get("roundWinners", {}).get("superBowlChampion"):
+                continue
+            # Exclude groups/members created after the final result was recorded.
+            if not results.get("updatedAt"):
+                continue
+            cutoff = int(datetime.fromisoformat(results["updatedAt"].replace("Z", "+00:00")).timestamp() * 1000)
+            # NBA ingestion continues updating updatedAt after the Finals. Pin
+            # the first final cutoff so later groups cannot inherit that season.
+            cutoff_key = f"historyFinal#{sport}#{results['season']}"
+            try:
+                table.put_item(Item={"groupKey": cutoff_key, "recordType": "historyFinal",
+                                     "cutoff": cutoff}, ConditionExpression="attribute_not_exists(groupKey)")
+            except Exception as error:
+                if not is_conditional_failure(error):
+                    raise
+            cutoff = table.get_item(Key={"groupKey": cutoff_key}, ConsistentRead=True)["Item"]["cutoff"]
+            for candidate in groups:
+                group = get_group(candidate["groupId"])
+                if not group or not sport_eligible_at(group, sport, cutoff):
+                    continue
+                key = f"history#{group['groupId']}#{sport}#{results['season']}"
+                if table.get_item(Key={"groupKey": key}, ConsistentRead=True).get("Item") or group.get("createdAt", cutoff + 1) > cutoff:
+                    continue
+                members = {item["userId"] for item in group_memberships(group["groupId"])
+                           if item.get("joinedAt", cutoff + 1) <= cutoff}
+                mode = group_scoring_option(group, sport)
+                entries = [entry for entry in build_leaderboard(members, mode, history=True, results=results)["entries"]
+                           if entry["memberId"] in members]
+                if not entries:
+                    continue
+                best = max(scoring_result(entry) for entry in entries)
+                snapshot = {
+                    "groupKey": key, "recordType": "groupSeason", "groupId": group["groupId"],
+                    "sport": sport, "season": results["season"], "scoringOption": mode,
+                    "entries": [{"memberId": entry["memberId"], "leaderboardName": entry["leaderboardName"],
+                                 "total": entry["total"], "champion": best[0] > 0 and
+                                 scoring_result(entry) == best}
+                                for entry in entries],
+                }
+                try:
+                    table.put_item(Item=json.loads(json.dumps(snapshot), parse_float=Decimal),
+                                   ConditionExpression="attribute_not_exists(groupKey)")
+                    saved += 1
+                except Exception as error:
+                    if not is_conditional_failure(error):
+                        raise
+        finally:
+            SPORT.reset(token)
+    return {"archived": saved}
 
 
 def list_group_members(group_id: str, user_id: str) -> dict:
@@ -1218,20 +1801,22 @@ def list_group_members(group_id: str, user_id: str) -> dict:
     memberships = sorted(
         (
             item
-            for item in scan_all(groups_table())
+            for item in group_memberships(group_id)
             if item.get("recordType") == "membership"
             and item.get("groupId") == group_id
         ),
         key=lambda item: (item.get("joinedAt", 0), item.get("userId", "")),
     )
     commissioner_id = group_commissioner_id(group, memberships)
+    profiles = {item["profileKey"]: item for item in batch_get(
+        profiles_table(), "profileKey", [profile_item_key(item["userId"]) for item in memberships])}
     members = []
     unnamed_number = 0
     for membership in memberships:
         member_id = membership.get("userId")
         if not isinstance(member_id, str):
             continue
-        profile = get_profile(member_id)
+        profile = profiles.get(profile_item_key(member_id))
         if profile and profile.get("leaderboardName"):
             display_name = profile["leaderboardName"]
         else:
@@ -1248,12 +1833,47 @@ def list_group_members(group_id: str, user_id: str) -> dict:
     return {"groupId": group_id, "members": members}
 
 
+def transfer_group_commissioner(group_id: str, user_id: str, event: dict) -> dict:
+    group = require_commissioner(group_id, user_id)
+    body = parse_body(event)
+    if not isinstance(body, dict) or set(body) != {"newCommissionerId"}:
+        raise ValueError("Choose a new commissioner")
+    replacement = body["newCommissionerId"]
+    if not isinstance(replacement, str) or not replacement or replacement == user_id:
+        raise ValueError("The new commissioner must be another current group member")
+    if not is_group_member(group_id, replacement):
+        raise ValueError("The new commissioner must be another current group member")
+    table = groups_table()
+    guard = commissioner_condition(group, user_id)
+    try:
+        table.meta.client.transact_write_items(TransactItems=[
+            {"Update": {"TableName": table.name, "Key": {"groupKey": group_item_key(group_id)},
+                        "UpdateExpression": "SET commissionerId = :newCommissioner",
+                        "ConditionExpression": guard["ConditionExpression"],
+                        "ExpressionAttributeValues": {**guard.get("ExpressionAttributeValues", {}),
+                                                      ":newCommissioner": replacement}}},
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": membership_item_key(group_id, replacement)},
+                                "ConditionExpression": "recordType = :membership",
+                                "ExpressionAttributeValues": {":membership": "membership"}}},
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": membership_item_key(group_id, user_id)},
+                                "ConditionExpression": "recordType = :membership",
+                                "ExpressionAttributeValues": {":membership": "membership"}}},
+        ])
+    except Exception as error:
+        if group_transaction_conflict(error):
+            raise PermissionError("The commissioner or membership changed. Refresh and try again") from error
+        raise
+    return {"commissionerTransferred": True}
+
+
 def leave_group(group_id: str, user_id: str, event: dict) -> dict:
     group = get_group(group_id)
     if not group:
         raise ValueError("Group not found")
     table = groups_table()
-    items = scan_all(table)
+    items = group_memberships(group_id)
     memberships = [
         item
         for item in items
@@ -1264,49 +1884,26 @@ def leave_group(group_id: str, user_id: str, event: dict) -> dict:
         raise PermissionError("Group membership required")
 
     commissioner_id = group_commissioner_id(group, memberships)
-    new_commissioner_id = parse_body(event).get("newCommissionerId")
     if commissioner_id == user_id:
-        if not isinstance(new_commissioner_id, str) or not new_commissioner_id:
-            raise ValueError("Choose a new commissioner before leaving this group")
-        if new_commissioner_id == user_id or not any(
-            item.get("userId") == new_commissioner_id for item in memberships
-        ):
-            raise ValueError("The new commissioner must be another current group member")
-
-        condition = "commissionerId = :currentCommissioner"
-        values = {
-            ":newCommissioner": new_commissioner_id,
-            ":currentCommissioner": user_id,
-        }
-        if not group.get("commissionerId"):
-            if group.get("createdBy"):
-                condition = (
-                    "attribute_not_exists(commissionerId) AND "
-                    "createdBy = :currentCommissioner"
-                )
-            else:
-                condition = (
-                    "attribute_not_exists(commissionerId) AND "
-                    "attribute_not_exists(createdBy)"
-                )
-        try:
-            table.update_item(
-                Key={"groupKey": group_item_key(group_id)},
-                UpdateExpression="SET commissionerId = :newCommissioner",
-                ConditionExpression=condition,
-                ExpressionAttributeValues=values,
-            )
-        except Exception as error:
-            if is_conditional_failure(error):
-                raise ValueError(
-                    "The group commissioner changed. Refresh and try again"
-                ) from error
-            raise
-    elif new_commissioner_id is not None:
-        raise ValueError("Only the current commissioner can appoint a replacement")
-
-    table.delete_item(Key={"groupKey": membership_item_key(group_id, user_id)})
-    return {"left": True, "commissionerTransferred": commissioner_id == user_id}
+        raise PermissionError("Transfer commissioner to another member before leaving this group")
+    if parse_body(event):
+        raise ValueError("Transfer commissioner separately before leaving")
+    # A concurrent transfer must not allow the new commissioner to leave.
+    try:
+        table.meta.client.transact_write_items(TransactItems=[
+            {"ConditionCheck": {"TableName": table.name,
+                                "Key": {"groupKey": group_item_key(group_id)},
+                                **commissioner_condition(group, commissioner_id)}},
+            {"Delete": {"TableName": table.name,
+                        "Key": {"groupKey": membership_item_key(group_id, user_id)},
+                        "ConditionExpression": "recordType = :membership",
+                        "ExpressionAttributeValues": {":membership": "membership"}}},
+        ])
+    except Exception as error:
+        if group_transaction_conflict(error):
+            raise PermissionError("The commissioner or membership changed. Refresh and try again") from error
+        raise
+    return {"left": True, "commissionerTransferred": False}
 
 
 def delete_group(group_id: str, user_id: str) -> None:
@@ -1314,13 +1911,26 @@ def delete_group(group_id: str, user_id: str) -> None:
     if not group:
         raise ValueError("Group not found")
     table = groups_table()
-    items = scan_all(table)
+    items = group_records(group_id)
     commissioner_id = group_commissioner_id(group, items)
     if commissioner_id != user_id:
         raise PermissionError("Only the group commissioner can delete this group")
 
+    # Check ownership before deleting any related data. A commissioner transfer
+    # between the read and this write must leave the group's records intact.
+    try:
+        guard = commissioner_condition(group, user_id)
+        guard["ConditionExpression"] += " AND normalizedName = :previousName"
+        guard.setdefault("ExpressionAttributeValues", {})[":previousName"] = group["normalizedName"]
+        table.delete_item(Key={"groupKey": group_item_key(group_id)},
+                          **guard)
+    except Exception as error:
+        if is_conditional_failure(error):
+            raise PermissionError("The group name or commissioner changed. Refresh and try again") from error
+        raise
+
     for item in items:
-        if item.get("recordType") == "membership" and item.get("groupId") == group_id:
+        if item.get("recordType") in ("membership", "removedMembership", "groupSeason") and item.get("groupId") == group_id:
             table.delete_item(Key={"groupKey": item["groupKey"]})
 
     try:
@@ -1333,28 +1943,16 @@ def delete_group(group_id: str, user_id: str) -> None:
         if not is_conditional_failure(error):
             raise
 
-    group_delete = {"Key": {"groupKey": group_item_key(group_id)}}
-    if group.get("commissionerId"):
-        group_delete.update(
-            ConditionExpression="commissionerId = :commissioner",
-            ExpressionAttributeValues={":commissioner": user_id},
-        )
-    elif group.get("createdBy"):
-        group_delete.update(
-            ConditionExpression="createdBy = :creator",
-            ExpressionAttributeValues={":creator": user_id},
-        )
-    table.delete_item(**group_delete)
-
 
 def delete_group_memberships(user_id: str) -> None:
     table = groups_table()
-    items = scan_all(table)
+    items = user_memberships(user_id)
+    groups = batch_get(table, "groupKey", [group_item_key(item["groupId"]) for item in items])
     owned_groups = [
         item.get("groupName", "a group")
-        for item in items
+        for item in groups
         if item.get("recordType") == "group"
-        and group_commissioner_id(item, items) == user_id
+        and (group_commissioner_id(item) or group_commissioner_id(item, group_memberships(item["groupId"]))) == user_id
     ]
     if owned_groups:
         raise ValueError(
@@ -1378,6 +1976,22 @@ def authenticated_user_id(event: dict) -> str | None:
 
 
 def handler(event, context):
+    if (event.get("rawPath") or "").startswith("/api/admin/analytics"):
+        from admin_analytics import handler as admin_handler
+        return admin_handler(event, context)
+    if event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event":
+        return archive_completed_group_seasons()
+    sport = (event.get("queryStringParameters") or {}).get("sport", "nfl")
+    if sport not in ("nfl", "nba"):
+        return response(400, {"message": "Unknown sport"})
+    token = SPORT.set(sport)
+    try:
+        return handle_request(event, context)
+    finally:
+        SPORT.reset(token)
+
+
+def handle_request(event, context):
     del context
     method = event.get("requestContext", {}).get("http", {}).get("method")
     path = event.get("rawPath")
@@ -1390,6 +2004,8 @@ def handler(event, context):
             return response(202, {"accepted": True})
         except ValueError as error:
             return response(400, {"message": str(error)})
+        except Exception:
+            return response(503, {"message": "Analytics is temporarily unavailable"})
 
     if method == "GET" and path == "/api/win-totals":
         return response(200, get_win_totals())
@@ -1420,9 +2036,11 @@ def handler(event, context):
     group_members_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/members", path or ""
     )
+    group_remove_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})/members/([^/]{1,128})", path or "")
     group_membership_match = re.fullmatch(
         r"/api/groups/([0-9a-f-]{36})/membership", path or ""
     )
+    group_commissioner_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})/commissioner", path or "")
     group_delete_match = re.fullmatch(r"/api/groups/([0-9a-f-]{36})", path or "")
     if path not in (
         "/api/prediction",
@@ -1435,7 +2053,9 @@ def handler(event, context):
             group_leaderboard_match,
             group_invite_match,
             group_members_match,
+            group_remove_match,
             group_membership_match,
+            group_commissioner_match,
             group_delete_match,
         )
     ):
@@ -1461,6 +2081,8 @@ def handler(event, context):
                 return response(200, join_group(user_id, event))
             except ValueError as error:
                 return response(400, {"message": str(error)})
+            except PermissionError as error:
+                return response(403, {"message": str(error)})
         return response(404, {"message": "Not found"})
 
     if path == "/api/groups/join-invite":
@@ -1469,9 +2091,29 @@ def handler(event, context):
                 return response(200, join_group_by_invite(user_id, event))
             except ValueError as error:
                 return response(400, {"message": str(error)})
+            except PermissionError as error:
+                return response(403, {"message": str(error)})
         return response(404, {"message": "Not found"})
 
+    if group_remove_match:
+        if method != "DELETE":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(200, remove_group_member(group_remove_match.group(1), user_id,
+                                                     unquote(group_remove_match.group(2))))
+        except ValueError as error:
+            return response(400, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
+
     if group_delete_match:
+        if method == "PATCH":
+            try:
+                return response(200, update_group_settings(group_delete_match.group(1), user_id, event))
+            except ValueError as error:
+                return response(400 if str(error) != "Group not found" else 404, {"message": str(error)})
+            except PermissionError as error:
+                return response(403, {"message": str(error)})
         if method != "DELETE":
             return response(404, {"message": "Not found"})
         try:
@@ -1493,6 +2135,16 @@ def handler(event, context):
         except PermissionError as error:
             return response(403, {"message": str(error)})
 
+    if group_commissioner_match:
+        if method != "POST":
+            return response(404, {"message": "Not found"})
+        try:
+            return response(200, transfer_group_commissioner(group_commissioner_match.group(1), user_id, event))
+        except ValueError as error:
+            return response(400, {"message": str(error)})
+        except PermissionError as error:
+            return response(403, {"message": str(error)})
+
     if group_membership_match:
         if method != "DELETE":
             return response(404, {"message": "Not found"})
@@ -1507,15 +2159,19 @@ def handler(event, context):
             return response(403, {"message": str(error)})
 
     if group_invite_match:
-        if method != "GET":
+        if method not in ("GET", "POST"):
             return response(404, {"message": "Not found"})
         try:
+            if method != "GET":
+                return response(200, change_group_invite(group_invite_match.group(1), user_id))
             return response(
                 200,
                 get_group_invite(group_invite_match.group(1), user_id),
             )
         except PermissionError as error:
             return response(403, {"message": str(error)})
+        except ValueError as error:
+            return response(404, {"message": str(error)})
 
     if group_leaderboard_match:
         if method != "GET":
@@ -1544,6 +2200,10 @@ def handler(event, context):
         if method == "DELETE":
             try:
                 delete_group_memberships(user_id)
+                table = predictions_table()
+                for prediction in scan_all(table):
+                    if prediction.get("profileKey") == user_id or prediction.get("ownerId") == user_id:
+                        table.delete_item(Key={"profileKey": prediction["profileKey"]})
                 delete_profile(user_id)
                 return response(200, {"deleted": True})
             except ValueError as error:
@@ -1566,7 +2226,7 @@ def handler(event, context):
                     {
                         **window,
                         "message": (
-                            "Brackets locked at the start of the NFL regular season "
+                            "Brackets locked at the start of the regular season "
                             "and can no longer be created or changed."
                         ),
                     },
@@ -1583,3 +2243,54 @@ def handler(event, context):
         return response(200, {"deleted": True})
 
     return response(404, {"message": "Not found"})
+
+
+def load_nba_results():
+    # Numeric namespace preserves the existing DynamoDB key schema and NFL rows.
+    if os.environ.get("RESULTS_TABLE"):
+        item = results_table().get_item(Key={"season": 100000 + NBA["season"]}, ConsistentRead=True).get("Item")
+        if item:
+            return {**item, "season": NBA["season"]}
+    return {"season": NBA["season"], "status": "Preseason — scoring has not started",
+            "updatedAt": None, "playoffTeams": {}, "seeds": {}, "divisionWinners": {},
+            "roundWinners": {}}
+
+
+def parse_nba_win_totals(html):
+    if "2026-27" not in html and "2026–27" not in html:
+        raise ValueError("NBA win-total source is for a different season")
+    totals = {}
+    for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", html, flags=re.S | re.I):
+        cells = [unescape(re.sub(r"<[^>]+>", "", cell)).strip()
+                 for cell in re.findall(r"<td\b[^>]*>(.*?)</td>", row, flags=re.S | re.I)]
+        if len(cells) >= 2 and cells[0] in NBA["totals"]:
+            total = float(cells[1])
+            if not 0 < total < 82:
+                raise ValueError("NBA win total is out of range")
+            totals[cells[0]] = total
+    if set(totals) != set(NBA["totals"]):
+        raise ValueError("Incomplete NBA win-total source")
+    return totals
+
+
+def get_nba_win_totals():
+    key = f"nba#{NBA['season']}"
+    base = {"apiVersion": API_VERSION, "sourceUrl": NBA["sourceUrl"]}
+    cached = None
+    try:
+        cached = cache_table().get_item(Key={"cacheKey": key}).get("Item")
+        if cached and set(cached.get("totals", {})) != set(NBA["totals"]):
+            cached = None
+        if cached and time.time() - int(cached["updatedAt"]) < CACHE_TTL_SECONDS:
+            return {**base, **cached, "status": "cached"}
+        request = Request(NBA["sourceUrl"], headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=12) as result:
+            totals = parse_nba_win_totals(result.read().decode("utf-8"))
+        payload = {"cacheKey": key, "totals": {team: Decimal(str(value)) for team, value in totals.items()},
+                   "source": "BetMGM season win totals", "updatedAt": int(time.time())}
+        cache_table().put_item(Item=payload)
+        return {**base, **payload, "status": "live"}
+    except Exception:
+        if cached:
+            return {**base, **cached, "status": "cached"}
+        return {**base, "totals": NBA["totals"], "source": NBA["source"], "status": "fallback", "updatedAt": None}

@@ -37,27 +37,14 @@ try {
 
   if (Test-Scope "Frontend") {
     Write-Host "Checking frontend JavaScript..."
-    foreach ($file in @(
-      "frontend/app.js",
-      "frontend/bootstrap.js",
-      "frontend/leaderboard.js",
-      "frontend/monitoring.js",
-      "frontend/picks.js",
-      "frontend/scoring.js",
-      "frontend/shell.js",
-      "frontend/auth-config.js"
-    )) {
-      Invoke-NativeCommand -FilePath node -ArgumentList @("--check", $file)
-    }
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_leaderboard.cjs")
-    Invoke-NativeCommand -FilePath node -ArgumentList @("--test", "backend/test_account_modal.cjs")
+    Invoke-NativeCommand -FilePath node -ArgumentList @("scripts/check-frontend.cjs")
   }
 
   if (Test-Scope "Backend") {
     Write-Host "Checking backend Python..."
-    Invoke-NativeCommand -FilePath $python -ArgumentList @(
-      "-m", "py_compile", "backend/lambda/app.py", "backend/lambda/results_updater.py"
-    )
+    $lambdaFiles = @(Get-ChildItem -LiteralPath "backend/lambda" -Filter "*.py" -File |
+      Sort-Object Name | ForEach-Object { $_.FullName })
+    Invoke-NativeCommand -FilePath $python -ArgumentList (@("-m", "py_compile") + $lambdaFiles)
     Invoke-NativeCommand -FilePath $python -ArgumentList @("-m", "unittest", "discover", "-s", "backend", "-p", "test_*.py")
   }
 

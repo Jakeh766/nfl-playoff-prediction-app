@@ -61,14 +61,8 @@ elements.groupName?.addEventListener("invalid", () => {
 elements.groupName?.addEventListener("input", () => {
   elements.groupName.setCustomValidity("");
 });
-elements.publicLeaderboardTab?.addEventListener("click", () => {
-  renderLeaderboardView("public");
-});
-elements.groupsLeaderboardTab?.addEventListener("click", () => {
-  renderLeaderboardView("groups");
-});
-elements.publicLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
-elements.groupsLeaderboardTab?.addEventListener("keydown", handleLeaderboardViewKeydown);
+initializeGroupsNavigation();
+if (typeof initializeGroupsPage === "function") initializeGroupsPage();
 elements.classicLeaderboardMode?.addEventListener("click", () => {
   selectLeaderboardScoringMode("classic");
 });
@@ -87,7 +81,11 @@ elements.groupDialog?.addEventListener("close", () => {
   resetPasswordVisibility(elements.groupForm);
   elements.groupDialogMessage.textContent = "";
 });
+if (typeof initializeGroupSettings === "function") initializeGroupSettings();
 elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+elements.editGroupSports?.addEventListener("click", openEditGroupSportsDialog);
+elements.editGroupSportsForm?.addEventListener("submit", submitEditGroupSports);
+elements.cancelEditGroupSports?.addEventListener("click", () => elements.editGroupSportsDialog.close());
 elements.leaveGroup?.addEventListener("click", () => {
   const group = state.groups.find(
     (candidate) => candidate.groupId === state.activeGroupId,
@@ -230,12 +228,14 @@ async function initializeAuthentication() {
       return;
     }
 
+    if (PAGE !== "groups") refreshGroupMemberships().catch(() => {});
+
     await refreshProfile();
     if (PAGE === "picks") {
       await refreshSavedPrediction();
       if (!loadAuthSession()) return;
       openPrediction(false);
-    } else if (PAGE === "leaderboard") {
+    } else if (PAGE === "groups") {
       await refreshGroups();
     }
   } catch (error) {
@@ -246,7 +246,7 @@ async function initializeAuthentication() {
 }
 
 if (PAGE === "picks") loadWinTotals();
-if (elements.leaderboardBody) loadLeaderboard();
+if (elements.leaderboardBody && window.location.hash !== "#groups") loadLeaderboard();
 if (["home", "picks"].includes(PAGE)) initializePredictionWindow();
 if (typeof renderHomeGroupInvite === "function") renderHomeGroupInvite();
 initializeAuthentication();

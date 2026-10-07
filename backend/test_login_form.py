@@ -38,6 +38,7 @@ class LoginFormTests(unittest.TestCase):
         cls.leaderboard_javascript = (
             FRONTEND_DIR / "leaderboard.js"
         ).read_text(encoding="utf-8")
+        cls.groups_javascript = (FRONTEND_DIR / "groups.js").read_text(encoding="utf-8")
         cls.picks_javascript = (FRONTEND_DIR / "picks.js").read_text(
             encoding="utf-8"
         )
@@ -141,7 +142,7 @@ class LoginFormTests(unittest.TestCase):
             self.app_javascript,
         )
 
-    def test_existing_unconfirmed_signup_resends_without_reusing_new_password(self):
+    def test_existing_signup_returns_to_sign_in_without_sending_a_code(self):
         create_flow = self.app_javascript[
             self.app_javascript.index("async function submitCreateAccount") :
             self.app_javascript.index("async function submitConfirmAccount")
@@ -150,15 +151,11 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('error.code === "UsernameExistsException"', create_flow)
         self.assertIn("pendingAccountCredentials = null;", create_flow)
         self.assertIn('elements.createPassword.value = "";', create_flow)
-        self.assertIn("await requestConfirmationCode(email);", create_flow)
-        self.assertIn("elements.confirmEmail.value = email;", create_flow)
+        self.assertNotIn("await requestConfirmationCode(email);", create_flow)
+        self.assertIn("elements.loginEmail.value = email;", create_flow)
         self.assertIn(
-            "You started creating an account with this email earlier.",
+            "An account already exists for this email. Sign in, or use Forgot password",
             create_flow,
-        )
-        self.assertLess(
-            create_flow.index("pendingAccountCredentials = null;"),
-            create_flow.index("await requestConfirmationCode(email);"),
         )
 
         confirm_flow = self.app_javascript[
@@ -222,15 +219,10 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('value !== "DELETE"', app_javascript)
 
         delete_flow = app_javascript[app_javascript.index("async function submitDeleteAccount") :]
-        prediction_delete = delete_flow.index(
-            'apiRequest("/api/prediction", { method: "DELETE" })'
-        )
         profile_delete = delete_flow.index(
             'apiRequest("/api/profile", { method: "DELETE" })'
         )
         account_delete = delete_flow.index('requestCognito("DeleteUser"')
-        self.assertLess(prediction_delete, account_delete)
-        self.assertLess(prediction_delete, profile_delete)
         self.assertLess(profile_delete, account_delete)
 
     def test_signed_in_card_keeps_account_details_in_account_dialog(self):
@@ -297,36 +289,27 @@ class LoginFormTests(unittest.TestCase):
             terraform,
         )
 
-    def test_public_and_group_leaderboards_share_a_toggleable_section(self):
-        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
-        html += self.shell
-        app_javascript = "\n".join(
-            (
-                self.app_javascript,
-                self.leaderboard_javascript,
-                self.bootstrap_javascript,
-            )
-        )
-
-        self.assertIn('id="leaderboard-section"', html)
-        self.assertIn('id="public-leaderboard-tab"', html)
-        self.assertIn('id="groups-leaderboard-tab"', html)
-        self.assertIn('id="public-leaderboard-panel"', html)
-        self.assertIn('id="groups-leaderboard-panel"', html)
-        self.assertNotIn('id="groups-section"', html)
-        self.assertIn('renderLeaderboardView("groups")', app_javascript)
-        self.assertIn('id="create-group"', html)
-        self.assertIn('id="join-group"', html)
-        self.assertIn('id="group-password"', html)
-        self.assertIn('type="password"', html)
+    def test_groups_have_a_standalone_page_and_preserve_group_forms(self):
+        html = (FRONTEND_DIR / "groups.html").read_text(encoding="utf-8")
+        public = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+        self.assertIn('data-page="groups"', html)
+        self.assertIn('<title>Groups | Predict Playoffs</title>', html)
+        self.assertNotIn('groups-leaderboard-panel', public)
+        self.assertNotIn('id="create-group"', public)
+        for view in ["standings", "history"]:
+            self.assertIn(f'id="group-panel-{view}"', html)
+        for removed in ["members", "settings"]:
+            self.assertNotIn(f'id="group-tab-{removed}"', html)
+        for control in ["create-group", "join-group", "share-group-invite", "leave-group", "delete-group"]:
+            self.assertIn(f'id="{control}"', html)
         self.assertIn(
             'id="group-password" name="group-password" type="password" minlength="6" maxlength="128" autocomplete="off" data-bwignore="true" data-1p-ignore data-lpignore="true" data-form-type="other" data-keeper-ignore="true"',
-            html,
+            self.shell,
         )
-        self.assertIn('apiRequest("/api/groups")', app_javascript)
-        self.assertIn('"/api/groups/join"', app_javascript)
-        self.assertIn("/leaderboard`", app_javascript)
-        self.assertIn('path.startsWith("/api/groups")', app_javascript)
+        self.assertIn('apiRequest("/api/groups", { sport })', self.app_javascript)
+        self.assertIn('"/api/groups/join"', self.groups_javascript)
+        self.assertIn('/leaderboard`', self.groups_javascript)
+        self.assertIn('path.startsWith("/api/groups")', self.app_javascript)
 
     def test_password_fields_share_an_accessible_visibility_toggle(self):
         password_ids = (
@@ -363,6 +346,7 @@ class LoginFormTests(unittest.TestCase):
             (
                 self.app_javascript,
                 self.leaderboard_javascript,
+                self.groups_javascript,
                 self.bootstrap_javascript,
             )
         )
@@ -381,7 +365,7 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('document.body.classList.toggle("has-group-invite"', app_javascript)
         self.assertIn('"Sign in to join group"', app_javascript)
         self.assertIn('id="group-invite-dialog"', self.shell)
-        leaderboard = (FRONTEND_DIR / "leaderboard.html").read_text(
+        leaderboard = (FRONTEND_DIR / "groups.html").read_text(
             encoding="utf-8"
         )
         self.assertIn('id="share-group-invite"', leaderboard)
@@ -394,12 +378,13 @@ class LoginFormTests(unittest.TestCase):
         groups_permissions = terraform[:groups_resource_index].rsplit("{", 1)[-1]
         self.assertIn('"dynamodb:UpdateItem"', groups_permissions)
 
-    def test_group_deletion_is_creator_only_and_confirmed(self):
-        html = (FRONTEND_DIR / "leaderboard.html").read_text(encoding="utf-8")
+    def test_group_deletion_is_commissioner_only_and_transfer_is_separate_from_leaving(self):
+        html = (FRONTEND_DIR / "groups.html").read_text(encoding="utf-8")
         app_javascript = "\n".join(
             (
                 self.app_javascript,
                 self.leaderboard_javascript,
+                self.groups_javascript,
                 self.bootstrap_javascript,
             )
         )
@@ -414,10 +399,12 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('route_key          = "DELETE /api/groups/{groupId}"', terraform)
         self.assertIn('id="leave-group"', html)
         self.assertIn('id="leave-group-dialog"', self.shell)
-        self.assertIn('}/members`', app_javascript)
+        self.assertIn('}/commissioner`', app_javascript)
+        self.assertNotIn('id="new-commissioner-field"', self.shell)
         self.assertIn('}/membership`', app_javascript)
         self.assertIn('route_key          = "GET /api/groups/{groupId}/members"', terraform)
         self.assertIn('route_key          = "DELETE /api/groups/{groupId}/membership"', terraform)
+        self.assertIn('route_key          = "POST /api/groups/{groupId}/commissioner"', terraform)
 
     def test_primary_features_have_clean_dedicated_pages(self):
         home = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
@@ -446,14 +433,15 @@ class LoginFormTests(unittest.TestCase):
             self.assertIn(f'"{route}" = {{', terraform)
             self.assertIn(f'${{var.frontend_dir}}/{source}', terraform)
 
-    def test_deployed_frontend_files_are_not_browser_cached(self):
+    def test_auth_configuration_remains_uncached(self):
         terraform = (
             FRONTEND_DIR.parent / "terraform" / "modules" / "app" / "main.tf"
         ).read_text(encoding="utf-8")
         cache_directive = (
             'cache_control = "no-store, no-cache, must-revalidate, max-age=0"'
         )
-        self.assertEqual(terraform.count(cache_directive), 2)
+        auth_config = terraform.split('resource "aws_s3_object" "auth_config" {', 1)[1].split('\n}', 1)[0]
+        self.assertIn(cache_directive, auth_config)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,20 @@ function buildConferenceGames(seeds, picksByConference, conference) {
     const name = seeds?.[conference]?.[number - 1];
     return name ? { name, seed: number } : null;
   };
+  if (typeof IS_NBA !== "undefined" && IS_NBA) {
+    const wildCard = [[1, 8], [4, 5], [2, 7], [3, 6]].map(([a, b]) => ({
+      id: `r1-${a}-${b}`, title: `First Round · ${a} vs ${b}`, teams: [seed(a), seed(b)],
+    }));
+    const winner = game => game.teams.every(Boolean)
+      ? game.teams.find(team => team.name === picks[game.id]) || null : null;
+    const divisional = [0, 2].map((offset, index) => ({
+      id: `div-${index + 1}`, title: "Conference Semifinal",
+      teams: [winner(wildCard[offset]), winner(wildCard[offset + 1])],
+    }));
+    return { wildCard, divisional, championship: [{
+      id: "conf", title: `${conference} Finals`, teams: divisional.map(winner),
+    }] };
+  }
   const wildCard = [
     { id: "wc-2-7", title: "Wild Card · 2 vs 7", teams: [seed(2), seed(7)] },
     { id: "wc-3-6", title: "Wild Card · 3 vs 6", teams: [seed(3), seed(6)] },
@@ -45,6 +59,13 @@ function buildConferenceGames(seeds, picksByConference, conference) {
   return { wildCard, divisional, championship };
 }
 
+function teamsInBracketDisplayOrder(teams) {
+  if (typeof IS_NBA === "undefined" || !IS_NBA) return teams;
+  return [...teams].sort((first, second) =>
+    (first?.seed ?? Infinity) - (second?.seed ?? Infinity),
+  );
+}
+
 function createPublicTeamPick(team, selected) {
   const row = document.createElement("div");
   row.className = "public-team-pick";
@@ -78,7 +99,7 @@ function createPublicGameCard(conference, game, bracket) {
   title.textContent = game.title;
   card.appendChild(title);
   const selected = bracket.picks?.[conference]?.[game.id] || "";
-  game.teams.forEach((team) => {
+  teamsInBracketDisplayOrder(game.teams).forEach((team) => {
     card.appendChild(createPublicTeamPick(team, selected));
   });
   return card;
@@ -92,8 +113,13 @@ function createPublicConferenceBracket(conference, bracket) {
   heading.className = `bracket-conference-label ${conference.toLowerCase()}-label`;
   const logo = document.createElement("img");
   logo.className = "bracket-conference-logo";
-  logo.src = `https://a.espncdn.com/i/teamlogos/nfl/500/${conference.toLowerCase()}.png`;
+  logo.src = IS_NBA
+    ? NBA_CONFERENCE_LOGOS[conference]
+    : `https://a.espncdn.com/i/teamlogos/nfl/500/${conference.toLowerCase()}.png`;
   logo.alt = `${conference} logo`;
+  logo.width = 64;
+  logo.height = 64;
+  logo.decoding = "async";
   const label = document.createElement("span");
   label.textContent = conference;
   heading.append(logo, label);
@@ -102,8 +128,8 @@ function createPublicConferenceBracket(conference, bracket) {
   rounds.className = "public-bracket-rounds";
   const games = buildConferenceGames(bracket.seeds, bracket.picks, conference);
   [
-    { key: "wildCard", label: "Wild Card" },
-    { key: "divisional", label: "Divisional" },
+    { key: "wildCard", label: IS_NBA ? "First Round" : "Wild Card" },
+    { key: "divisional", label: IS_NBA ? "Conference Semifinals" : "Divisional" },
     { key: "championship", label: `${conference} Champion` },
   ].forEach(({ key, label: roundLabel }) => {
     const round = document.createElement("div");
@@ -135,20 +161,20 @@ function renderPublicBracket(bracket, scoringMode = "classic") {
     : "";
   elements.publicBracketStatus.textContent = scoringMode === "vegas"
     ? `${scoreLabel}: ${formatLeaderboardScore(score.total, 2)} points${savedAt}`
-    : `${scoreLabel}: ${formatLeaderboardScore(score.total)} / 300${savedAt}`;
+    : `${scoreLabel}: ${formatLeaderboardScore(score.total)} / ${CLASSIC_MAXIMUM}${savedAt}`;
 
   const conferences = document.createElement("div");
   conferences.className = "public-bracket-grid";
   conferences.append(
-    createPublicConferenceBracket("AFC", bracket),
-    createPublicConferenceBracket("NFC", bracket),
+    createPublicConferenceBracket(CONFERENCES[0], bracket),
+    createPublicConferenceBracket(CONFERENCES[1], bracket),
   );
 
   const champion = document.createElement("section");
   champion.className = "public-champion";
   const kicker = document.createElement("p");
   kicker.className = "card-kicker";
-  kicker.textContent = "SUPER BOWL CHAMPION";
+  kicker.textContent = `${FINAL_NAME.toUpperCase()} CHAMPION`;
   const championName = bracket.picks?.superBowl || "No champion selected";
   champion.appendChild(kicker);
   if (bracket.picks?.superBowl) {
@@ -303,11 +329,15 @@ function rankLeaderboardEntries(entries, mode = "classic") {
       1,
     );
   });
+  let previous = "", rank = null;
   return ordered.map((entry, index) => {
     const total = leaderboardSortValue(entry, "total", mode);
+    const result = JSON.stringify(["total", "field", "playoffs"].map(key => leaderboardSortValue(entry, key, mode)));
+    if (result !== previous) rank = index + 1;
+    previous = result;
     return {
       ...entry,
-      rank: total != null && total > 0 ? index + 1 : null,
+      rank: total != null && total > 0 ? rank : null,
       scoringMode: mode,
     };
   });
@@ -378,7 +408,7 @@ function createLeaderboardChampionCell(entry) {
   const champion = leaderboardChampion(entry);
   if (!champion) {
     cell.textContent = "—";
-    cell.setAttribute("aria-label", "No Super Bowl pick");
+    cell.setAttribute("aria-label", `No ${FINAL_NAME} pick`);
     return cell;
   }
 
@@ -389,7 +419,7 @@ function createLeaderboardChampionCell(entry) {
   logo.setAttribute("aria-hidden", "true");
   pick.appendChild(logo);
   cell.appendChild(pick);
-  cell.setAttribute("aria-label", `Super Bowl pick: ${champion}`);
+  cell.setAttribute("aria-label", `${FINAL_NAME} pick: ${champion}`);
   return cell;
 }
 
@@ -406,7 +436,9 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
   visibleEntries.forEach((entry) => {
     const row = document.createElement("tr");
     row.className = "leaderboard-row";
-    row.addEventListener("click", () => openPublicBracket(entry));
+    const hasPrediction = entry.hasPrediction !== false;
+    row.dataset.hasPrediction = String(hasPrediction);
+    if (hasPrediction) row.addEventListener("click", () => openPublicBracket(entry));
     const rank = document.createElement("td");
     rank.className = "leaderboard-rank";
     rank.textContent = formatLeaderboardRank(entry.rank);
@@ -421,10 +453,16 @@ function renderLeaderboardRows(body, entries, mode = "classic") {
     playerButton.className = "leaderboard-player-button";
     playerButton.type = "button";
     const playerName = document.createElement("strong");
-    playerName.textContent = entry.leaderboardName;
-    const viewLabel = document.createElement("span");
-    viewLabel.textContent = "View bracket";
-    playerButton.append(playerName, viewLabel);
+    playerName.textContent = entry.leaderboardName + (entry.isCommissioner ? " · Commissioner" : "");
+    playerButton.disabled = !hasPrediction;
+    playerButton.appendChild(playerName);
+    if (hasPrediction) {
+      playerButton.setAttribute("aria-label", `View bracket for ${entry.leaderboardName}`);
+    } else {
+      const status = document.createElement("span");
+      status.textContent = "No prediction";
+      playerButton.appendChild(status);
+    }
     player.appendChild(playerButton);
 
     const champion = createLeaderboardChampionCell(entry);
@@ -467,6 +505,15 @@ function selectLeaderboardScoringMode(mode) {
   renderLeaderboard();
 }
 
+function seasonStatusText(status, now = Date.now()) {
+  if (!status?.startsWith("Preseason")) return status || "";
+  // Keep the NFL fallback aligned with prediction_lock_at in terraform/envs/*/terraform.tfvars.
+  const seasonStart = state.predictionWindow?.lockAt
+    || (IS_NBA ? NBA_SEASON.lockAt : "2026-09-10T00:20:00Z");
+  const serverNow = now + (state.predictionClockOffset || 0);
+  return serverNow < Date.parse(seasonStart) ? status : "";
+}
+
 function renderLeaderboard() {
   const leaderboard = state.leaderboard;
   const mode = state.leaderboardScoringMode || "classic";
@@ -476,7 +523,7 @@ function renderLeaderboard() {
   updateLeaderboardScoreHeading(elements.leaderboardBody, mode);
   renderLeaderboardRows(elements.leaderboardBody, entries, mode);
 
-  if (leaderboard) elements.leaderboardStatus.textContent = leaderboard.status;
+  if (leaderboard) elements.leaderboardStatus.textContent = seasonStatusText(leaderboard.status);
 }
 
 const LOCAL_PREVIEW_LEADERBOARD_NAMES = [
@@ -554,7 +601,7 @@ async function loadLeaderboard() {
   try {
     state.leaderboard = await apiRequest("/api/leaderboard");
   } catch (error) {
-    if (LOCAL_PREVIEW) {
+    if (LOCAL_PREVIEW && !IS_NBA) {
       state.leaderboard = {
         status: "Preseason — scoring has not started",
         entries: LOCAL_PREVIEW_LEADERBOARD_NAMES.map((leaderboardName) => ({
@@ -582,536 +629,4 @@ async function loadLeaderboard() {
     }
   }
   renderLeaderboard();
-}
-
-function renderGroups() {
-  if (!elements.groupTabs) return;
-  const activeGroup = state.groups.find(
-    (group) => group.groupId === state.activeGroupId,
-  );
-  const isCommissioner = Boolean(
-    activeGroup?.isCommissioner ?? activeGroup?.isCreator,
-  );
-  elements.leaveGroup?.classList.toggle("hidden", !activeGroup);
-  elements.deleteGroup?.classList.toggle("hidden", !isCommissioner);
-  if (activeGroup) {
-    elements.leaveGroup?.setAttribute(
-      "aria-label",
-      `Leave ${activeGroup.groupName}`,
-    );
-  } else {
-    elements.leaveGroup?.removeAttribute("aria-label");
-  }
-  if (isCommissioner) {
-    elements.deleteGroup.setAttribute(
-      "aria-label",
-      `Delete ${activeGroup.groupName}`,
-    );
-  } else {
-    elements.deleteGroup?.removeAttribute("aria-label");
-  }
-  elements.groupTabs.innerHTML = "";
-  elements.emptyGroups.classList.toggle("hidden", Boolean(state.groups.length));
-  elements.groupLeaderboard.classList.toggle("hidden", !activeGroup);
-
-  state.groups.forEach((group) => {
-    const button = document.createElement("button");
-    button.className = "group-tab";
-    button.type = "button";
-    button.textContent = group.groupName;
-    button.classList.toggle("active", group.groupId === state.activeGroupId);
-    button.setAttribute(
-      "aria-pressed",
-      String(group.groupId === state.activeGroupId),
-    );
-    button.addEventListener("click", () => {
-      if (state.activeGroupId === group.groupId) return;
-      state.activeGroupId = group.groupId;
-      state.groupLeaderboard = null;
-      renderGroups();
-      loadGroupLeaderboard(group.groupId);
-    });
-    elements.groupTabs.appendChild(button);
-  });
-
-  if (activeGroup) elements.activeGroupName.textContent = activeGroup.groupName;
-}
-
-function renderGroupLeaderboard() {
-  const leaderboard = state.groupLeaderboard;
-  const mode = leaderboard?.scoringOption || "classic";
-  const entries = rankLeaderboardEntries(leaderboard?.entries || [], mode);
-  elements.groupLeaderboardTableShell.classList.toggle("hidden", !entries.length);
-  elements.emptyGroupLeaderboard.classList.toggle("hidden", Boolean(entries.length));
-  updateLeaderboardScoreHeading(elements.groupLeaderboardBody, mode);
-  renderLeaderboardRows(elements.groupLeaderboardBody, entries, mode);
-  if (leaderboard) {
-    elements.activeGroupName.textContent = leaderboard.groupName;
-    elements.groupLeaderboardStatus.textContent = `${leaderboard.scoringOption === "vegas" ? "Upset Edge" : "Classic"} ranking · ${leaderboard.status}`;
-    elements.groupLeaderboardStatus.title = "";
-  }
-}
-
-async function loadGroupLeaderboard(groupId = state.activeGroupId) {
-  if (!groupId) return;
-  elements.groupLeaderboardStatus.textContent = "Loading group leaderboard…";
-  try {
-    const leaderboard = await apiRequest(
-      `/api/groups/${encodeURIComponent(groupId)}/leaderboard`,
-    );
-    if (state.activeGroupId !== groupId) return;
-    state.groupLeaderboard = leaderboard;
-    renderGroupLeaderboard();
-  } catch (error) {
-    if (state.activeGroupId !== groupId) return;
-    state.groupLeaderboard = null;
-    elements.groupLeaderboardBody.innerHTML = "";
-    elements.groupLeaderboardTableShell.classList.add("hidden");
-    elements.emptyGroupLeaderboard.classList.add("hidden");
-    elements.groupLeaderboardStatus.textContent =
-      "The group leaderboard could not be loaded.";
-    elements.groupLeaderboardStatus.title = error.message;
-  }
-}
-
-async function refreshGroups(preferredGroupId = state.activeGroupId) {
-  try {
-    const payload = await apiRequest("/api/groups");
-    state.groups = payload.groups || [];
-    state.activeGroupId = state.groups.some(
-      (group) => group.groupId === preferredGroupId,
-    )
-      ? preferredGroupId
-      : state.groups[0]?.groupId || "";
-    state.groupLeaderboard = null;
-    if (!elements.groupTabs) return;
-    elements.emptyGroups.textContent =
-      "You have not joined a group yet. Create one for friends or join one with its name and password.";
-    elements.emptyGroups.title = "";
-    renderGroups();
-    if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
-  } catch (error) {
-    state.groups = [];
-    state.activeGroupId = "";
-    state.groupLeaderboard = null;
-    if (!elements.groupTabs) throw error;
-    renderGroups();
-    elements.emptyGroups.textContent =
-      "Your groups could not be loaded. Please refresh and try again.";
-    elements.emptyGroups.title = error.message;
-  }
-}
-
-function resetLeaveGroupDialog() {
-  leaveGroupPending = false;
-  leaveGroupId = "";
-  elements.leaveGroupDescription.textContent = "";
-  elements.newCommissionerField.classList.add("hidden");
-  elements.newCommissioner.innerHTML = "";
-  elements.leaveGroupMessage.textContent = "";
-  elements.confirmLeaveGroup.disabled = false;
-  elements.confirmLeaveGroup.removeAttribute("aria-busy");
-  elements.confirmLeaveGroup.textContent = "Leave group";
-}
-
-async function openLeaveGroupDialog(group) {
-  if (!group || !elements.leaveGroupDialog) return;
-  resetLeaveGroupDialog();
-  leaveGroupId = group.groupId;
-  const isCommissioner = Boolean(group.isCommissioner ?? group.isCreator);
-  elements.leaveGroupTitle.textContent = `Leave ${group.groupName}?`;
-  elements.leaveGroupDescription.textContent = isCommissioner
-    ? "You’re this group’s commissioner. Choose another member to take over before you leave."
-    : "You’ll be removed from this group and its private leaderboard. You can rejoin later with an invite or the group password.";
-  elements.newCommissionerField.classList.toggle("hidden", !isCommissioner);
-  elements.leaveGroupDialog.showModal();
-
-  if (!isCommissioner) {
-    elements.confirmLeaveGroup.focus();
-    return;
-  }
-
-  elements.confirmLeaveGroup.disabled = true;
-  elements.leaveGroupMessage.textContent = "Loading group members…";
-  try {
-    const payload = await apiRequest(
-      `/api/groups/${encodeURIComponent(group.groupId)}/members`,
-    );
-    if (leaveGroupId !== group.groupId) return;
-    const candidates = (payload.members || []).filter(
-      (member) => !member.isCurrentUser,
-    );
-    candidates.forEach((member) => {
-      const option = document.createElement("option");
-      option.value = member.userId;
-      option.textContent = member.displayName;
-      elements.newCommissioner.appendChild(option);
-    });
-    if (candidates.length) {
-      elements.leaveGroupMessage.textContent = "";
-      elements.confirmLeaveGroup.disabled = false;
-      elements.newCommissioner.focus();
-    } else {
-      elements.leaveGroupMessage.textContent =
-        "Invite another member before leaving so someone can take over.";
-    }
-  } catch (error) {
-    elements.leaveGroupMessage.textContent =
-      `Could not load group members: ${error.message}`;
-  }
-}
-
-async function submitLeaveGroup(event) {
-  event.preventDefault();
-  const group = state.groups.find(
-    (candidate) => candidate.groupId === leaveGroupId,
-  );
-  if (leaveGroupPending || !group) return;
-  const isCommissioner = Boolean(group.isCommissioner ?? group.isCreator);
-  const newCommissionerId = isCommissioner
-    ? elements.newCommissioner.value
-    : "";
-  if (isCommissioner && !newCommissionerId) return;
-
-  leaveGroupPending = true;
-  elements.confirmLeaveGroup.disabled = true;
-  elements.confirmLeaveGroup.setAttribute("aria-busy", "true");
-  elements.confirmLeaveGroup.textContent = "Leaving…";
-  elements.leaveGroupMessage.textContent = isCommissioner
-    ? "Transferring commissioner access and leaving…"
-    : "Leaving the group…";
-  try {
-    await apiRequest(
-      `/api/groups/${encodeURIComponent(group.groupId)}/membership`,
-      {
-        method: "DELETE",
-        body: JSON.stringify(
-          isCommissioner ? { newCommissionerId } : {},
-        ),
-      },
-    );
-    state.groups = state.groups.filter(
-      (candidate) => candidate.groupId !== group.groupId,
-    );
-    state.activeGroupId = state.groups[0]?.groupId || "";
-    state.groupLeaderboard = null;
-    elements.leaveGroupDialog.close();
-    renderGroups();
-    if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
-    showToast(`You left ${group.groupName}.`);
-  } catch (error) {
-    elements.leaveGroupMessage.textContent =
-      `Could not leave the group: ${error.message}`;
-  } finally {
-    leaveGroupPending = false;
-    elements.confirmLeaveGroup.removeAttribute("aria-busy");
-    elements.confirmLeaveGroup.textContent = "Leave group";
-    if (elements.leaveGroupDialog.open) {
-      elements.confirmLeaveGroup.disabled = isCommissioner
-        ? !elements.newCommissioner.value
-        : false;
-    }
-  }
-}
-
-function groupConfirmationMatches(value, groupName) {
-  return Boolean(groupName) &&
-    value.trim().toLowerCase() === groupName.trim().toLowerCase();
-}
-
-function resetDeleteGroupDialog() {
-  deleteGroupPending = false;
-  deleteGroupId = "";
-  elements.deleteGroupName.textContent = "";
-  elements.deleteGroupConfirmationName.textContent = "";
-  elements.deleteGroupConfirmation.value = "";
-  elements.deleteGroupMessage.textContent = "";
-  elements.confirmDeleteGroup.disabled = true;
-  elements.confirmDeleteGroup.removeAttribute("aria-busy");
-  elements.confirmDeleteGroup.textContent = "Delete group";
-}
-
-function openDeleteGroupDialog(group) {
-  if (
-    !(group?.isCommissioner ?? group?.isCreator) ||
-    !elements.deleteGroupDialog
-  ) return;
-  deleteGroupId = group.groupId;
-  elements.deleteGroupName.textContent = group.groupName;
-  elements.deleteGroupConfirmationName.textContent = group.groupName;
-  elements.deleteGroupConfirmation.value = "";
-  elements.deleteGroupMessage.textContent = "";
-  elements.confirmDeleteGroup.disabled = true;
-  elements.deleteGroupDialog.showModal();
-  elements.deleteGroupConfirmation.focus();
-}
-
-function updateDeleteGroupConfirmation() {
-  elements.confirmDeleteGroup.disabled =
-    deleteGroupPending ||
-    !groupConfirmationMatches(
-      elements.deleteGroupConfirmation.value,
-      elements.deleteGroupConfirmationName.textContent,
-    );
-}
-
-async function submitDeleteGroup(event) {
-  event.preventDefault();
-  const group = state.groups.find(
-    (candidate) => candidate.groupId === deleteGroupId,
-  );
-  if (
-    deleteGroupPending ||
-    !(group?.isCommissioner ?? group?.isCreator) ||
-    !groupConfirmationMatches(
-      elements.deleteGroupConfirmation.value,
-      group.groupName,
-    )
-  ) {
-    return;
-  }
-
-  deleteGroupPending = true;
-  elements.confirmDeleteGroup.disabled = true;
-  elements.confirmDeleteGroup.setAttribute("aria-busy", "true");
-  elements.confirmDeleteGroup.textContent = "Deleting…";
-  elements.deleteGroupMessage.textContent =
-    "Removing the group for every member…";
-
-  try {
-    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`, {
-      method: "DELETE",
-    });
-    state.groups = state.groups.filter(
-      (candidate) => candidate.groupId !== group.groupId,
-    );
-    state.activeGroupId = state.groups[0]?.groupId || "";
-    state.groupLeaderboard = null;
-    elements.deleteGroupDialog.close();
-    renderGroups();
-    if (state.activeGroupId) await loadGroupLeaderboard(state.activeGroupId);
-    showToast(`Deleted ${group.groupName}.`);
-  } catch (error) {
-    elements.deleteGroupMessage.textContent =
-      `Could not delete the group: ${error.message}`;
-  } finally {
-    deleteGroupPending = false;
-    elements.confirmDeleteGroup.removeAttribute("aria-busy");
-    elements.confirmDeleteGroup.textContent = "Delete group";
-    updateDeleteGroupConfirmation();
-  }
-}
-
-function openGroupDialog(mode) {
-  groupDialogMode = mode;
-  const creating = mode === "create";
-  elements.groupForm.reset();
-  document.querySelector("#group-scoring-field").classList.toggle("hidden", !creating);
-  elements.groupDialogKicker.textContent = creating ? "NEW PRIVATE GROUP" : "JOIN PRIVATE GROUP";
-  elements.groupDialogTitle.textContent = creating ? "Create a group." : "Join a group.";
-  elements.groupDialogDescription.textContent = creating
-    ? "Pick a unique group name. You can invite people with a private link or the group password."
-    : "Enter the exact group name and the password shared by its creator.";
-  elements.submitGroup.textContent = creating ? "Create group" : "Join group";
-  elements.groupDialogMessage.textContent = "";
-  elements.groupDialog.showModal();
-  elements.groupName.focus();
-}
-
-async function submitGroup(event) {
-  event.preventDefault();
-  const creating = groupDialogMode === "create";
-  elements.submitGroup.disabled = true;
-  elements.submitGroup.setAttribute("aria-busy", "true");
-  elements.submitGroup.textContent = creating ? "Creating…" : "Joining…";
-  elements.groupDialogMessage.textContent = creating
-    ? "Creating your private group…"
-    : "Checking the group password…";
-
-  try {
-    const group = await apiRequest(creating ? "/api/groups" : "/api/groups/join", {
-      method: "POST",
-      body: JSON.stringify({
-        groupName: elements.groupName.value,
-        password: elements.groupPassword.value,
-        ...(creating ? { scoringOption: document.querySelector("#group-scoring").value } : {}),
-      }),
-    });
-    elements.groupDialog.close();
-    state.groups = [
-      ...state.groups.filter((existing) => existing.groupId !== group.groupId),
-      group,
-    ];
-    window.siteAnalytics?.track(creating ? "group_created" : "group_joined");
-    if (PAGE === "leaderboard") await refreshGroups(group.groupId);
-    if (elements.homeGroupStatus) {
-      elements.homeGroupStatus.textContent = creating
-        ? `${group.groupName} is ready. Copy the invite link to bring people in.`
-        : `You joined ${group.groupName}. Open My Groups to view its standings.`;
-    }
-    showToast(creating ? `Created ${group.groupName}.` : `Joined ${group.groupName}.`);
-    if (creating) await openGroupInviteDialog(group);
-  } catch (error) {
-    elements.groupDialogMessage.textContent = error.message;
-    elements.groupPassword.value = "";
-    elements.groupPassword.focus();
-  } finally {
-    elements.submitGroup.disabled = false;
-    elements.submitGroup.removeAttribute("aria-busy");
-    elements.submitGroup.textContent = creating ? "Create group" : "Join group";
-  }
-}
-
-function renderHomeGroupInvite() {
-  if (!elements.homeInviteCallout) return;
-  const hasInviteParameter = new URLSearchParams(window.location.search).has("invite");
-  const hasValidInvite = Boolean(pendingGroupInvite);
-  elements.homeInviteCallout.classList.toggle("hidden", !hasValidInvite);
-  document.body.classList.toggle("has-group-invite", hasValidInvite);
-  elements.homeAcceptInvite.textContent = state.signedIn
-    ? "Join group"
-    : "Sign in to join group";
-  if (hasInviteParameter && !pendingGroupInvite) {
-    elements.homeGroupStatus.textContent =
-      "This group invite link is invalid. Ask the sender for a new link.";
-  }
-}
-
-function openGroupAction(mode) {
-  if (state.signedIn) {
-    openGroupDialog(mode);
-    return;
-  }
-  pendingGroupAction = mode;
-  showAuthPanel(
-    "signIn",
-    mode === "create"
-      ? "Sign in to create a private group."
-      : "Sign in to join a private group.",
-  );
-  openAccountModal(elements.loginEmail);
-}
-
-async function acceptPendingGroupInvite() {
-  if (!pendingGroupInvite) return;
-  if (!state.signedIn) {
-    pendingGroupAction = "accept-invite";
-    showAuthPanel("signIn", "Sign in to accept this private group invite.");
-    openAccountModal(elements.loginEmail);
-    return;
-  }
-
-  elements.homeAcceptInvite.disabled = true;
-  elements.homeAcceptInvite.setAttribute("aria-busy", "true");
-  elements.homeAcceptInvite.textContent = "Joining…";
-  elements.homeInviteStatus.textContent = "Joining your group…";
-  try {
-    const group = await apiRequest("/api/groups/join-invite", {
-      method: "POST",
-      body: JSON.stringify(pendingGroupInvite),
-    });
-    pendingGroupInvite = null;
-    window.siteAnalytics?.track("group_invite_joined");
-    const url = new URL(window.location.href);
-    url.searchParams.delete("invite");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    renderHomeGroupInvite();
-    elements.homeGroupStatus.textContent =
-      `You joined ${group.groupName}. Open My Groups to view its standings.`;
-    showToast(`Joined ${group.groupName}.`);
-  } catch (error) {
-    elements.homeInviteStatus.textContent = error.message;
-  } finally {
-    elements.homeAcceptInvite.disabled = false;
-    elements.homeAcceptInvite.removeAttribute("aria-busy");
-    renderHomeGroupInvite();
-  }
-}
-
-async function resumePendingGroupAction() {
-  if (!pendingGroupAction) return;
-  const action = pendingGroupAction;
-  pendingGroupAction = "";
-  closeAccountModal({ restoreFocus: false });
-  if (action === "accept-invite") {
-    await acceptPendingGroupInvite();
-  } else {
-    openGroupDialog(action);
-  }
-}
-
-function groupInviteUrl(groupId, inviteCode) {
-  const url = new URL("/", window.location.origin);
-  url.searchParams.set("invite", `${groupId}.${inviteCode}`);
-  return url.toString();
-}
-
-async function openGroupInviteDialog(group) {
-  elements.groupInviteName.textContent = group.groupName;
-  elements.groupInviteLink.value = "";
-  elements.groupInviteMessage.textContent = "Creating a private invite link…";
-  elements.copyGroupInvite.disabled = true;
-  elements.shareGroupInviteNative.classList.toggle("hidden", !navigator.share);
-  elements.groupInviteDialog.showModal();
-
-  try {
-    const invite = await apiRequest(
-      `/api/groups/${encodeURIComponent(group.groupId)}/invite`,
-    );
-    elements.groupInviteName.textContent = invite.groupName;
-    elements.groupInviteLink.value = groupInviteUrl(
-      invite.groupId,
-      invite.inviteCode,
-    );
-    elements.groupInviteMessage.textContent =
-      "Only share this link with people you want in the group.";
-    elements.copyGroupInvite.disabled = false;
-  } catch (error) {
-    elements.groupInviteMessage.textContent = error.message;
-  }
-}
-
-async function shareActiveGroupInvite() {
-  const group = state.groups.find(
-    (candidate) => candidate.groupId === state.activeGroupId,
-  );
-  if (group) await openGroupInviteDialog(group);
-}
-
-async function copyGroupInviteLink() {
-  const link = elements.groupInviteLink.value;
-  if (!link) return;
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(link);
-    } else {
-      elements.groupInviteLink.select();
-      document.execCommand("copy");
-    }
-    elements.groupInviteMessage.textContent = "Invite link copied.";
-    elements.copyGroupInvite.textContent = "Copied";
-    setTimeout(() => {
-      elements.copyGroupInvite.textContent = "Copy invite link";
-    }, 1800);
-  } catch (error) {
-    elements.groupInviteMessage.textContent =
-      "Copy failed. Select the link and copy it manually.";
-    elements.groupInviteLink.select();
-  }
-}
-
-async function shareGroupInviteNatively() {
-  const link = elements.groupInviteLink.value;
-  if (!link || !navigator.share) return;
-  try {
-    await navigator.share({
-      title: `Join ${elements.groupInviteName.textContent}`,
-      text: "Join my Predict Playoffs private leaderboard.",
-      url: link,
-    });
-  } catch (error) {
-    if (error.name !== "AbortError") {
-      elements.groupInviteMessage.textContent = "The invite link could not be shared.";
-    }
-  }
 }

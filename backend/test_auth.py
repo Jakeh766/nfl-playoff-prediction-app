@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(resource=lambda _name: None))
@@ -21,6 +23,13 @@ SPEC.loader.exec_module(lambda_app)
 class FakeTable:
     def __init__(self, items=None):
         self.items = dict(items or {})
+        self.name = "profiles-or-predictions"
+        self.meta = types.SimpleNamespace(client=self)
+
+    def batch_get_item(self, *, RequestItems):
+        request = RequestItems[self.name]
+        return {"Responses": {self.name: [self.items[key["profileKey"]]
+                for key in request["Keys"] if key["profileKey"] in self.items]}}
 
     def get_item(self, *, Key):
         item = self.items.get(Key["profileKey"])
@@ -61,10 +70,62 @@ class FakeTable:
 class FakeGroupTable:
     def __init__(self, items=None):
         self.items = dict(items or {})
+        self.name = "groups"
+        self.meta = types.SimpleNamespace(client=self)
 
-    def get_item(self, *, Key):
+    def batch_get_item(self, *, RequestItems):
+        return {"Responses": {self.name: [self.items[key["groupKey"]].copy()
+                for key in RequestItems[self.name]["Keys"] if key["groupKey"] in self.items]}}
+
+    def query(self, *, IndexName, KeyConditionExpression, ExpressionAttributeValues, **kwargs):
+        values = ExpressionAttributeValues
+        attribute, placeholder = {"group-records": ("groupId", ":group"),
+                                  "user-groups": ("userId", ":user"),
+                                  "record-types": ("recordType", ":type")}[IndexName]
+        return {"Items": [item.copy() for item in self.items.values()
+                if item.get(attribute) == values[placeholder]
+                and item["groupKey"].startswith(values.get(":prefix", ""))]}
+
+    @staticmethod
+    def condition_matches(item, condition, values):
+        values = values or {}
+        for attribute in re.findall(r"attribute_exists\((\w+)\)", condition):
+            if not item or attribute not in item:
+                return False
+        for attribute in re.findall(r"attribute_not_exists\((\w+)\)", condition):
+            if item and attribute in item:
+                return False
+        for attribute, placeholder in re.findall(r"(\w+) = (:\w+)", condition):
+            if not item or item.get(attribute) != values[placeholder]:
+                return False
+        return True
+
+    def transact_write_items(self, *, TransactItems):
+        for action in TransactItems:
+            operation = next(iter(action.values()))
+            key = operation.get("Key", operation.get("Item"))["groupKey"]
+            if not self.condition_matches(self.items.get(key), operation.get("ConditionExpression", ""),
+                                          operation.get("ExpressionAttributeValues")):
+                raise ConditionalCheckFailed()
+        for action in TransactItems:
+            if "Put" in action:
+                self.items[action["Put"]["Item"]["groupKey"]] = action["Put"]["Item"]
+            elif "Update" in action:
+                operation = dict(action["Update"])
+                operation.pop("TableName")
+                self.update_item(**operation)
+            elif "Delete" in action:
+                self.items.pop(action["Delete"]["Key"]["groupKey"], None)
+
+    def get_item(self, *, Key, ConsistentRead=False):
         item = self.items.get(Key["groupKey"])
         return {"Item": item} if item else {}
+
+    @staticmethod
+    def check_expression_values(values, *expressions):
+        used = set(re.findall(r":[A-Za-z0-9_]+", " ".join(expression or "" for expression in expressions)))
+        if used != set(values or {}):
+            raise ValueError("DynamoDB requires every expression value to be used")
 
     def put_item(self, *, Item, ConditionExpression=None):
         if ConditionExpression and Item["groupKey"] in self.items:
@@ -79,12 +140,22 @@ class FakeGroupTable:
         ExpressionAttributeValues=None,
     ):
         existing = self.items.get(Key["groupKey"])
+        self.check_expression_values(ExpressionAttributeValues, ConditionExpression)
         if ConditionExpression:
             values = ExpressionAttributeValues or {}
-            if "commissionerId" in ConditionExpression:
+            if not self.condition_matches(existing, ConditionExpression, values):
+                raise ConditionalCheckFailed()
+            if "commissionerId = :commissioner" in ConditionExpression:
                 attribute, value_key = "commissionerId", ":commissioner"
-            elif "createdBy" in ConditionExpression:
-                attribute, value_key = "createdBy", ":creator"
+            elif "createdBy = :commissioner" in ConditionExpression:
+                if not existing or "commissionerId" in existing:
+                    raise ConditionalCheckFailed()
+                attribute, value_key = "createdBy", ":commissioner"
+            elif "attribute_not_exists(commissionerId)" in ConditionExpression:
+                if not existing or "commissionerId" in existing or "createdBy" in existing:
+                    raise ConditionalCheckFailed()
+                self.items.pop(Key["groupKey"])
+                return
             else:
                 attribute, value_key = "groupId", ":groupId"
             if not existing or existing.get(attribute) != values.get(value_key):
@@ -102,21 +173,37 @@ class FakeGroupTable:
     ):
         item = self.items[Key["groupKey"]]
         values = ExpressionAttributeValues or {}
-        if UpdateExpression == "SET inviteCode = :inviteCode":
-            if ConditionExpression and "inviteCode" in item:
+        self.check_expression_values(values, UpdateExpression, ConditionExpression)
+        if UpdateExpression.startswith("SET inviteCode"):
+            if not self.condition_matches(item, ConditionExpression or "", values):
                 raise ConditionalCheckFailed()
             item["inviteCode"] = values[":inviteCode"]
+            if ":revoked" in values:
+                item["inviteRevoked"] = values[":revoked"]
         elif UpdateExpression == "SET commissionerId = :newCommissioner":
-            current = values[":currentCommissioner"]
-            if "commissionerId = :currentCommissioner" == ConditionExpression:
+            current = values.get(":commissioner")
+            if "commissionerId = :commissioner" == ConditionExpression:
                 if item.get("commissionerId") != current:
                     raise ConditionalCheckFailed()
-            elif "createdBy = :currentCommissioner" in (ConditionExpression or ""):
+            elif "createdBy = :commissioner" in (ConditionExpression or ""):
                 if "commissionerId" in item or item.get("createdBy") != current:
                     raise ConditionalCheckFailed()
             elif "commissionerId" in item or "createdBy" in item:
                 raise ConditionalCheckFailed()
             item["commissionerId"] = values[":newCommissioner"]
+        elif UpdateExpression.startswith(("SET groupName =", "SET sports = :sports", "SET scoringOptions =", "SET passwordSalt =")):
+            if not self.condition_matches(item, ConditionExpression or "", values):
+                raise ConditionalCheckFailed()
+            if "commissionerId = :commissioner" in ConditionExpression:
+                if item.get("commissionerId") != values[":commissioner"]:
+                    raise ConditionalCheckFailed()
+            elif "createdBy = :commissioner" in (ConditionExpression or ""):
+                if "commissionerId" in item or item.get("createdBy") != values[":commissioner"]:
+                    raise ConditionalCheckFailed()
+            elif "commissionerId" in item or "createdBy" in item:
+                raise ConditionalCheckFailed()
+            for attribute, placeholder in re.findall(r"(\w+) = (:\w+)", UpdateExpression):
+                item[attribute] = values[placeholder]
         else:
             raise AssertionError(f"Unexpected update expression: {UpdateExpression}")
         return {"Attributes": item.copy()} if ReturnValues == "ALL_NEW" else {}
@@ -134,6 +221,7 @@ def event(
     user_id: str | None = "user-123",
     body=None,
     path: str = "/api/prediction",
+    sport: str = "nfl",
 ):
     request_context = {"http": {"method": method}}
     if user_id:
@@ -142,15 +230,26 @@ def event(
         "rawPath": path,
         "requestContext": request_context,
         "body": json.dumps(body) if body is not None else None,
+        "queryStringParameters": {"sport": sport},
     }
 
 
 def valid_prediction():
+    afc = ["Baltimore Ravens", "Houston Texans", "Buffalo Bills", "Kansas City Chiefs",
+           "Denver Broncos", "Cincinnati Bengals", "Los Angeles Chargers"]
+    nfc = ["Detroit Lions", "Tampa Bay Buccaneers", "Philadelphia Eagles", "Los Angeles Rams",
+           "Green Bay Packers", "Minnesota Vikings", "Seattle Seahawks"]
     return {
-        "displayName": "must not be persisted",
-        "divisionWinners": {"AFC": {}, "NFC": {}},
-        "seeds": {"AFC": ["team"] * 7, "NFC": ["team"] * 7},
-        "picks": {"AFC": {}, "NFC": {}, "superBowl": "team"},
+        "divisionWinners": {
+            "AFC": dict(zip(("North", "South", "East", "West"), afc[:4])),
+            "NFC": dict(zip(("North", "South", "East", "West"), nfc[:4])),
+        },
+        "seeds": {"AFC": afc, "NFC": nfc},
+        "picks": {
+            c: {"wc-2-7": teams[1], "wc-3-6": teams[2], "wc-4-5": teams[3],
+                "div-1": teams[0], "div-2": teams[1], "conf": teams[0]}
+            for c, teams in (("AFC", afc), ("NFC", nfc))
+        } | {"superBowl": afc[0]},
         "bracketBuilt": True,
     }
 
@@ -220,7 +319,7 @@ class PredictionAuthorizationTests(unittest.TestCase):
 
         self.assertEqual(result["statusCode"], 401)
 
-    def test_put_uses_sub_and_does_not_store_display_name(self):
+    def test_put_uses_sub_and_stores_only_prediction_fields(self):
         result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
         stored = self.table.items["user-123"]
 
@@ -269,7 +368,8 @@ class PredictionAuthorizationTests(unittest.TestCase):
         }
 
         try:
-            result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "prod"}):
+                result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
         finally:
             lambda_app.PREDICTION_LOCK_AT = original_lock_at
             lambda_app.time.time = original_time
@@ -278,8 +378,43 @@ class PredictionAuthorizationTests(unittest.TestCase):
         self.assertEqual(self.table.items["user-123"]["savedAt"], 123)
         self.assertTrue(json.loads(result["body"])["locked"])
 
+    def test_dev_nfl_prediction_can_be_saved_after_kickoff(self):
+        original_time = lambda_app.time.time
+        lambda_app.time.time = lambda: 1_789_000_000
+        try:
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "dev"}), patch.object(
+                lambda_app, "PREDICTION_LOCK_AT", "2026-09-10T00:20:00Z"
+            ):
+                result = lambda_app.handler(event("PUT", body=valid_prediction()), None)
+        finally:
+            lambda_app.time.time = original_time
+
+        self.assertEqual(result["statusCode"], 200)
+        self.assertIn("user-123", self.table.items)
+
 
 class PredictionWindowTests(unittest.TestCase):
+    def test_only_dev_nfl_ignores_elapsed_lock_date(self):
+        after_kickoff = 1_789_000_000
+        with patch.object(lambda_app, "PREDICTION_LOCK_AT", "2026-09-10T00:20:00Z"):
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "dev"}):
+                dev_window = lambda_app.prediction_window(after_kickoff)
+                nba_token = lambda_app.SPORT.set("nba")
+                try:
+                    nba_window = lambda_app.prediction_window(2_000_000_000)
+                finally:
+                    lambda_app.SPORT.reset(nba_token)
+            with patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "prod"}):
+                prod_window = lambda_app.prediction_window(after_kickoff)
+
+        self.assertTrue(dev_window["devNflUnlocked"])
+        self.assertFalse(dev_window["locked"])
+        self.assertEqual(dev_window["season"], 2026)
+        self.assertFalse(prod_window["devNflUnlocked"])
+        self.assertTrue(prod_window["locked"])
+        self.assertFalse(nba_window["devNflUnlocked"])
+        self.assertTrue(nba_window["locked"])
+
     def test_window_endpoint_is_public_and_reports_server_time(self):
         original_lock_at = lambda_app.PREDICTION_LOCK_AT
         original_time = lambda_app.time.time
@@ -304,6 +439,8 @@ class PredictionWindowTests(unittest.TestCase):
 
 class LeaderboardProfileTests(unittest.TestCase):
     def setUp(self):
+        self.predictions = FakeTable()
+        lambda_app.predictions_table = lambda: self.predictions
         self.profiles = FakeTable()
         self.groups = FakeGroupTable()
         lambda_app.profiles_table = lambda: self.profiles
@@ -392,6 +529,275 @@ class LeaderboardProfileTests(unittest.TestCase):
 
 
 class PrivateGroupTests(unittest.TestCase):
+    def test_settings_are_commissioner_only_and_password_is_never_returned(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        for user in (None, "user-456", "outsider"):
+            for body in ({"password": "new-secret"}, {"scoringOption": "vegas"}, {"sports": ["nba"]}):
+                with self.subTest(user=user, body=body):
+                    result = lambda_app.handler(event("PATCH", user_id=user, path=f"/api/groups/{group_id}", body=body), None)
+                    self.assertEqual(result["statusCode"], 401 if user is None else 403)
+        group = self.groups.items[f"group#{group_id}"]
+        old_salt, old_hash = group["passwordSalt"], group["passwordHash"]
+        result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body={"password": "new-secret"}), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertNotEqual(group["passwordSalt"], old_salt)
+        self.assertNotEqual(group["passwordHash"], old_hash)
+        for key in ("password", "passwordHash", "passwordSalt", "passwordIterations"):
+            self.assertNotIn(key, json.loads(result["body"]))
+            self.assertNotIn(key, lambda_app.list_groups("user-456")["groups"][0])
+            self.assertNotIn(key, lambda_app.get_group_leaderboard(group_id, "user-456"))
+        self.assertEqual(self.join(user_id="new-member")["statusCode"], 400)
+        self.assertEqual(self.join(user_id="new-member", password="new-secret")["statusCode"], 200)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(self.join_invite(group_id, group["inviteCode"], user_id="invite-member")["statusCode"], 200)
+
+    def test_invalid_settings_do_not_partially_change_competition(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        original = self.groups.items[f"group#{group_id}"].copy()
+        for body in ({}, {"password": "short"}, {"password": None}, {"scoringOption": "invalid"},
+                     {"commissionerId": "outsider"}, {"scoringOptions": {"nfl": "vegas"}},
+                     {"sports": ["nba"], "password": "bad"}, {"sports": ["nba"], "scoringOption": "vegas"}):
+            with self.subTest(body=body):
+                result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body=body), None)
+                self.assertEqual(result["statusCode"], 400)
+                self.assertEqual(self.groups.items[f"group#{group_id}"], original)
+
+    def test_group_rename_preserves_members_history_credentials_and_invites(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.items[f"group#{group_id}"].copy()
+        result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                         body={"groupName": "  Sunday   Legends  "}), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(json.loads(result["body"])["groupName"], "Sunday Legends")
+        self.assertNotIn("name#sunday crew", self.groups.items)
+        self.assertEqual(self.groups.items["name#sunday legends"]["groupId"], group_id)
+        updated = self.groups.items[f"group#{group_id}"]
+        for key, value in original.items():
+            if key not in ("groupName", "normalizedName"):
+                self.assertEqual(updated[key], value)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(self.join(user_id="third", name="Sunday Legends")["statusCode"], 200)
+        self.assertEqual(self.join(user_id="fourth", name="Sunday Crew")["statusCode"], 400)
+        result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                         body={"groupName": "SUNDAY LEGENDS"}), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["groupName"], "SUNDAY LEGENDS")
+        self.assertEqual(self.create(name="Sunday Crew", user_id="another")["statusCode"], 201)
+
+    def test_group_rename_rejects_members_invalid_names_and_duplicate_reservations_atomically(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.create(name="Taken Name", user_id="another")
+        original = {key: value.copy() for key, value in self.groups.items.items()}
+        for user, name, status in (("user-456", "Member Rename", 403), ("outsider", "Outsider Rename", 403),
+                                   ("user-123", "x", 400), ("user-123", "<invalid>", 400),
+                                   ("user-123", "Taken Name", 400)):
+            result = lambda_app.handler(event("PATCH", user_id=user, path=f"/api/groups/{group_id}",
+                                             body={"groupName": name, "password": "changed-secret"}), None)
+            self.assertEqual(result["statusCode"], status)
+            self.assertEqual(self.groups.items, original)
+
+    def test_group_rename_losing_commissioner_race_keeps_both_name_reservations_intact(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        transaction = self.groups.transact_write_items
+        def transfer_first(**arguments):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "new-owner"
+            return transaction(**arguments)
+        with patch.object(self.groups, "transact_write_items", side_effect=transfer_first):
+            result = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                             body={"groupName": "New Name"}), None)
+        self.assertEqual(result["statusCode"], 400)
+        self.assertIn("name#sunday crew", self.groups.items)
+        self.assertNotIn("name#new name", self.groups.items)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["groupName"], "Sunday Crew")
+
+    def test_group_delete_rejects_a_concurrent_rename_before_removing_records(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        original_delete = self.groups.delete_item
+        def rename_first(**arguments):
+            group = self.groups.items[f"group#{group_id}"]
+            group["groupName"] = "Renamed Crew"
+            group["normalizedName"] = "renamed crew"
+            self.groups.items["name#renamed crew"] = {"groupKey": "name#renamed crew", "groupId": group_id}
+            return original_delete(**arguments)
+        with patch.object(self.groups, "delete_item", side_effect=rename_first):
+            self.assertEqual(self.delete(group_id)["statusCode"], 403)
+        self.assertIn(f"group#{group_id}", self.groups.items)
+        self.assertIn("name#renamed crew", self.groups.items)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_scoring_is_sport_specific_and_locked_at_exact_deadline_even_on_dev(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        path = f"/api/groups/{group_id}"
+        lambda_app.update_group_settings(group_id, "user-123", event("PATCH", body={"sports": ["nfl", "nba"]}))
+        nfl_lock = "2026-09-01T00:00:00Z"
+        with patch.object(lambda_app, "PREDICTION_LOCK_AT", nfl_lock), patch.object(lambda_app.time, "time", return_value=1788220799):
+            updated = lambda_app.handler(event("PATCH", path=path, body={"scoringOption": "vegas"}), None)
+            self.assertEqual(updated["statusCode"], 200)
+            self.assertEqual(json.loads(updated["body"])["scoringOptions"], {"nfl": "vegas", "nba": "classic"})
+            self.assertEqual(lambda_app.get_group_leaderboard(group_id, "user-123")["scoringOption"], "vegas")
+        with patch.object(lambda_app, "PREDICTION_LOCK_AT", nfl_lock), patch.object(lambda_app.time, "time", return_value=1788220800), \
+             patch.dict(lambda_app.os.environ, {"ENVIRONMENT": "dev"}):
+            self.assertFalse(lambda_app.prediction_window()["locked"])
+            self.assertTrue(lambda_app.get_group_leaderboard(group_id, "user-123")["scoringLock"]["locked"])
+            rejected = lambda_app.handler(event("PATCH", path=path, body={"scoringOption": "classic", "password": "new-secret"}), None)
+            self.assertEqual(rejected["statusCode"], 403)
+            self.assertEqual(self.join(user_id="still-old-password")["statusCode"], 200)
+            nba_event = event("PATCH", path=path, body={"scoringOption": "vegas"})
+            nba_event["queryStringParameters"] = {"sport": "nba"}
+            self.assertEqual(lambda_app.handler(nba_event, None)["statusCode"], 200)
+            self.assertEqual(lambda_app.group_scoring_option(self.groups.items[f"group#{group_id}"], "nfl"), "vegas")
+        nba_deadline = lambda_app.calendar.timegm(lambda_app.time.strptime(lambda_app.NBA["lockAt"], "%Y-%m-%dT%H:%M:%SZ"))
+        with patch.object(lambda_app.time, "time", return_value=nba_deadline):
+            self.assertEqual(lambda_app.handler(nba_event, None)["statusCode"], 403)
+
+    def test_legacy_scoring_defaults_and_concurrent_settings_guards(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        group = self.groups.items[f"group#{group_id}"]
+        self.assertEqual(lambda_app.group_scoring_option(group, "nba"), "classic")
+        self.join()
+        original = self.groups.update_item
+        def transfer(**kwargs):
+            group["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "update_item", side_effect=transfer):
+            with self.assertRaises(PermissionError):
+                lambda_app.update_group_settings(group_id, "user-123", event("PATCH", body={"password": "new-secret"}))
+        self.assertEqual(self.join(user_id="old-password-works")["statusCode"], 200)
+        group["commissionerId"] = "user-123"
+        group["scoringOptions"] = {"nfl": "classic", "nba": "classic"}
+        def concurrent_scoring(**kwargs):
+            group["scoringOptions"] = {"nfl": "classic", "nba": "vegas"}
+            return original(**kwargs)
+        with patch.object(self.groups, "update_item", side_effect=concurrent_scoring):
+            with self.assertRaises(PermissionError):
+                lambda_app.update_group_settings(group_id, "user-123", event("PATCH", body={"scoringOption": "vegas"}))
+        self.assertEqual(group["scoringOptions"], {"nfl": "classic", "nba": "vegas"})
+
+    def test_removal_blocks_old_new_invites_password_and_private_routes(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        path = f"/api/groups/{group_id}/members/user-456"
+        self.assertEqual(lambda_app.handler(event("DELETE", user_id="user-456", path=path), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("DELETE", user_id=None, path=path), None)["statusCode"], 401)
+        self.assertEqual(lambda_app.handler(event("DELETE", path=f"/api/groups/{group_id}/members/user-123"), None)["statusCode"], 400)
+        self.assertEqual(lambda_app.handler(event("DELETE", path=path), None)["statusCode"], 200)
+        self.assertEqual(self.join_invite(group_id, code)["statusCode"], 403)
+        self.assertEqual(self.join()["statusCode"], 403)
+        new_code = lambda_app.change_group_invite(group_id, "user-123")["inviteCode"]
+        self.assertEqual(self.join_invite(group_id, new_code)["statusCode"], 403)
+        self.assertFalse(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(lambda_app.list_groups("user-456"), {"groups": []})
+        for suffix in ("leaderboard", "members", "invite"):
+            self.assertEqual(lambda_app.handler(event("GET", user_id="user-456", path=f"/api/groups/{group_id}/{suffix}"), None)["statusCode"], 403)
+        self.assertEqual(len(lambda_app.list_group_members(group_id, "user-123")["members"]), 1)
+
+    def test_invite_rotation_permissions_and_revoke_feature_removed(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        path = f"/api/groups/{group_id}/invite"
+        old = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        self.assertEqual(lambda_app.handler(event("POST", user_id="user-456", path=path), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("POST", user_id=None, path=path), None)["statusCode"], 401)
+        rotated = json.loads(lambda_app.handler(event("POST", path=path), None)["body"])["inviteCode"]
+        self.assertNotEqual(old, rotated)
+        self.assertEqual(self.join_invite(group_id, old, user_id="new-user")["statusCode"], 400)
+        self.assertEqual(self.join_invite(group_id, rotated, user_id="new-user")["statusCode"], 200)
+        self.assertEqual(lambda_app.handler(event("DELETE", path=path), None)["statusCode"], 404)
+        self.assertEqual(self.join_invite(group_id, rotated, user_id="another-user")["statusCode"], 200)
+        self.assertEqual(lambda_app.get_group_invite(group_id, "user-456")["inviteCode"], rotated)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertTrue(lambda_app.change_group_invite(group_id, "user-123")["inviteCode"])
+
+    def test_legacy_revoked_invite_stays_disabled_until_secondary_reset(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        group = self.groups.items[f"group#{group_id}"]
+        group.update(inviteCode="", inviteRevoked=True)
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["inviteCode"])
+        code = lambda_app.change_group_invite(group_id, "user-123")["inviteCode"]
+        self.assertFalse(group["inviteRevoked"])
+        self.assertEqual(self.join_invite(group_id, code)["statusCode"], 200)
+
+    def test_group_reads_do_not_scan_and_include_members_without_predictions(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.predictions.items.pop("user-456")
+        lambda_app.add_group_membership(group_id, "no-profile")
+        with patch.object(self.groups, "scan", side_effect=AssertionError("Groups scan")), \
+             patch.object(self.profiles, "scan", side_effect=AssertionError("Profiles scan")), \
+             patch.object(self.predictions, "scan", side_effect=AssertionError("Predictions scan")):
+            self.assertEqual(len(lambda_app.list_groups("user-123")["groups"]), 1)
+            board = lambda_app.get_group_leaderboard(group_id, "user-123")
+            self.assertEqual(len(board["entries"]), 3)
+            missing = [entry for entry in board["entries"] if not entry["hasPrediction"]]
+            self.assertEqual(len(missing), 2)
+            self.assertTrue(all(entry["total"] is None and entry["rank"] is None for entry in missing))
+            self.assertEqual(sum(entry["isCommissioner"] for entry in board["entries"]), 1)
+            self.assertEqual(len(board["members"]), 3)
+            self.assertFalse(any("memberId" in entry for entry in board["entries"]))
+
+    def test_equal_scoring_results_share_rank_with_existing_tiebreakers(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.predictions.items["user-456"]["testScore"] = self.predictions.items["user-123"]["testScore"]
+        self.profiles.items["user#third"] = {"profileKey": "user#third", "recordType": "profile", "leaderboardName": "Third"}
+        self.predictions.items["third"] = {"profileKey": "third", "testScore": 1}
+        lambda_app.add_group_membership(group_id, "third")
+        for members in (None, {"user-123", "user-456", "third"}):
+            self.assertEqual([entry["rank"] for entry in lambda_app.build_leaderboard(members)["entries"]], [1, 1, 3])
+
+    def test_concurrent_role_change_prevents_removal_and_invite_changes(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.transact_write_items
+        def transfer(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=transfer):
+            with self.assertRaises(PermissionError):
+                lambda_app.remove_group_member(group_id, "user-123", "user-456")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+
+    def test_removed_replacement_cannot_become_commissioner_during_transfer(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.transact_write_items
+        def remove_replacement(**kwargs):
+            self.groups.items[lambda_app.membership_item_key(group_id, "user-456")]["recordType"] = "removedMembership"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=remove_replacement):
+            rejected = self.transfer(group_id, "user-456")
+        self.assertEqual(rejected["statusCode"], 403)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "user-123")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_invite_revoked_between_read_and_join_cannot_add_a_membership(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        original = self.groups.transact_write_items
+        def revoke_before_join(**kwargs):
+            self.groups.items[f"group#{group_id}"].update(inviteCode="", inviteRevoked=True)
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=revoke_before_join):
+            self.assertEqual(self.join_invite(group_id, code)["statusCode"], 403)
+        self.assertFalse(lambda_app.is_group_member(group_id, "user-456"))
+
+    def test_concurrent_invite_update_cannot_override_new_commissioner(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        old_code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        original = self.groups.update_item
+        def transfer_before_update(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "update_item", side_effect=transfer_before_update):
+            with self.assertRaises(PermissionError):
+                lambda_app.change_group_invite(group_id, "user-123")
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["inviteCode"], old_code)
+
     def setUp(self):
         self.groups = FakeGroupTable()
         self.profiles = FakeTable(
@@ -477,6 +883,10 @@ class PrivateGroupTests(unittest.TestCase):
             None,
         )
 
+    def transfer(self, group_id, replacement, user_id="user-123"):
+        return lambda_app.handler(event("POST", user_id=user_id,
+            path=f"/api/groups/{group_id}/commissioner", body={"newCommissionerId": replacement}), None)
+
     def join(self, user_id="user-456", name="Sunday Crew", password="secret1"):
         return lambda_app.handler(
             event(
@@ -521,6 +931,53 @@ class PrivateGroupTests(unittest.TestCase):
             body={"groupName": "Vegas Crew", "password": "secret1", "scoringOption": "unknown"}), None)
         self.assertEqual(result["statusCode"], 400)
 
+    def test_group_sports_filter_both_leaderboards_and_legacy_default(self):
+        group_ids = {}
+        for name, sports in (("NFL Crew", ["nfl"]), ("NBA Crew", ["nba"]), ("Both Crew", ["nfl", "nba"])):
+            result = lambda_app.handler(event("POST", path="/api/groups", body={
+                "groupName": name, "password": "secret1", "sports": sports,
+            }), None)
+            self.assertEqual(result["statusCode"], 201)
+            group_ids[name] = json.loads(result["body"])["groupId"]
+        del self.groups.items[f"group#{group_ids['NFL Crew']}"]["sports"]
+        for sport, expected in (("nfl", {"NFL Crew", "Both Crew"}), ("nba", {"NBA Crew", "Both Crew"})):
+            listed = lambda_app.handler(event("GET", path="/api/groups", sport=sport), None)
+            self.assertEqual({group["groupName"] for group in json.loads(listed["body"])["groups"]}, expected)
+        self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['NFL Crew']}/leaderboard", sport="nba"), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['NBA Crew']}/leaderboard", sport="nfl"), None)["statusCode"], 403)
+        with patch.object(lambda_app, "build_leaderboard", return_value={"entries": []}):
+            self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['Both Crew']}/leaderboard", sport="nfl"), None)["statusCode"], 200)
+            self.assertEqual(lambda_app.handler(event("GET", path=f"/api/groups/{group_ids['Both Crew']}/leaderboard", sport="nba"), None)["statusCode"], 200)
+
+    def test_group_creation_defaults_to_requested_sport_and_rejects_invalid_sports(self):
+        created = lambda_app.handler(event("POST", path="/api/groups", sport="nba", body={
+            "groupName": "NBA Crew", "password": "secret1",
+        }), None)
+        self.assertEqual(json.loads(created["body"])["sports"], ["nba"])
+        for sports in ([], ["nfl", "other"], ["nba", "nba"], "nfl"):
+            rejected = lambda_app.handler(event("POST", path="/api/groups", body={
+                "groupName": "Invalid Crew", "password": "secret1", "sports": sports,
+            }), None)
+            self.assertEqual(rejected["statusCode"], 400)
+
+    def test_only_current_commissioner_can_edit_sports(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        path = f"/api/groups/{group_id}"
+        self.join()
+        rejected = lambda_app.handler(event("PATCH", user_id="user-456", path=path, body={"sports": ["nba"]}), None)
+        self.assertEqual(rejected["statusCode"], 403)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["sports"], ["nfl"])
+        for sports in ([], ["nfl", "other"], ["nfl", "nfl"], "nba"):
+            invalid = lambda_app.handler(event("PATCH", path=path, body={"sports": sports}), None)
+            self.assertEqual(invalid["statusCode"], 400)
+        updated = lambda_app.handler(event("PATCH", path=path, body={"sports": ["nba", "nfl"]}), None)
+        self.assertEqual(json.loads(updated["body"])["sports"], ["nfl", "nba"])
+        self.assertEqual(len([item for item in self.groups.items.values() if item.get("recordType") == "group"]), 1)
+        self.transfer(group_id, "user-456")
+        self.assertEqual(lambda_app.handler(event("PATCH", path=path, body={"sports": ["nfl"]}), None)["statusCode"], 403)
+        self.assertEqual(lambda_app.handler(event("PATCH", user_id="user-456", path=path, body={"sports": ["nba"]}), None)["statusCode"], 200)
+
     def test_create_hashes_password_and_reserves_unique_name(self):
         created = self.create()
         payload = json.loads(created["body"])
@@ -540,6 +997,64 @@ class PrivateGroupTests(unittest.TestCase):
 
         duplicate = self.create(user_id="user-456", name="  sunday crew  ")
         self.assertEqual(duplicate["statusCode"], 400)
+
+    def test_legacy_groups_can_edit_sports_and_transfer_without_unused_values(self):
+        for keep_creator in (True, False):
+            with self.subTest(keep_creator=keep_creator):
+                created = json.loads(self.create(name=f"Legacy {keep_creator}")["body"])
+                group_id = created["groupId"]
+                self.join(name=f"Legacy {keep_creator}")
+                group = self.groups.items[f"group#{group_id}"]
+                group.pop("commissionerId", None)
+                if not keep_creator:
+                    del group["createdBy"]
+                    # Make the inferred creator unambiguous even on fast machines.
+                    group["createdAt"] = 1
+                    self.groups.items[lambda_app.membership_item_key(group_id, "user-123")]["joinedAt"] = 1
+                    self.groups.items[lambda_app.membership_item_key(group_id, "user-456")]["joinedAt"] = 2
+                updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                    body={"sports": ["nfl", "nba"]}), None)
+                self.assertEqual(updated["statusCode"], 200)
+                self.assertTrue(json.loads(updated["body"])["isCommissioner"])
+                transferred = self.transfer(group_id, "user-456")
+                self.assertEqual(transferred["statusCode"], 200)
+                self.assertEqual(group["commissionerId"], "user-456")
+
+    def test_role_change_during_delete_preserves_memberships_name_and_history(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+        history_key = f"history#{group_id}#nfl#2026"
+        self.groups.items[history_key] = {"groupKey": history_key, "recordType": "groupSeason", "groupId": group_id}
+        original_delete = self.groups.delete_item
+
+        def transfer_before_delete(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original_delete(**kwargs)
+
+        keys = set(self.groups.items)
+        with patch.object(self.groups, "delete_item", side_effect=transfer_before_delete) as deletion:
+            rejected = self.delete(group_id)
+        self.assertEqual(rejected["statusCode"], 403)
+        deletion.assert_called_once()
+        self.assertEqual(set(self.groups.items), keys)
+
+    def test_concurrent_password_and_invite_joins_preserve_original_membership(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        self.join()
+        membership = dict(self.groups.items[lambda_app.membership_item_key(group_id, "user-456")])
+        code = self.groups.items[f"group#{group_id}"]["inviteCode"]
+        with patch.object(lambda_app, "is_group_member", return_value=False):
+            self.assertEqual(self.join()["statusCode"], 200)
+            self.assertEqual(self.join_invite(group_id, code)["statusCode"], 200)
+        self.assertEqual(self.groups.items[lambda_app.membership_item_key(group_id, "user-456")], membership)
+
+    def test_join_storage_failure_is_not_treated_as_success(self):
+        created = json.loads(self.create()["body"])
+        with patch.object(self.groups, "transact_write_items", side_effect=RuntimeError("Storage unavailable")):
+            with self.assertRaises(RuntimeError):
+                lambda_app.add_group_membership(created["groupId"], "user-456")
 
     def test_group_creator_can_delete_group_and_release_its_name(self):
         created = json.loads(self.create()["body"])
@@ -593,16 +1108,21 @@ class PrivateGroupTests(unittest.TestCase):
         self.join()
 
         rejected = self.leave(group_id, user_id="user-123")
-        transferred = self.leave(
-            group_id,
-            user_id="user-123",
-            new_commissioner_id="user-456",
-        )
+        self.assertEqual(self.leave(group_id, user_id="user-123", new_commissioner_id="user-456")["statusCode"], 403)
+        before = {key: dict(value) for key, value in self.groups.items.items()}
+        transferred = self.transfer(group_id, "user-456")
         group = self.groups.items[f"group#{group_id}"]
 
-        self.assertEqual(rejected["statusCode"], 400)
+        self.assertEqual(rejected["statusCode"], 403)
         self.assertEqual(transferred["statusCode"], 200)
         self.assertEqual(group["commissionerId"], "user-456")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        self.assertEqual(set(self.groups.items), set(before))
+        self.assertEqual({key: value for key, value in self.groups.items.items() if key != f"group#{group_id}"},
+                         {key: value for key, value in before.items() if key != f"group#{group_id}"})
+        self.assertEqual(group["createdBy"], "user-123")
+        self.assertEqual(self.leave(group_id, user_id="user-123")["statusCode"], 200)
         self.assertNotIn(
             f"membership#{group_id}#user#user-123",
             self.groups.items,
@@ -621,17 +1141,60 @@ class PrivateGroupTests(unittest.TestCase):
     def test_commissioner_can_only_transfer_to_another_member(self):
         created = json.loads(self.create()["body"])
 
-        result = self.leave(
-            created["groupId"],
-            user_id="user-123",
-            new_commissioner_id="outsider",
-        )
+        result = self.transfer(created["groupId"], "outsider")
 
         self.assertEqual(result["statusCode"], 400)
         self.assertIn(
             f"membership#{created['groupId']}#user#user-123",
             self.groups.items,
         )
+
+    def test_transfer_rejects_members_outsiders_self_and_invalid_bodies(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        path = f"/api/groups/{group_id}/commissioner"
+        for user in (None, "user-456", "outsider"):
+            self.assertEqual(self.transfer(group_id, "user-456", user_id=user)["statusCode"], 401 if user is None else 403)
+        for body in ({}, [], None, {"newCommissionerId": ""}, {"newCommissionerId": "user-123"},
+                     {"newCommissionerId": "outsider"}, {"newCommissionerId": "user-456", "extra": True}):
+            with self.subTest(body=body):
+                self.assertEqual(lambda_app.handler(event("POST", path=path, body=body), None)["statusCode"], 400)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "user-123")
+        self.assertEqual(lambda_app.handler(event("GET", path=path), None)["statusCode"], 404)
+
+    def test_members_without_predictions_can_be_commissioner_but_leave_cannot_transfer(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        self.assertEqual(self.leave(group_id, new_commissioner_id="user-123")["statusCode"], 400)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
+        lambda_app.add_group_membership(group_id, "no-prediction")
+        self.assertEqual(self.transfer(group_id, "no-prediction")["statusCode"], 200)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "no-prediction")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_stale_transfer_cannot_replace_new_commissioner(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        lambda_app.add_group_membership(group_id, "third")
+        original = self.groups.transact_write_items
+        def concurrent_transfer(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "third"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=concurrent_transfer):
+            self.assertEqual(self.transfer(group_id, "user-456")["statusCode"], 403)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["commissionerId"], "third")
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-123"))
+
+    def test_new_commissioner_cannot_leave_during_concurrent_transfer(self):
+        group_id = json.loads(self.create()["body"])["groupId"]
+        self.join()
+        original = self.groups.transact_write_items
+        def concurrent_transfer(**kwargs):
+            self.groups.items[f"group#{group_id}"]["commissionerId"] = "user-456"
+            return original(**kwargs)
+        with patch.object(self.groups, "transact_write_items", side_effect=concurrent_transfer):
+            self.assertEqual(self.leave(group_id)["statusCode"], 403)
+        self.assertTrue(lambda_app.is_group_member(group_id, "user-456"))
 
     def test_group_members_endpoint_is_member_only(self):
         created = json.loads(self.create()["body"])
@@ -710,6 +1273,10 @@ class PrivateGroupTests(unittest.TestCase):
             },
         }
 
+        updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}", body={"sports": ["nfl", "nba"]}), None)
+        self.assertEqual(updated["statusCode"], 200)
+        self.assertEqual(self.groups.items[f"group#{group_id}"]["sports"], ["nfl", "nba"])
+
         deleted = self.delete(group_id)
 
         self.assertEqual(deleted["statusCode"], 200)
@@ -776,6 +1343,47 @@ class PrivateGroupTests(unittest.TestCase):
             f"membership#{created['groupId']}#user#user-456",
             self.groups.items,
         )
+
+    def test_visible_password_is_member_only_and_updates_with_existing_patch(self):
+        created = json.loads(self.create(password="<shared & secret>  ")["body"])
+        group_id = created["groupId"]
+        path = f"/api/groups/{group_id}/invite"
+        self.join(password="<shared & secret>  ")
+        for user in ("user-123", "user-456"):
+            result = lambda_app.handler(event("GET", user_id=user, path=path), None)
+            self.assertEqual(result["statusCode"], 200)
+            self.assertEqual(json.loads(result["body"])["groupPassword"], "<shared & secret>  ")
+            self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+            for key in ("passwordHash", "passwordSalt", "shareablePassword"):
+                self.assertNotIn(key, json.loads(result["body"]))
+        for user, status in ((None, 401), ("outsider", 403)):
+            result = lambda_app.handler(event("GET", user_id=user, path=path), None)
+            self.assertEqual(result["statusCode"], status)
+            self.assertNotIn("groupPassword", json.loads(result["body"]))
+        updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                    body={"password": "replacement-secret"}), None)
+        self.assertEqual(updated["statusCode"], 200)
+        self.assertNotIn("shareablePassword", json.loads(updated["body"]))
+        self.assertEqual(lambda_app.get_group_invite(group_id, "user-456")["groupPassword"], "replacement-secret")
+        listed = lambda_app.list_groups("user-456")["groups"][0]
+        for key in ("groupPassword", "shareablePassword"):
+            self.assertNotIn(key, listed)
+        lambda_app.remove_group_member(group_id, "user-123", "user-456")
+        self.assertEqual(lambda_app.handler(event("GET", user_id="user-456", path=path), None)["statusCode"], 403)
+
+    def test_legacy_password_stays_valid_until_commissioner_sets_visible_password(self):
+        created = json.loads(self.create()["body"])
+        group_id = created["groupId"]
+        group = self.groups.items[f"group#{group_id}"]
+        del group["shareablePassword"]
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["groupPassword"])
+        self.assertEqual(self.join()["statusCode"], 200)
+        group["inviteRevoked"] = True
+        self.assertIsNone(lambda_app.get_group_invite(group_id, "user-123")["groupPassword"])
+        updated = lambda_app.handler(event("PATCH", path=f"/api/groups/{group_id}",
+                                    body={"password": "visible-secret"}), None)
+        self.assertEqual(updated["statusCode"], 200)
+        self.assertEqual(lambda_app.get_group_invite(group_id, "user-123")["groupPassword"], "visible-secret")
 
     def test_existing_group_gets_an_invite_code_when_first_shared(self):
         created = json.loads(self.create()["body"])
@@ -943,6 +1551,27 @@ class PublicLeaderboardTests(unittest.TestCase):
             None,
         )
         self.assertEqual(missing["statusCode"], 404)
+
+    def test_public_bracket_normalizes_apostrophes_like_profile_registration(self):
+        lambda_app.put_profile("user-123", event("PUT", body={"leaderboardName": "Jake’s Picks"}))
+        for name in ("Jake%E2%80%99s%20Picks", "JAKE%27S%20PICKS"):
+            with self.subTest(name=name):
+                result = lambda_app.handler(
+                    event("GET", user_id=None, path=f"/api/leaderboard/{name}/bracket"), None)
+                self.assertEqual(result["statusCode"], 200)
+                self.assertEqual(json.loads(result["body"])["leaderboardName"], "Jake’s Picks")
+
+        self.profiles.items["user#user-123"]["leaderboardName"] = "Renamed Picks"
+        self.assertIsNone(lambda_app.get_public_bracket("Jake’s Picks"))
+
+    def test_public_bracket_scores_both_modes_from_one_results_snapshot(self):
+        results = lambda_app.load_season_results()
+        with patch.object(lambda_app, "load_season_results", return_value=results) as load, \
+             patch.object(lambda_app, "score_prediction", wraps=lambda_app.score_prediction) as score:
+            lambda_app.get_public_bracket("Jake")
+        load.assert_called_once_with()
+        self.assertEqual(score.call_count, 2)
+        self.assertTrue(all(call.args[1] is results for call in score.call_args_list))
 
 
 if __name__ == "__main__":
