@@ -39,8 +39,9 @@ edits made before this change cannot be recovered from the old schema.
 
 Live rankings use the same total/field/playoff comparison as champions. Equal
 results share competition ranks (`1, 1, 3`); zero scores and missing predictions
-remain unranked. Current members without predictions still appear in standings
-and the member list, with empty scores and **No prediction**.
+remain unranked. Standings shows only members with a saved prediction for the
+selected sport. Members shows the full roster, including **No prediction**,
+**You**, and **Commissioner** labels; the header also identifies the commissioner.
 
 ## Data access and commissioner controls
 
@@ -61,8 +62,9 @@ unique keys, with bounded backoff for unprocessed keys. Queries paginate. GSI
 membership candidates are rechecked against the base table because indexes are
 eventually consistent; newly joined members may take a short time to appear.
 
-Commissioners can remove another member from **Members**, regenerate the invite
-with `POST /api/groups/{id}/invite`, or revoke it with `DELETE` on that endpoint.
+Commissioners can remove another member from **Members** or regenerate the invite
+with `POST /api/groups/{id}/invite`. The UI has no separate revoke action; the
+legacy `DELETE` endpoint remains commissioner-only for older clients.
 Removal uses `DELETE /api/groups/{id}/members/{userId}` and an atomic commissioner
 check plus a `removedMembership` tombstone. Joins atomically check the group and
 the invite/password against a new membership write. Removed accounts cannot
@@ -73,6 +75,23 @@ Existing memberships and archived results survive invite changes and removal.
 The dev deployment seeder skips existing demo groups and their membership
 records, so repeated deployments preserve commissioner edits, kicked members,
 and voluntary departures. It continues initializing new demo groups normally.
+
+Competition settings use the existing `PATCH /api/groups/{id}` route. Only the
+current commissioner may change sports, set a new password, or change the selected
+sport's `scoringOption`. Passwords are salted and hashed; public responses never
+return the password, salt, or hash. A password change invalidates the old password
+without removing existing members or rotating invites. Scoring is locked at that
+sport's real prediction deadline, even when dev NFL picks are reopened for testing.
+The server returns `scoringLock` with group standings for the UI's disabled state.
+
+Additive `scoringOptions` stores sport-specific overrides. Legacy groups continue
+using their shared `scoringOption` as the fallback. Changing NBA scoring cannot
+change NFL scoring, and immutable season snapshots retain their captured mode.
+Writes check the current commissioner and previous sports/scoring values so
+concurrent edits or commissioner transfers cannot overwrite another change.
+Regular members can view competition info, share the current invite, and leave.
+Commissioners must transfer to another current member before leaving; only the
+commissioner can delete the group.
 
 **Groups** in primary navigation and **View groups** on the homepage open
 `/groups` directly, retaining the NBA query parameter when selected. Old

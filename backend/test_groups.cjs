@@ -119,7 +119,7 @@ test('sign-out clears private cards, details and cached summaries', () => {
   assert.match(node('#empty').textContent, /Sign in/);
 });
 
-test('standings identify commissioner and do not open a bracket for missing predictions', () => {
+test('shared renderer does not open a bracket for missing predictions', () => {
   const { context } = boot();
   const body = new Element();
   context.renderLeaderboardRows(body, [{ leaderboardName: 'Alice', isCommissioner: true, hasPrediction: false, total: null }]);
@@ -151,6 +151,29 @@ test('member list shows everyone and restricts removal controls to commissioner'
   context.state.groups[0].isCommissioner = false;
   context.renderGroupMembers();
   assert.ok(list.children.every(item => item.children.length === 2));
+});
+
+test('group standings contain saved predictions only and never append commissioner labels', () => {
+  const { context, node } = boot();
+  context.state.groupLeaderboard = board();
+  context.state.groupLeaderboard.members[0].isCommissioner = true;
+  context.state.groupLeaderboard.entries[0].isCommissioner = true;
+  context.renderGroupLeaderboard();
+  const rows = node('#board').children;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].children[1].children[0].children[0].textContent, 'Alice');
+  assert.equal(node('#group-member-list').children.length, 2);
+  assert.equal(node('#group-header-commissioner').textContent, 'Alice (You)');
+  assert.equal(context.state.groupLeaderboard.entries[0].isCommissioner, true);
+  context.state.groupLeaderboard.entries = [{ leaderboardName: 'Bob', hasPrediction: false, total: null }];
+  context.renderGroupLeaderboard();
+  assert.equal(node('#board').children.length, 0);
+  assert.equal(node('#empty-board').classes.has('hidden'), false);
+  assert.equal(node('#board-shell').classes.has('hidden'), true);
+  // Old API prediction entries omit hasPrediction; they remain supported.
+  context.state.groupLeaderboard.entries = [{ leaderboardName: 'Alice', total: 10, regularSeason: 10, playoffs: 0 }];
+  context.renderGroupLeaderboard();
+  assert.equal(node('#board').children.length, 1);
 });
 
 test('member removal cancellation and failure preserve the roster and usable action', async () => {
@@ -270,29 +293,91 @@ test('invite dialog restores focus to the actual header, settings or regenerate 
     node('#invite-dialog').close();
     assert.equal(trigger.focused, true);
   }
-  await context.changeActiveGroupInvite(false);
+  await context.regenerateActiveGroupInvite();
   node('#invite-dialog').close();
   assert.equal(node('#regenerate-group-invite').focused, true);
 });
 
-test('invite controls regenerate and revoke with explicit confirmation and handle failures', async () => {
+test('invite controls only regenerate with confirmation, restrict role and handle failures', async () => {
   const { context, node } = boot();
-  await context.changeActiveGroupInvite(false);
+  await context.regenerateActiveGroupInvite();
   assert.equal(context.requests[0][1].method, 'POST');
   assert.equal(context.invited, 'g');
-  await context.changeActiveGroupInvite(true);
-  assert.equal(context.requests[1][1].method, 'DELETE');
   context.window.confirm = () => false;
-  await context.changeActiveGroupInvite(true);
-  assert.equal(context.requests.length, 2);
+  await context.regenerateActiveGroupInvite();
+  assert.equal(context.requests.length, 1);
   context.window.confirm = () => true;
   context.apiRequest = async () => { throw new Error('Refresh and try again'); };
-  await context.changeActiveGroupInvite(false);
+  await context.regenerateActiveGroupInvite();
   assert.equal(node('#status').textContent, 'Refresh and try again');
   assert.equal(node('#regenerate-group-invite').disabled, false);
   context.state.groups[0].isCommissioner = false;
-  await context.changeActiveGroupInvite(false);
-  assert.equal(context.requests.length, 2);
+  await context.regenerateActiveGroupInvite();
+  assert.equal(context.requests.length, 1);
+  assert.doesNotMatch(read('groups.html'), /revoke-group-invite|Revoke invite link/);
+});
+
+test('competition settings reflect the selected sport, scoring lock and role', () => {
+  const { context, node } = boot();
+  context.state.groups[0].scoringOptions = { nfl: 'classic', nba: 'vegas' };
+  context.state.groupLeaderboard = { ...board(), scoringLock: { locked: false, lockAt: '2099-01-01T00:00:00Z' } };
+  context.renderGroupCompetition();
+  assert.equal(node('#group-settings-scoring').textContent, 'Classic');
+  assert.equal(node('#save-group-scoring').disabled, false);
+  assert.equal(node('#save-group-password').disabled, false);
+  assert.match(context.groupMetadata(context.state.groups[0]), /NFL · Classic \/ NBA · Upset Edge/);
+  context.state.groupLeaderboard.scoringLock.locked = true;
+  context.renderGroupCompetition();
+  assert.equal(node('#save-group-scoring').disabled, true);
+  assert.equal(node('#group-settings-scoring-select').disabled, true);
+  assert.equal(node('#save-group-password').disabled, false);
+  assert.match(node('#group-scoring-lock-status').textContent, /locked for NFL/);
+  context.state.groups[0].isCommissioner = false;
+  context.renderGroups();
+  assert.equal(node('#commissioner-section').classes.has('hidden'), true);
+  assert.equal(node('#save-group-password').disabled, true);
+  assert.equal(node('#edit-group-sports').classes.has('hidden'), true);
+  assert.equal(node('#delete-group').classes.has('hidden'), true);
+  assert.equal(node('#regenerate-group-invite').classes.has('hidden'), true);
+});
+
+test('commissioner updates password without retrieving it, clears secret inputs and keeps errors usable', async () => {
+  const { context, node } = boot();
+  node('#group-new-password').value = 'new-secret';
+  await context.submitGroupCompetition({ preventDefault() {} }, 'password');
+  assert.equal(context.requests[0][0], '/api/groups/g');
+  assert.equal(context.requests[0][1].method, 'PATCH');
+  assert.deepEqual(JSON.parse(context.requests[0][1].body), { password: 'new-secret' });
+  assert.equal(node('#group-new-password').value, '');
+  assert.match(node('#group-competition-message').textContent, /old password no longer works/);
+  context.apiRequest = async () => { throw new Error('Update failed'); };
+  node('#group-new-password').value = 'another-secret';
+  await context.submitGroupCompetition({ preventDefault() {} }, 'password');
+  assert.equal(node('#group-new-password').value, '');
+  assert.equal(node('#group-competition-message').textContent, 'Update failed');
+  assert.equal(node('#save-group-password').disabled, false);
+  assert.match(read('groups.html'), /id="group-new-password" type="password" autocomplete="new-password"/);
+  node('#group-new-password').value = 'stale-secret';
+  context.showGroupsDirectory();
+  assert.equal(node('#group-new-password').value, '');
+});
+
+test('scoring update is selected-sport PATCH; members and locked/unknown states cannot submit', async () => {
+  const { context, node } = boot();
+  context.state.groupLeaderboard = { ...board(), scoringLock: { locked: false } };
+  node('#group-settings-scoring-select').value = 'vegas';
+  context.refreshGroups = async id => { context.refreshed = id; };
+  await context.submitGroupCompetition({ preventDefault() {} }, 'scoring');
+  assert.deepEqual(JSON.parse(context.requests[0][1].body), { scoringOption: 'vegas' });
+  assert.equal(context.refreshed, 'g');
+  context.state.groupLeaderboard.scoringLock.locked = true;
+  await context.submitGroupCompetition({ preventDefault() {} }, 'scoring');
+  delete context.state.groupLeaderboard.scoringLock;
+  await context.submitGroupCompetition({ preventDefault() {} }, 'scoring');
+  context.state.groups[0].isCommissioner = false;
+  node('#group-new-password').value = 'new-secret';
+  await context.submitGroupCompetition({ preventDefault() {} }, 'password');
+  assert.equal(context.requests.length, 1);
 });
 
 const board = (name = 'Alice', total = 30) => ({

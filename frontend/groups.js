@@ -2,6 +2,7 @@ const GROUP_VIEWS = ["standings", "members", "history", "settings"];
 let groupsRequest = 0;
 let groupDetailRequest = 0;
 let groupInviteReturnFocus = null;
+let groupSettingPending = false;
 
 function groupPageUrl(groupId = "", view = "standings", sport = SPORT) {
   const url = new URL(routeHref("/groups"), window.location.origin);
@@ -20,7 +21,15 @@ function groupDisplaySport(group) {
 }
 
 function groupMetadata(group) {
-  return `${(group.sports || ["nfl"]).map(sport => sport.toUpperCase()).join(" + ")} · ${group.scoringOption === "vegas" ? "Upset Edge" : "Classic"}`;
+  const sports = group.sports || ["nfl"];
+  const label = sport => groupScoringOption(group, sport) === "vegas" ? "Upset Edge" : "Classic";
+  return new Set(sports.map(label)).size > 1
+    ? sports.map(sport => `${sport.toUpperCase()} · ${label(sport)}`).join(" / ")
+    : `${sports.map(sport => sport.toUpperCase()).join(" + ")} · ${label(sports[0])}`;
+}
+
+function groupScoringOption(group, sport = SPORT) {
+  return group.scoringOptions?.[sport] || group.scoringOption || "classic";
 }
 
 function groupCurrentRank(board) {
@@ -140,10 +149,13 @@ function renderGroups() {
   elements.leaveGroup?.classList.toggle("hidden", !activeGroup);
   elements.editGroupSports?.classList.toggle("hidden", !isCommissioner);
   elements.deleteGroup?.classList.toggle("hidden", !isCommissioner);
-  for (const id of ["regenerate-group-invite", "revoke-group-invite"]) {
+  for (const id of ["regenerate-group-invite"]) {
     document.getElementById(id)?.classList.toggle("hidden", !isCommissioner);
   }
   document.querySelectorAll("[data-commissioner-only]").forEach(section => section.classList.toggle("hidden", !isCommissioner));
+  document.getElementById("group-new-password").value = "";
+  document.getElementById("group-password-editor").open = false;
+  document.getElementById("group-competition-message").textContent = "";
   document.querySelector("#group-member-list")?.replaceChildren();
   if (document.querySelector("#group-member-count")) document.querySelector("#group-member-count").textContent = "";
   if (activeGroup) {
@@ -195,8 +207,9 @@ function renderGroups() {
 function initializeGroupSettings() {
   const settings = document.querySelector(".group-settings-actions");
   if (!settings) return;
-  document.getElementById("regenerate-group-invite")?.addEventListener("click", () => changeActiveGroupInvite(false));
-  document.getElementById("revoke-group-invite")?.addEventListener("click", () => changeActiveGroupInvite(true));
+  document.getElementById("regenerate-group-invite")?.addEventListener("click", regenerateActiveGroupInvite);
+  document.getElementById("group-scoring-form")?.addEventListener("submit", event => submitGroupCompetition(event, "scoring"));
+  document.getElementById("group-password-form")?.addEventListener("submit", event => submitGroupCompetition(event, "password"));
   document.getElementById("settings-share-group-invite")?.addEventListener("click", shareActiveGroupInvite);
   document.getElementById("settings-group-members")?.addEventListener("click", () => {
     selectGroupView("members");
@@ -239,6 +252,60 @@ function renderGroupHub() {
   document.getElementById("group-personal-rank").textContent = board
     ? rank ? `Your rank #${rank}` : "You’re not ranked yet" : "";
   if (!board) elements.groupLeaderboardStatus.textContent = "Loading competition…";
+  renderGroupCompetition();
+}
+
+function renderGroupCompetition() {
+  const group = state.groups.find(item => item.groupId === state.activeGroupId);
+  if (!group) return;
+  const lock = state.groupLeaderboard?.scoringLock;
+  const mode = state.groupLeaderboard?.scoringOption || groupScoringOption(group);
+  const commissioner = Boolean(group.isCommissioner ?? group.isCreator);
+  document.getElementById("group-settings-sports").textContent = (group.sports || ["nfl"]).map(sport => sport.toUpperCase()).join(" + ");
+  document.getElementById("group-settings-scoring-label").textContent = `${SPORT.toUpperCase()} scoring`;
+  document.getElementById("group-settings-scoring").textContent = mode === "vegas" ? "Upset Edge" : "Classic";
+  const deadline = lock?.lockAt ? new Date(lock.lockAt).toLocaleString() : "";
+  document.getElementById("group-scoring-lock-status").textContent = !lock ? "Checking scoring deadline…"
+    : lock.locked ? `Scoring is locked for ${SPORT.toUpperCase()} this season.`
+    : `The commissioner can change scoring before ${deadline || "the prediction deadline"}.`;
+  document.getElementById("group-settings-scoring-select").value = mode;
+  const disabled = !commissioner || lock?.locked !== false || groupSettingPending;
+  document.getElementById("group-settings-scoring-select").disabled = disabled;
+  document.getElementById("save-group-scoring").disabled = disabled;
+  document.getElementById("save-group-password").disabled = !commissioner || groupSettingPending;
+}
+
+async function submitGroupCompetition(event, setting) {
+  event.preventDefault();
+  const group = state.groups.find(item => item.groupId === state.activeGroupId);
+  if (groupSettingPending || !(group?.isCommissioner ?? group?.isCreator)) return;
+  const password = document.getElementById("group-new-password");
+  const message = document.getElementById("group-competition-message");
+  if (setting === "scoring" && state.groupLeaderboard?.scoringLock?.locked !== false) return;
+  if (setting === "password" && (password.value.length < 6 || password.value.length > 128)) {
+    message.textContent = "Group password must be between 6 and 128 characters.";
+    return;
+  }
+  const body = setting === "password" ? { password: password.value }
+    : { scoringOption: document.getElementById("group-settings-scoring-select").value };
+  groupSettingPending = true;
+  document.getElementById("save-group-password").disabled = true;
+  document.getElementById("save-group-scoring").disabled = true;
+  message.textContent = "Saving…";
+  try {
+    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}`, { method: "PATCH", body: JSON.stringify(body) });
+    password.value = "";
+    if (!state.signedIn || state.activeGroupId !== group.groupId) return;
+    if (setting === "scoring") await refreshGroups(group.groupId);
+    message.textContent = setting === "password" ? "Password updated. The old password no longer works." : "Scoring system updated.";
+    showToast(setting === "password" ? "Group password updated." : "Group scoring updated.");
+  } catch (error) {
+    password.value = "";
+    if (state.signedIn && state.activeGroupId === group.groupId) message.textContent = error.message;
+  } finally {
+    groupSettingPending = false;
+    renderGroupCompetition();
+  }
 }
 
 function renderGroupLeaderboard() {
@@ -246,7 +313,9 @@ function renderGroupLeaderboard() {
   renderGroupHistory();
   const leaderboard = state.groupLeaderboard;
   const mode = leaderboard?.scoringOption || "classic";
-  const entries = rankLeaderboardEntries(leaderboard?.entries || [], mode);
+  const entries = rankLeaderboardEntries((leaderboard?.entries || [])
+    .filter(entry => entry.hasPrediction !== false)
+    .map(({ isCommissioner, ...entry }) => entry), mode);
   elements.groupLeaderboardTableShell.classList.toggle("hidden", !entries.length);
   elements.emptyGroupLeaderboard.classList.toggle("hidden", Boolean(entries.length));
   updateLeaderboardScoreHeading(elements.groupLeaderboardBody, mode);
@@ -354,20 +423,20 @@ function renderGroupMembers() {
   }
 }
 
-async function changeActiveGroupInvite(revoke) {
+async function regenerateActiveGroupInvite() {
   const group = state.groups.find(item => item.groupId === state.activeGroupId);
   if (!(group?.isCommissioner ?? group?.isCreator)) return;
-  if (!window.confirm(`${revoke ? "Revoke" : "Regenerate"} the invite link for ${group.groupName}? Existing invite links will stop working.`)) return;
-  const buttons = ["regenerate-group-invite", "revoke-group-invite"].map(id => document.getElementById(id));
-  buttons.forEach(button => { button.disabled = true; });
+  if (!window.confirm(`Regenerate the invite link for ${group.groupName}? Existing invite links will stop working.`)) return;
+  const button = document.getElementById("regenerate-group-invite");
+  button.disabled = true;
   try {
-    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}/invite`, { method: revoke ? "DELETE" : "POST" });
-    showToast(revoke ? "Invite link revoked. Regenerate it to invite new members." : "Invite link regenerated. Old links no longer work.");
-    if (!revoke) await openGroupInviteDialog(group, document.getElementById("regenerate-group-invite"));
+    await apiRequest(`/api/groups/${encodeURIComponent(group.groupId)}/invite`, { method: "POST" });
+    showToast("Invite link regenerated. Old links no longer work.");
+    await openGroupInviteDialog(group, button);
   } catch (error) {
     elements.groupLeaderboardStatus.textContent = error.message;
   } finally {
-    buttons.forEach(button => { button.disabled = false; });
+    button.disabled = false;
   }
 }
 
