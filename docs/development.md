@@ -140,6 +140,10 @@ Follow [AGENTS.md](../AGENTS.md) for Git and AWS rules. Development changes go t
 infrastructure. Production uses `prod` and requires explicit promotion.
 Routine deployments use GitHub Actions' temporary OIDC credentials.
 
+The [production promotion checklist](production-promotion.md) tracks dev-only
+behavior, including randomize picks and the reopened NFL testing window, and
+the checks that keep those behaviors out of production.
+
 Each environment serves static files from a private S3 bucket through
 CloudFront, with API Gateway in front of the Python Lambda. Terraform manages
 these resources and a CloudWatch analytics dashboard. See the
