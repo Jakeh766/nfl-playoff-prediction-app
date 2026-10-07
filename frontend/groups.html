@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=65" />
+    <link rel="stylesheet" href="/styles.css?v=66" />
     <script src="/sports.js?v=4" defer></script>
     <script src="/shell.js?v=21" defer></script>
     <script src="/auth-config.js" defer></script>
@@ -38,7 +38,7 @@
     <script src="/engagement.js?v=1" defer></script>
     <script src="/app.js?v=36" defer></script>
     <script src="/leaderboard.js?v=23" defer></script>
-    <script src="/groups.js?v=4" defer></script>
+    <script src="/groups.js?v=5" defer></script>
     <script src="/bootstrap.js?v=12" defer></script>
   </head>
   <body data-page="groups">
@@ -60,7 +60,12 @@
           <header class="group-hub-header">
             <div class="group-hub-title">
               <div><h1 id="active-group-name" tabindex="-1"></h1><p id="active-group-meta" data-no-sport-copy></p></div>
-              <button class="button group-invite-button" id="share-group-invite" type="button">Invite friends</button>
+              <div class="group-header-actions">
+                <button class="button group-invite-button" id="share-group-invite" type="button">Invite friends</button>
+                <button class="button group-settings-trigger" id="group-settings-trigger" type="button" aria-label="Group settings" aria-expanded="false" aria-controls="group-settings-panel" aria-haspopup="dialog">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 3-.5 2-2 1-2-.5-2 3 1.5 1.5v3L3 14.5l2 3 2-.5 2 1 .5 3h5l.5-3 2-1 2 .5 2-3-1.5-1.5v-3L21 8.5l-2-3-2 .5-2-1-.5-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
             </div>
             <dl class="group-hub-facts">
               <div class="group-season-fact"><dt id="group-season-label">Current season</dt><dd id="group-leaderboard-status" role="status" aria-live="polite">Loading competition…</dd></div>
@@ -70,9 +75,7 @@
           </header>
           <div class="group-detail-tabs" role="tablist" aria-label="Group details">
             <button class="group-detail-tab active" id="group-tab-standings" role="tab" type="button" aria-selected="true" aria-controls="group-panel-standings" data-group-view="standings">Standings</button>
-            <button class="group-detail-tab" id="group-tab-members" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-members" data-group-view="members">Members</button>
             <button class="group-detail-tab" id="group-tab-history" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-history" data-group-view="history">History</button>
-            <button class="group-detail-tab" id="group-tab-settings" role="tab" type="button" aria-selected="false" tabindex="-1" aria-controls="group-panel-settings" data-group-view="settings">Settings</button>
           </div>
           <div id="group-panel-standings" role="tabpanel" aria-labelledby="group-tab-standings" tabindex="0">
             <div class="group-panel-heading"><div><h2>Season standings</h2><p id="group-standings-summary">Your group’s race to the title.</p></div><p class="group-personal-rank" id="group-personal-rank"></p></div>
@@ -90,22 +93,16 @@
                 <tbody id="group-leaderboard-body"></tbody>
               </table>
             </div>
-            <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No member has a saved prediction for this sport yet. Everyone is listed in Members.</p>
-          </div>
-          <div id="group-panel-members" class="hidden" role="tabpanel" aria-labelledby="group-tab-members" tabindex="0">
-            <div class="group-panel-heading"><div><h2>The roster <span id="group-member-count"></span></h2><p>Everyone in your private competition, with or without a prediction.</p></div></div>
-            <ul id="group-member-list" class="group-member-list"></ul>
-            <p class="input-hint group-removal-note hidden" data-commissioner-only>Removing a member blocks them from rejoining with an invite or password.</p>
-            <p id="group-members-status" role="status" aria-live="polite"></p>
+            <p class="empty-leaderboard hidden" id="empty-group-leaderboard">No predictions for this sport yet. Save a prediction to join the standings.</p>
           </div>
           <div id="group-panel-history" class="group-history hidden" role="tabpanel" aria-labelledby="group-tab-history" tabindex="0">
             <div class="group-panel-heading"><div><h2>Group history</h2><p>Past seasons. Shared titles. Lasting bragging rights.</p></div></div>
             <div class="group-history-content" id="group-history-content" aria-live="polite"></div>
           </div>
-          <div id="group-panel-settings" class="hidden" role="tabpanel" aria-labelledby="group-tab-settings" tabindex="0">
-            <div class="group-panel-heading"><div><h2>Group settings</h2></div></div>
+          <div id="group-settings-panel" class="group-settings-panel" popover role="dialog" aria-labelledby="group-settings-heading" tabindex="-1">
+            <div class="group-panel-heading"><h2 id="group-settings-heading">Group settings</h2><button class="text-link" id="close-group-settings" type="button" aria-label="Close group settings">Close</button></div>
             <div class="group-settings-actions">
-              <section class="group-setting-section group-competition-section" aria-labelledby="group-competition-heading">
+              <section class="group-setting-section group-competition-section hidden" data-commissioner-only aria-labelledby="group-competition-heading">
                 <h3 id="group-competition-heading">Group</h3>
                 <div class="group-competition-fields">
                   <div class="group-competition-row"><div><h4>Group name</h4><p id="group-settings-name"></p></div></div>
@@ -116,20 +113,25 @@
                       <label for="group-settings-scoring-select">New scoring system</label><select id="group-settings-scoring-select"><option value="classic">Classic</option><option value="vegas">Upset Edge</option></select><button class="button button-secondary" id="save-group-scoring" type="submit">Save scoring</button>
                     </form></details>
                   </div>
-                  <div class="group-competition-row">
-                    <div><h4>Group password</h4><p class="group-password-mask" aria-label="Group password is hidden and cannot be recovered">••••••••</p></div>
-                    <details class="group-setting-editor hidden" data-commissioner-only id="group-password-editor"><summary>Change password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="password" autocomplete="new-password" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details>
-                  </div>
                 </div>
+              </section>
+              <section class="group-setting-section group-password-section" aria-labelledby="group-password-heading">
+                <div><h3 id="group-password-heading">Group password</h3><p id="group-current-password" class="group-current-password"></p><p id="group-password-status" role="status" aria-live="polite"></p></div>
+                <div class="group-setting-controls"><button class="button button-secondary" id="copy-group-password" type="button" disabled>Copy password</button><button class="text-link hidden" id="retry-group-password" type="button">Retry password</button><details class="group-setting-editor hidden" data-commissioner-only id="group-password-editor"><summary>Change password</summary><form id="group-password-form" class="group-inline-form"><label for="group-new-password">New group password</label><input id="group-new-password" type="text" autocomplete="off" minlength="6" maxlength="128" required /><button class="button button-secondary" id="save-group-password" type="submit">Save password</button></form></details></div>
                 <p class="dialog-message" id="group-competition-message" role="status" aria-live="polite"></p>
               </section>
-              <section class="group-setting-section" aria-labelledby="group-invites-heading">
-                <div><h3 id="group-invites-heading">Invites</h3><p>Bring your friends into the group.</p></div>
-                <div class="group-setting-controls"><button class="button button-primary" id="settings-share-group-invite" type="button">Invite friends</button><details class="group-setting-editor group-invite-options hidden" data-commissioner-only id="group-invite-options"><summary>Invite options</summary><button class="text-link" id="regenerate-group-invite" type="button">Regenerate invite link</button></details></div>
+              <section class="group-setting-section hidden" data-commissioner-only aria-labelledby="group-invites-heading">
+                <h3 id="group-invites-heading">Invite options</h3>
+                <div class="group-setting-controls"><details class="group-setting-editor group-invite-options" id="group-invite-options"><summary>Manage invite link</summary><button class="text-link" id="regenerate-group-invite" type="button">Regenerate invite link</button></details></div>
               </section>
-              <section class="group-setting-section" aria-labelledby="group-membership-heading">
-                <div><h3 id="group-membership-heading">Members &amp; Commissioner</h3><p>Commissioner: <strong id="group-settings-commissioner"></strong></p><p class="input-hint hidden" data-commissioner-only>Transfer commissioner before leaving.</p></div>
-                <div class="group-setting-controls"><button class="button button-secondary" id="settings-group-members" type="button">Manage members</button><details class="group-setting-editor hidden" data-commissioner-only id="group-commissioner-editor"><summary>Transfer commissioner</summary><form id="group-commissioner-form" class="group-inline-form"><label for="group-new-commissioner">New commissioner</label><select id="group-new-commissioner" required></select><p class="input-hint">They’ll manage the group. You’ll stay as a member.</p><button class="button button-secondary" id="save-group-commissioner" type="submit">Transfer commissioner</button></form></details><p class="dialog-message" id="group-commissioner-message" role="status" aria-live="polite"></p><button class="text-link group-destructive hidden" id="leave-group" type="button">Leave group</button></div>
+              <section class="group-setting-section group-competition-section hidden" data-commissioner-only aria-labelledby="group-membership-heading">
+                <h3 id="group-membership-heading">Manage members <span id="group-member-count"></span></h3>
+                <ul id="group-member-list" class="group-member-list"></ul>
+                <p class="input-hint group-removal-note">Removing a member blocks them from rejoining with an invite or password.</p>
+                <p id="group-members-status" role="status" aria-live="polite"></p>
+                <details class="group-setting-editor" id="group-commissioner-editor"><summary>Transfer commissioner</summary><form id="group-commissioner-form" class="group-inline-form"><label for="group-new-commissioner">New commissioner</label><select id="group-new-commissioner" required></select><p class="input-hint">They’ll manage the group. You’ll stay as a member. Transfer commissioner before leaving.</p><button class="button button-secondary" id="save-group-commissioner" type="submit">Transfer commissioner</button></form></details><p class="dialog-message" id="group-commissioner-message" role="status" aria-live="polite"></p>
+              </section>
+              <section class="group-setting-section group-leave-section"><button class="text-link group-destructive hidden" id="leave-group" type="button">Leave group</button>
               </section>
               <section class="group-setting-section group-danger-zone hidden" data-commissioner-only aria-labelledby="group-danger-heading">
                 <div><h3 id="group-danger-heading">Danger Zone</h3><p>Delete the group and its history for everyone.</p></div>

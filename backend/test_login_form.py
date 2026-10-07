@@ -301,8 +301,10 @@ class LoginFormTests(unittest.TestCase):
         self.assertIn('<title>Groups | Predict Playoffs</title>', html)
         self.assertNotIn('groups-leaderboard-panel', public)
         self.assertNotIn('id="create-group"', public)
-        for view in ["standings", "members", "history", "settings"]:
+        for view in ["standings", "history"]:
             self.assertIn(f'id="group-panel-{view}"', html)
+        for removed in ["members", "settings"]:
+            self.assertNotIn(f'id="group-tab-{removed}"', html)
         for control in ["create-group", "join-group", "share-group-invite", "leave-group", "delete-group"]:
             self.assertIn(f'id="{control}"', html)
         self.assertIn(

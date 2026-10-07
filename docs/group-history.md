@@ -40,8 +40,9 @@ edits made before this change cannot be recovered from the old schema.
 Live rankings use the same total/field/playoff comparison as champions. Equal
 results share competition ranks (`1, 1, 3`); zero scores and missing predictions
 remain unranked. Standings shows only members with a saved prediction for the
-selected sport. Members shows the full roster, including **No prediction**,
-**You**, and **Commissioner** labels; the header also identifies the commissioner.
+selected sport. Only commissioners see the management roster in the header gear
+panel, including **No prediction**, **You**, and **Commissioner** labels.
+The header identifies the commissioner for everyone.
 
 ## Data access and commissioner controls
 
@@ -62,8 +63,8 @@ unique keys, with bounded backoff for unprocessed keys. Queries paginate. GSI
 membership candidates are rechecked against the base table because indexes are
 eventually consistent; newly joined members may take a short time to appear.
 
-Commissioners can remove another member from **Members** or regenerate the invite
-with `POST /api/groups/{id}/invite` under Settings → Invite options. Invite friends
+Commissioners can remove another member or regenerate the invite from the header
+gear panel, using `POST /api/groups/{id}/invite` for regeneration. Invite friends
 is the main invite action. The revoke feature and `DELETE` invite route are removed.
 Removal uses `DELETE /api/groups/{id}/members/{userId}` and an atomic commissioner
 check plus a `removedMembership` tombstone. Joins atomically check the group and
@@ -78,8 +79,15 @@ and voluntary departures. It continues initializing new demo groups normally.
 
 Competition settings use the existing `PATCH /api/groups/{id}` route. Only the
 current commissioner may change sports, set a new password, or change the selected
-sport's `scoringOption`. Passwords are salted and hashed; public responses never
-return the password, salt, or hash. A password change invalidates the old password
+sport's `scoringOption`. Join validation still uses salted password hashes. New
+and changed passwords also store `shareablePassword` in the group record, protected
+by DynamoDB encryption at rest. The existing member-only `GET /api/groups/{id}/invite`
+returns `groupPassword` for direct display and copying. List, standings, public,
+create, join, and PATCH responses never include the password, salt, or hash.
+Responses are `no-store`; the frontend clears the displayed password on dismissal,
+group navigation, or sign-out and ignores late responses. Legacy hash-only passwords
+cannot be recovered: the panel asks the commissioner to set a new password, without
+automatically changing existing credentials. A password change invalidates the old password
 without removing existing members or rotating invites. Scoring is locked at that
 sport's real prediction deadline, even when dev NFL picks are reopened for testing.
 The server returns `scoringLock` with group standings for the UI's disabled state.
@@ -89,10 +97,11 @@ using their shared `scoringOption` as the fallback. Changing NBA scoring cannot
 change NFL scoring, and immutable season snapshots retain their captured mode.
 Writes check the current commissioner and previous sports/scoring values so
 concurrent edits or commissioner transfers cannot overwrite another change.
-Regular members can view competition info, share the current invite, and leave.
-Settings groups the commissioner’s controls into Group, Invites, Members &
-Commissioner, and Danger Zone. Regular members see group information, the
-commissioner, invite sharing, and their own membership controls. Password and
+Regular members can share the current invite and leave. Their gear panel contains
+only the visible group password, Copy password, and a separated Leave group action
+that opens the existing confirmation dialog. Commissioners use the same gear for
+Group, password, invite options, member management, and confirmed deletion.
+Group name remains read-only, as in the previous settings UI. Password and
 scoring editors stay collapsed until needed; locked scoring has no editor.
 Commissioners transfer with `POST /api/groups/{id}/commissioner`, supplying a
 `newCommissionerId` for another current member. The atomic role change preserves
@@ -105,7 +114,7 @@ against a concurrent role change. Only the commissioner can delete the group.
 `/leaderboard#groups` links redirect to this page. The public leaderboard remains
 on `/leaderboard` and does not load private memberships.
 Signed-out visitors see a sign-in prompt and can start the existing create/join
-authentication flows. Commissioner identity appears in standings and Members.
+authentication flows. Commissioner identity appears in the group header.
 
 The directory merges the existing NFL and NBA membership responses by group ID.
 Cards show sports, scoring mode, commissioner role, member count, and personal
@@ -114,12 +123,16 @@ reads run concurrently to fill in counts and ranks using the existing API;
 failed summaries keep their cards visible with a retry prompt. No new backend
 endpoint or stored group field is required.
 
-Group details use `?group=<id>` and optional `&view=members|history|settings`.
+Group details use `?group=<id>` and optional `&view=history`.
 The default view is Standings. Browser Back restores the directory, and tabs
 support arrow keys, Home, and End. Closing or signing out of a group prevents
 late requests from restoring private content. Leaving or deleting returns to
-the directory. Settings retains invites, sport edits, departure/commissioner
-transfer, and confirmed deletion; member removal stays in Members.
+the directory. Former `view=members` and `view=settings` links are normalized to
+Standings with a URL replacement. There were no separate `/members` or `/settings`
+frontend path routes. The gear popover uses native keyboard traversal, Escape and
+outside-click dismissal, with a Close button and restored trigger focus. It scrolls
+within the viewport on mobile, with 44px header controls. Invite friends stays in
+the header alongside the gear.
 
 ## UI maintenance
 
@@ -128,7 +141,7 @@ type, use the `--display` Oswald stack for history headings and years, and reuse
 `--line`, `--link`, `--muted`, `--surface-soft`, and `--focus-outline` so light
 and dark themes remain consistent. There is no separate approved visual comp.
 
-History lives in its own tab beside Standings, Members, and Settings.
+History lives in its own tab beside Standings; these are the only group tabs.
 Preserve tab keyboard operation, visible focus, and the polite live
 region for content updates. Label the selected NFL or NBA scope explicitly;
 only completed seasons populate champions and all-time standings.
