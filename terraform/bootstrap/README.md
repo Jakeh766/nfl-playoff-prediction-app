@@ -27,10 +27,41 @@ application environments must never manage these bootstrap resources.
 
 The GitHub Actions role cannot expand its own permissions. Changes to this
 bootstrap root must be applied once with a separately authenticated AWS
-administrator before rerunning the dev deployment:
+administrator before rerunning the affected dev or prod deployment:
 
 ```powershell
 terraform -chdir=terraform/bootstrap init
 terraform -chdir=terraform/bootstrap plan
 terraform -chdir=terraform/bootstrap apply
 ```
+
+## Production response-header policy permission
+
+The browser-security deployment creates a custom CloudFront response-header
+policy. Both deployment roles need its five lifecycle operations: create,
+get, get configuration, update, and delete. AWS does not support resource-level
+permissions for `CreateResponseHeadersPolicy`, so its separate creation statement
+requires `Resource: "*"`. The other four operations remain scoped to response-header
+policies in this AWS account using `response-headers-policy/*`. See the
+[CloudFront authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudfront.html).
+
+Production run 13 failed with `AccessDenied` for
+`cloudfront:CreateResponseHeadersPolicy`. Its Groups database indexes and other
+completed resources remain recorded in Terraform state. Do not roll back or
+recreate the database. Once an administrator has applied the production-role
+permission correction, rerun the failed jobs in that production run. Terraform
+will refresh state and plan the remaining work; the release job runs only after
+the deployment succeeds.
+
+The reviewed grant is available in
+[`prod-response-headers-permission.json`](prod-response-headers-permission.json).
+It contains only the two additive statements for the existing
+`nfl-playoff-predictor-prod-github-actions` role. If applying it in the IAM
+console, append both statements to the existing
+`nfl-playoff-predictor-prod-terraform-deploy` inline policy; do not replace the
+existing policy with this small document. The matching statements in `main.tf`
+keeps future bootstrap applies consistent.
+
+Changing live IAM permissions requires explicit authorization under
+[`AGENTS.md`](../../AGENTS.md). Use a separately authenticated administrator;
+the deployment and audit roles cannot grant this access themselves.

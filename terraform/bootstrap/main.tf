@@ -895,6 +895,25 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     ]
   }
 
+  # CreateResponseHeadersPolicy does not support resource-level permissions.
+  # The remaining lifecycle actions stay scoped to this account's policies.
+  statement {
+    sid       = "CreateProdResponseHeadersPolicy"
+    actions   = ["cloudfront:CreateResponseHeadersPolicy"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "ManageProdResponseHeadersPolicy"
+    actions = [
+      "cloudfront:DeleteResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicyConfig",
+      "cloudfront:UpdateResponseHeadersPolicy",
+    ]
+    resources = ["arn:aws:cloudfront::${local.account_id}:response-headers-policy/*"]
+  }
+
   statement {
     sid = "ManageProdAnalyticsDashboard"
     actions = [
