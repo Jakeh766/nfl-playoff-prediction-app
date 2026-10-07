@@ -895,6 +895,20 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     ]
   }
 
+  # CloudFront assigns response-header policy IDs when they are created.
+  # Match the dev role's scoped lifecycle access for the browser security policy.
+  statement {
+    sid = "ManageProdResponseHeadersPolicy"
+    actions = [
+      "cloudfront:CreateResponseHeadersPolicy",
+      "cloudfront:DeleteResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicy",
+      "cloudfront:GetResponseHeadersPolicyConfig",
+      "cloudfront:UpdateResponseHeadersPolicy",
+    ]
+    resources = ["arn:aws:cloudfront::${local.account_id}:response-headers-policy/*"]
+  }
+
   statement {
     sid = "ManageProdAnalyticsDashboard"
     actions = [

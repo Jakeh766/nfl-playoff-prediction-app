@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageProdResponseHeadersPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateResponseHeadersPolicy",
+        "cloudfront:DeleteResponseHeadersPolicy",
+        "cloudfront:GetResponseHeadersPolicy",
+        "cloudfront:GetResponseHeadersPolicyConfig",
+        "cloudfront:UpdateResponseHeadersPolicy"
+      ],
+      "Resource": "arn:aws:cloudfront::410533922944:response-headers-policy/*"
+    }
+  ]
+}
