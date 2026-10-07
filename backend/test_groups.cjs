@@ -429,7 +429,7 @@ test('group hub shows sport-scoped season, commissioner, complete member count a
   context.renderGroups();
   assert.equal(node('#group-season-label').textContent, 'NBA · 2026–27 season');
   assert.equal(node('#group-header-commissioner').textContent, 'Alice');
-  assert.equal(node('#group-personal-rank').textContent, 'You’re not ranked yet');
+  assert.equal(node('#group-personal-rank').textContent, '');
   assert.equal(node('#commissioner-section').classes.has('hidden'), true);
 });
 

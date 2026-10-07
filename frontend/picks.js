@@ -729,7 +729,7 @@ function createScoreSummary(score) {
 
   const status = document.createElement("p");
   status.className = "score-summary-status";
-  status.textContent = score.status;
+  status.textContent = seasonStatusText(score.status);
 
   const splits = document.createElement("div");
   splits.className = "score-splits";

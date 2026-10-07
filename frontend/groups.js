@@ -309,8 +309,7 @@ function renderGroupHub() {
     ? `${predictions} of ${members.length} members have a prediction for ${SPORT.toUpperCase()}.`
     : "Your group’s race to the title.";
   const rank = groupCurrentRank(board);
-  document.getElementById("group-personal-rank").textContent = board
-    ? rank ? `Your rank #${rank}` : "You’re not ranked yet" : "";
+  document.getElementById("group-personal-rank").textContent = rank ? `Your rank #${rank}` : "";
   if (!board) elements.groupLeaderboardStatus.textContent = "Loading competition…";
   renderGroupCompetition();
 }
@@ -465,7 +464,7 @@ function renderGroupLeaderboard() {
   renderGroupHub();
   if (leaderboard) {
     elements.activeGroupName.textContent = leaderboard.groupName;
-    elements.groupLeaderboardStatus.textContent = leaderboard.status || "Results unavailable";
+    elements.groupLeaderboardStatus.textContent = seasonStatusText(leaderboard.status || "Results unavailable");
     elements.groupLeaderboardStatus.title = "";
   }
 }

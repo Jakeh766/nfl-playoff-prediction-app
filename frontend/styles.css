@@ -2954,7 +2954,7 @@ body .champion-display strong {
 .group-panel-heading h2 { margin: 0; font-family: var(--display); font-size: 1.65rem; font-weight: 500; }
 .group-panel-heading p { max-width: 65ch; margin: 6px 0 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
 .group-panel-heading .group-personal-rank { flex-shrink: 0; margin: 0; color: var(--link); font-weight: 700; }
-.group-detail #group-leaderboard-sort-hint { margin-bottom: 14px; font-size: 0.75rem; }
+.group-personal-rank:empty, #group-leaderboard-status:empty { display: none; }
 .group-detail #group-leaderboard-table-shell { padding: 0 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; }
 .group-detail #group-leaderboard-table-shell .leaderboard-table { min-width: 650px; }
 .group-detail #group-leaderboard-table-shell thead th { padding-top: 16px; padding-bottom: 16px; background: transparent; }
@@ -3058,17 +3058,7 @@ body .champion-display strong {
   font-weight: 700;
 }
 
-.leaderboard-sort-hint {
-  margin: 0 0 14px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.leaderboard-sort-hint a {
-  color: var(--link);
-  text-underline-offset: 3px;
-}
+.leaderboard-status:empty { display: none; }
 
 .leaderboard-table-shell {
   max-height: min(70vh, 44rem);
@@ -3452,6 +3442,8 @@ body .champion-display strong {
   font-size: 11px;
   line-height: 1.45;
 }
+
+.score-summary-status:empty { display: none; }
 
 .score-splits {
   margin-top: 14px;

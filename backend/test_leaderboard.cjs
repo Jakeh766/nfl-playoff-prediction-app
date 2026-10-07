@@ -100,6 +100,37 @@ test('private leaderboard reads only its fixed scoring mode', () => {
   assert.equal(vm.runInContext(`leaderboardSortValue(privateEntry, 'total', 'classic')`, context), null);
 });
 
+test('preseason status stops at each sport’s kickoff, including when dev picks stay open', () => {
+  const status = 'Preseason — scoring has not started';
+  const season = vm.createContext({ state: {}, IS_NBA: false, NBA_SEASON: { lockAt: '2026-10-20T19:00:00Z' } });
+  vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), season);
+  const display = time => season.seasonStatusText(status, Date.parse(time));
+  assert.equal(display('2026-09-10T00:19:59Z'), status);
+  assert.equal(display('2026-09-10T00:20:00Z'), '');
+  assert.equal(display('2026-10-07T12:00:00Z'), '');
+  season.IS_NBA = true;
+  assert.equal(display('2026-10-07T12:00:00Z'), status);
+  assert.equal(display('2026-10-20T19:00:00Z'), '');
+  season.IS_NBA = false;
+  season.state.predictionWindow = { lockAt: '2027-09-09T00:20:00Z', devNflUnlocked: true, locked: false };
+  assert.equal(display('2027-09-09T00:19:59Z'), status);
+  assert.equal(display('2027-09-09T00:20:00Z'), '');
+  season.state.predictionClockOffset = 1000;
+  assert.equal(display('2027-09-09T00:19:59Z'), '');
+  for (const message of ['Loading leaderboard…', 'Results unavailable', 'Playoffs in progress']) {
+    assert.equal(season.seasonStatusText(message), message);
+  }
+});
+
+test('bundled NFL preseason cutoff matches both deployment configurations', () => {
+  const source = fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8');
+  for (const environment of ['dev', 'prod']) {
+    const config = fs.readFileSync(`${__dirname}/../terraform/envs/${environment}/terraform.tfvars`, 'utf8');
+    const cutoff = config.match(/prediction_lock_at\s*=\s*"([^"]+)"/)[1];
+    assert.ok(source.includes(`"${cutoff}"`), `${environment} kickoff must match the UI fallback`);
+  }
+});
+
 test('identical scoring results share competition ranks in both scoring modes', () => {
   context.tied = [
     { leaderboardName: 'Zoe', scores: { classic: { total: 20, regularSeason: 15, playoffs: 5 }, vegas: { total: 12.5, regularSeason: 10, playoffs: 2.5 } } },

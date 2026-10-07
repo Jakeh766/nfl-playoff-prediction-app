@@ -29,16 +29,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=67" />
+    <link rel="stylesheet" href="/styles.css?v=68" />
     <script src="/sports.js?v=4" defer></script>
-    <script src="/shell.js?v=22" defer></script>
+    <script src="/shell.js?v=23" defer></script>
     <script src="/auth-config.js" defer></script>
     <script src="/goatcounter.js?v=1" defer></script>
     <script src="/monitoring.js?v=8" defer></script>
     <script src="/engagement.js?v=1" defer></script>
     <script src="/app.js?v=37" defer></script>
-    <script src="/leaderboard.js?v=23" defer></script>
-    <script src="/groups.js?v=7" defer></script>
+    <script src="/leaderboard.js?v=24" defer></script>
+    <script src="/groups.js?v=8" defer></script>
     <script src="/bootstrap.js?v=13" defer></script>
   </head>
   <body data-page="groups">
@@ -79,9 +79,8 @@
           </div>
           <div id="group-panel-standings" role="tabpanel" aria-labelledby="group-tab-standings" tabindex="0">
             <div class="group-panel-heading"><div><h2>Season standings</h2><p id="group-standings-summary">Your group’s race to the title.</p></div><p class="group-personal-rank" id="group-personal-rank"></p></div>
-            <p class="input-hint leaderboard-sort-hint" id="group-leaderboard-sort-hint">Select a player to view their bracket. Use the column headings to sort scores.</p>
             <div class="leaderboard-table-shell hidden" id="group-leaderboard-table-shell" role="region" aria-label="Group leaderboard table" tabindex="0">
-              <table class="leaderboard-table" aria-describedby="group-leaderboard-sort-hint">
+              <table class="leaderboard-table">
                 <thead><tr>
                   <th scope="col" data-sort-key="rank" aria-sort="ascending"><button class="leaderboard-sort-button" type="button" data-sort-key="rank" data-sort-label="Rank" aria-label="Sort by rank, descending"><span>Rank</span><span class="leaderboard-sort-indicator" aria-hidden="true"></span></button></th>
                   <th scope="col" class="leaderboard-player-heading">Player</th>

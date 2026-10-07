@@ -43,6 +43,7 @@ separately and cannot change the frozen preseason scoring weights.
 | `backend/lambda/scoring_odds.json` | Frozen NFL Upset Edge snapshot |
 | `backend/lambda/nba_season.json` | NBA season, teams, deadline, and frozen snapshot |
 | `frontend/sports.js` | Matching NBA static-preview configuration, checked by a regression test |
+| `frontend/leaderboard.js` | NFL preseason-message cutoff fallback, checked against both environments |
 | `terraform/envs/dev/terraform.tfvars` and `terraform/envs/prod/terraform.tfvars` | NFL `prediction_lock_at` settings for each environment |
 
 The repository currently configures the 2026 NFL season and the 2026–27 NBA

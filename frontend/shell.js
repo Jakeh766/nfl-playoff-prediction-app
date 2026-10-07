@@ -211,7 +211,7 @@ if (dialogs) {
               <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/><path class="password-toggle-slash" d="m4 4 16 16"/></svg>
             </button>
           </div>
-          <p class="input-hint">6–128 characters. Passwords are stored as secure hashes.</p>
+          <p class="input-hint">6–128 characters.</p>
           <p class="dialog-message" id="group-dialog-message" role="status" aria-live="polite"></p>
           <div class="dialog-actions">
             <button class="button button-secondary" id="cancel-group" type="button">Cancel</button>

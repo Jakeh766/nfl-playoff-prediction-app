@@ -505,6 +505,15 @@ function selectLeaderboardScoringMode(mode) {
   renderLeaderboard();
 }
 
+function seasonStatusText(status, now = Date.now()) {
+  if (!status?.startsWith("Preseason")) return status || "";
+  // Keep the NFL fallback aligned with prediction_lock_at in terraform/envs/*/terraform.tfvars.
+  const seasonStart = state.predictionWindow?.lockAt
+    || (IS_NBA ? NBA_SEASON.lockAt : "2026-09-10T00:20:00Z");
+  const serverNow = now + (state.predictionClockOffset || 0);
+  return serverNow < Date.parse(seasonStart) ? status : "";
+}
+
 function renderLeaderboard() {
   const leaderboard = state.leaderboard;
   const mode = state.leaderboardScoringMode || "classic";
@@ -514,7 +523,7 @@ function renderLeaderboard() {
   updateLeaderboardScoreHeading(elements.leaderboardBody, mode);
   renderLeaderboardRows(elements.leaderboardBody, entries, mode);
 
-  if (leaderboard) elements.leaderboardStatus.textContent = leaderboard.status;
+  if (leaderboard) elements.leaderboardStatus.textContent = seasonStatusText(leaderboard.status);
 }
 
 const LOCAL_PREVIEW_LEADERBOARD_NAMES = [
