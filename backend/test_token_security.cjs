@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(path.join(__dirname, "../frontend/app.js"), "utf8");
+const source = require("./frontend-source.cjs")("app.js");
 const section = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const authSource = section("function loadAuthSession()", "async function finishPasswordSignIn(") +
   section("async function getValidAccessToken()", "function currentUserEmail()") +

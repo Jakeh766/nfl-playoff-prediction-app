@@ -66,7 +66,7 @@ test("public pages keep auth before monitoring and remove consent surfaces", () 
     assert.doesNotMatch(html, /src="\/analytics\.js|cookie-preferences|data-clarity-mask/);
     assert.match(html, /href="\/privacy"/);
   }
-  const app = fs.readFileSync(path.join(root, "frontend/app.js"), "utf8");
+  const app = require("./frontend-source.cjs")("app.js");
   assert.match(app, /await requestCognito\("DeleteUser"[^;]+;\s*window.siteAnalytics\?\.track\("account_deleted"\)/);
   const picks = fs.readFileSync(path.join(root, "frontend/picks.js"), "utf8");
   for (const event of ["bracket_created", "bracket_completed", "prediction_saved"]) assert.ok(picks.includes(`track("${event}", { bracketType: SPORT })`));

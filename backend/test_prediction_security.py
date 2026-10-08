@@ -49,10 +49,10 @@ class PredictionSecurityTests(unittest.TestCase):
         script = r'''
 const fs = require("node:fs");
 const vm = require("node:vm");
-const source = fs.readFileSync("frontend/app.js", "utf8");
+const source = fs.readFileSync("frontend/teams.js", "utf8");
 const context = vm.createContext({ IS_NBA: true });
 vm.runInContext(source.slice(source.indexOf("function createEmptyDivisionWinners()"),
-  source.indexOf("const state =")), context);
+  source.indexOf("function getTeamNickname(")), context);
 process.stdout.write(JSON.stringify(context.createEmptyDivisionWinners()));
 '''
         result = subprocess.run(["node", "-e", script], cwd=Path(__file__).resolve().parent.parent,

@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const appSource = fs.readFileSync(path.join(__dirname, "../frontend/app.js"), "utf8");
+const appSource = require("./frontend-source.cjs")("app.js");
 const start = appSource.indexOf("function setAccountModalBackgroundInert(");
 const end = appSource.indexOf("\nfunction openAccountModal(", start);
 assert.ok(start >= 0 && end > start, "account modal background handler exists");

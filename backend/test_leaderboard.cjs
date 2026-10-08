@@ -4,11 +4,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const context = vm.createContext({});
-vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), context);
+vm.runInContext(require("./frontend-source.cjs")("leaderboard.js"), context);
 
 test('NBA uses a fixed eight-team bracket and invalidates downstream winners', () => {
   const nba = vm.createContext({ IS_NBA: true });
-  vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), nba);
+  vm.runInContext(require("./frontend-source.cjs")("leaderboard.js"), nba);
   nba.seeds = { East: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'] };
   nba.picks = { East: { 'r1-1-8': 'eight', 'r1-4-5': 'four', 'r1-2-7': 'two', 'r1-3-6': 'three', 'div-1': 'eight', 'div-2': 'two', conf: 'eight' } };
   const games = () => JSON.parse(vm.runInContext('JSON.stringify(buildConferenceGames(seeds, picks, "East"))', nba));
@@ -103,7 +103,7 @@ test('private leaderboard reads only its fixed scoring mode', () => {
 test('preseason status stops at each sport’s kickoff, including when dev picks stay open', () => {
   const status = 'Preseason — scoring has not started';
   const season = vm.createContext({ state: {}, IS_NBA: false, NBA_SEASON: { lockAt: '2026-10-20T19:00:00Z' } });
-  vm.runInContext(fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8'), season);
+  vm.runInContext(require("./frontend-source.cjs")("leaderboard.js"), season);
   const display = time => season.seasonStatusText(status, Date.parse(time));
   assert.equal(display('2026-09-10T00:19:59Z'), status);
   assert.equal(display('2026-09-10T00:20:00Z'), '');
@@ -123,7 +123,7 @@ test('preseason status stops at each sport’s kickoff, including when dev picks
 });
 
 test('bundled NFL preseason cutoff matches both deployment configurations', () => {
-  const source = fs.readFileSync(__dirname + '/../frontend/leaderboard.js', 'utf8');
+  const source = require("./frontend-source.cjs")("leaderboard.js");
   for (const environment of ['dev', 'prod']) {
     const config = fs.readFileSync(`${__dirname}/../terraform/envs/${environment}/terraform.tfvars`, 'utf8');
     const cutoff = config.match(/prediction_lock_at\s*=\s*"([^"]+)"/)[1];

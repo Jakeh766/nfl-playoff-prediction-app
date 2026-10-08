@@ -74,6 +74,50 @@ locals {
       source       = "${var.frontend_dir}/shell.js"
       content_type = "application/javascript; charset=utf-8"
     }
+    "teams.js" = {
+      source       = "${var.frontend_dir}/teams.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "ui.js" = {
+      source       = "${var.frontend_dir}/ui.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "auth.js" = {
+      source       = "${var.frontend_dir}/auth.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "group-navigation.js" = {
+      source       = "${var.frontend_dir}/group-navigation.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "api.js" = {
+      source       = "${var.frontend_dir}/api.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "prediction-window.js" = {
+      source       = "${var.frontend_dir}/prediction-window.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "group-actions.js" = {
+      source       = "${var.frontend_dir}/group-actions.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "bracket.js" = {
+      source       = "${var.frontend_dir}/bracket.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "standings.js" = {
+      source       = "${var.frontend_dir}/standings.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "public-bracket.js" = {
+      source       = "${var.frontend_dir}/public-bracket.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "leaderboard-table.js" = {
+      source       = "${var.frontend_dir}/leaderboard-table.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "app.js" = {
       source       = "${var.frontend_dir}/app.js"
       content_type = "application/javascript; charset=utf-8"

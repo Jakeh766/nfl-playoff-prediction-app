@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const read = name => fs.readFileSync(`${__dirname}/../frontend/${name}`, 'utf8');
+const read = require("./frontend-source.cjs");
 const leaderboard = read('leaderboard.js');
 const app = read('app.js');
 const groups = read('groups.js');
@@ -89,7 +89,8 @@ test('Groups owns its page and controls while the leaderboard stays public', () 
   assert.doesNotMatch(leaderboard, /function refreshGroups|function submitGroup/);
   for (const file of ['index.html', 'nba.html']) {
     assert.match(read(file), /href="\/groups" data-clean-route="\/groups">View groups/);
-    assert.match(read(file), /src="\/groups.js/);
+    assert.match(read(file), /src="\/group-actions.js/);
+    assert.doesNotMatch(read(file), /src="\/groups.js/);
   }
   assert.match(read('shell.js'), /routeHref\("\/groups"\).*data-nav-page="groups"/);
   const infra = fs.readFileSync(`${__dirname}/../terraform/modules/app/main.tf`, 'utf8');

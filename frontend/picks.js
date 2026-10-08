@@ -652,11 +652,7 @@ function updateSaveState(saved) {
     : "Unsaved changes";
 }
 
-function openPrediction(scrollToPredictor = true) {
-  if (PAGE !== "picks") {
-    window.location.assign(sportUrl(LOCAL_PREVIEW ? "/picks.html" : "/picks"));
-    return;
-  }
+function loadPredictionIntoEditor(scrollToPredictor = true) {
   closeAccountModal();
   const stored = state.savedPrediction;
   state.seeds = stored?.seeds

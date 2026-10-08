@@ -31,14 +31,13 @@ class LoginFormTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.shell = (FRONTEND_DIR / "shell.js").read_text(encoding="utf-8")
-        cls.app_javascript = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
-        cls.bootstrap_javascript = (FRONTEND_DIR / "bootstrap.js").read_text(
-            encoding="utf-8"
-        )
-        cls.leaderboard_javascript = (
-            FRONTEND_DIR / "leaderboard.js"
-        ).read_text(encoding="utf-8")
-        cls.groups_javascript = (FRONTEND_DIR / "groups.js").read_text(encoding="utf-8")
+        cls.app_javascript = "\n".join((FRONTEND_DIR / file).read_text(encoding="utf-8") for file in
+            ("teams.js", "app.js", "ui.js", "auth.js", "group-navigation.js", "api.js", "prediction-window.js"))
+        cls.bootstrap_javascript = "\n".join((FRONTEND_DIR / file).read_text(encoding="utf-8")
+            for file in ("ui.js", "bootstrap.js"))
+        cls.leaderboard_javascript = "\n".join((FRONTEND_DIR / file).read_text(encoding="utf-8")
+            for file in ("bracket.js", "public-bracket.js", "standings.js", "leaderboard-table.js", "leaderboard.js"))
+        cls.groups_javascript = "\n".join((FRONTEND_DIR / file).read_text(encoding="utf-8") for file in ("group-actions.js", "groups.js"))
         cls.picks_javascript = (FRONTEND_DIR / "picks.js").read_text(
             encoding="utf-8"
         )
