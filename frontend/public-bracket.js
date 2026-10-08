@@ -119,13 +119,12 @@ function renderPublicBracket(bracket, scoringMode = "classic") {
   if (typeof createPredictionShareButton === "function") {
     const actions = document.createElement("div");
     actions.className = "saved-card-actions";
-    const picks = createPredictionShareButton(bracket.leaderboardName, "picks", scoringMode);
     const isOwn = state.signedIn && state.leaderboardName === bracket.leaderboardName;
-    if (!isOwn) picks.textContent = "Share picks";
+    const picks = createPredictionShareButton(bracket.leaderboardName, "picks", scoringMode);
     actions.appendChild(picks);
     if (score.possible > 0) {
-      const results = createPredictionShareButton(bracket.leaderboardName, "results", scoringMode);
-      if (!isOwn) results.textContent = "Share results";
+      const results = createPredictionShareButton(bracket.leaderboardName, "results", scoringMode,
+        isOwn ? "Share my results" : "Share results");
       actions.appendChild(results);
     }
     elements.publicBracketContent.appendChild(actions);

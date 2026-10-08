@@ -2,24 +2,16 @@
 export function publicPlayerName(value) {
   if (typeof value !== "string" || value.length < 3 || value.length > 24 ||
       !/^[A-Za-z0-9][A-Za-z0-9 ._'’\-]*[A-Za-z0-9]$/.test(value)) {
-    throw new Error("A public leaderboard name is required to share picks.");
+    throw new Error("A public leaderboard name is required to share a bracket.");
   }
   return value;
-}
-
-export function publicPredictionUrl({ origin, player, sport, local = false }) {
-  const url = new URL(local ? "/leaderboard.html" : "/leaderboard", origin);
-  // Rebuild from the origin: never carry invite codes, group IDs, or auth parameters.
-  url.searchParams.set("player", publicPlayerName(player));
-  if (sport === "nba") url.searchParams.set("sport", "nba");
-  return url.href;
 }
 
 export function hasScoring(score) {
   return Number.isFinite(score?.possible) && score.possible > 0;
 }
 
-export function createShareModel({ bracket, sport, season, kind = "picks", mode = "classic", rank = null, origin, local, buildGames }) {
+export function createShareModel({ bracket, sport, season, kind = "picks", mode = "classic", rank = null, buildGames }) {
   const player = publicPlayerName(bracket.leaderboardName);
   const nba = sport === "nba";
   const conferences = nba ? ["West", "East"] : ["AFC", "NFC"];
@@ -63,15 +55,16 @@ export function createShareModel({ bracket, sport, season, kind = "picks", mode 
     rank: results && Number.isInteger(rank) && rank > 0 ? rank : null,
     championStatus: results ? status : null,
     // `maximum` is the system ceiling, NOT the player's remaining potential.
-    url: publicPredictionUrl({ origin, player, sport, local }),
   });
 }
 
 export function nativeSharePayload(model, file, navigator) {
-  if (!navigator.share) return null;
-  const base = { title: `${model.player}'s Predict Playoffs ${model.kind === "results" ? "results" : "picks"}`, url: model.url };
+  if (!file || typeof navigator.share !== "function" || typeof navigator.canShare !== "function") return null;
   try {
-    if (file && navigator.canShare?.({ files: [file] })) return { ...base, files: [file] };
+    if (navigator.canShare({ files: [file] })) return {
+      title: `${model.player}'s Predict Playoffs bracket${model.kind === "results" ? " results" : ""}`,
+      files: [file],
+    };
   } catch (_error) { /* File sharing can be disabled by browser policy. */ }
-  return base;
+  return null;
 }

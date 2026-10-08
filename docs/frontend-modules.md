@@ -37,7 +37,8 @@ framework, bundler, dependency installation, or build step was added.
 
 ## Sharing and privacy
 
-Saving a prediction exposes **Share my picks** in the saved bracket card.
+Saving a prediction exposes a standard share icon and visible **Share bracket**
+text in the saved bracket card, with a matching accessible label.
 **Share my results** appears when the score's `possible` field indicates that
 results have settled (including a player with zero earned points). Read-only
 public brackets offer both actions as applicable; results respect the selected
@@ -57,22 +58,18 @@ timeout. Failed or unavailable logos leave the team name and seed visible and
 the PNG downloadable. No credentials or share parameters reach logo requests.
 The image footer contains only the brand and `predictplayoffs.com`; it has no
 legend, structure explanation, or public prediction URL. Supported browsers share the
-image via Web Share; browsers without file sharing share the link. Download and
-copy-link actions remain available. Image export failure leaves the public link
-usable. Native-share cancellation leaves the preview open without a success event.
-
-Links use the current deployment's origin and `/leaderboard?player=PublicName`
-(plus `sport=nba` for NBA). Viewing needs no account. They reference the player's
-current saved prediction: edits change what the link opens, while a downloaded
-image stays a snapshot. Renaming/deleting the profile or prediction can invalidate
-an old link. Social link previews retain existing site Open Graph metadata;
-attach the generated PNG for a personalized platform preview.
+image file via Web Share. When file sharing is unavailable, the dialog offers
+the image download for attachment to a message or post. Sharing never creates,
+copies, or sends a public bracket URL. Image generation failures prompt a retry;
+native-share failures retain the download action. Cancellation leaves the preview
+open without a success event. Existing anonymous read-only brackets on the
+leaderboard remain available independently of this image-only sharing flow.
 
 Sharing always refetches the anonymous public bracket and public leaderboard.
 Neither private group data nor group URLs pass to the sharing module. Sharing
 from Groups exposes public picks/overall performance only, with no group rank,
 group name, member identifier, password, or invite code. Email, Cognito IDs,
-tokens, and internal database keys are excluded from the share model and URL.
+tokens, and internal database keys are excluded from the share model and file.
 
 The existing public bracket API gains additive `season` and `championStatus`
 fields. Champion status uses finalized playoff qualification, NFL losses, NBA
@@ -80,8 +77,8 @@ completed series, and completed rounds. Unknown status is omitted from the card.
 The existing system `maximum` is deliberately not presented as a player's
 maximum possible remaining score. There are no new endpoints or database changes.
 
-Five fixed events (`share_card_opened`, `share_image_generated`,
-`share_native_used`, `share_image_downloaded`, `share_link_copied`) use the
+Four fixed events (`share_card_opened`, `share_image_generated`,
+`share_native_used`, `share_image_downloaded`) use the
 existing first-party analytics endpoint and admin activity report. They carry
 only event and fixed page names, honor DNT/GPC, and never contain the card,
 player, share URL, or group information. `/groups` permits those same coarse

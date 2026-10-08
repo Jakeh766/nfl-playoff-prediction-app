@@ -791,14 +791,16 @@ function renderSavedPrediction() {
   remove.addEventListener("click", deletePrediction);
 
   const share = createPredictionShareButton(() => state.leaderboardName);
-  actions.append(load, share);
-  if (prediction.score?.possible > 0) {
-    actions.appendChild(createPredictionShareButton(() => state.leaderboardName, "results"));
-  }
-  actions.appendChild(remove);
+  actions.append(load, share, remove);
   card.append(top, champion);
   if (scoreSummary) card.appendChild(scoreSummary);
   card.appendChild(actions);
+  if (prediction.score?.possible > 0) {
+    const results = document.createElement("div");
+    results.className = "saved-card-actions saved-result-actions";
+    results.appendChild(createPredictionShareButton(() => state.leaderboardName, "results"));
+    card.appendChild(results);
+  }
   elements.savedGrid.appendChild(card);
 }
 

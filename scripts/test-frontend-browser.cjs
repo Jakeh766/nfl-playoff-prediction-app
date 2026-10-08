@@ -29,15 +29,16 @@ const server = http.createServer((request, response) => {
   const errors = [];
   const events = [];
   const records = new Map();
-  async function boot(signedIn) {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, permissions: ["clipboard-read", "clipboard-write"], acceptDownloads: true });
-    await context.addInitScript(({ signedIn }) => {
+  async function boot(signedIn, hasNativeShare = true) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+    await context.addInitScript(({ signedIn, hasNativeShare }) => {
       if (signedIn) localStorage.setItem("road-to-bowl.auth.session", JSON.stringify({ accessToken: "fixture", idToken: "", expiresAt: Date.now() + 3600000 }));
-      Object.defineProperty(navigator, "canShare", { value: ({ files }) => Boolean(files?.length) });
-      Object.defineProperty(navigator, "share", { value: async payload => {
+      Object.defineProperty(navigator, "canShare", { value: ({ files }) => !window.disableImageSharing && Boolean(files?.length) });
+      Object.defineProperty(navigator, "share", { value: hasNativeShare ? async payload => {
         if (window.cancelShare) throw new DOMException("Cancelled", "AbortError");
-        window.sharedPayload = { title: payload.title, url: payload.url, files: payload.files?.map(file => ({ name: file.name, type: file.type, size: file.size })) };
-      } });
+        if (window.failShare) throw new DOMException("Unavailable", "NotAllowedError");
+        window.sharedPayload = { title: payload.title, keys: Object.keys(payload), files: payload.files?.map(file => ({ name: file.name, type: file.type, size: file.size })) };
+      } : undefined });
       const fillText = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function (...args) {
         if (this.canvas.width === 1200 && this.canvas.height === 630) {
@@ -53,7 +54,7 @@ const server = http.createServer((request, response) => {
         }
         return drawImage.apply(this, args);
       };
-    }, { signedIn });
+    }, { signedIn, hasNativeShare });
     await context.route("**/auth-config.js", route => route.fulfill({ contentType: "application/javascript", body: 'window.AUTH_CONFIG = {environment:"dev", clientId:"fixture", region:"us-east-1"};' }));
     await context.route("**/api/**", async route => {
       const request = route.request();
@@ -113,7 +114,13 @@ const server = http.createServer((request, response) => {
       assert.equal(await page.evaluate(() => allGamesPicked()), true);
       assert.equal(await page.evaluate(() => validateSeeding()), "");
       await page.locator("#save-prediction").click();
-      await page.getByRole("button", { name: "Share my picks", exact: true }).click();
+      const shareBracket = page.getByRole("button", { name: "Share bracket", exact: true });
+      await shareBracket.waitFor();
+      assert.equal(await shareBracket.locator("span").textContent(), "Share bracket");
+      assert.equal(await shareBracket.getAttribute("aria-label"), "Share bracket");
+      assert.equal(await shareBracket.locator('svg[aria-hidden="true"] circle').count(), 3);
+      await page.locator(".saved-card").screenshot({ path: path.join(output, `share-${sport}-saved-card-desktop.png`) });
+      await shareBracket.click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       assert.deepEqual(await page.locator(".prediction-share-preview canvas").evaluate(node => [node.width, node.height]), [1200, 630]);
       const bracketLabel = await page.locator("canvas").getAttribute("aria-label");
@@ -147,21 +154,41 @@ const server = http.createServer((request, response) => {
       await download.saveAs(path.join(output, `share-${sport}-download.png`));
       const bytes = fs.readFileSync(path.join(output, `share-${sport}-download.png`));
       assert.equal(bytes.readUInt32BE(16), 1200); assert.equal(bytes.readUInt32BE(20), 630);
-      await page.locator("[data-share-copy]").click();
-      const link = await page.evaluate(() => navigator.clipboard.readText());
-      assert.equal(new URL(link).searchParams.get("player"), "JakeH");
-      assert.doesNotMatch(link, /group|invite|fixture|password/);
+      assert.equal(await page.locator(".prediction-share-dialog input, .prediction-share-dialog a, [data-share-copy]").count(), 0);
+      assert.doesNotMatch(await page.locator(".prediction-share-dialog").textContent(), /share link|public bracket link|copy.*link|copy.*url|view online/i);
       await page.locator("[data-share-native]").click();
       assert.equal(await page.evaluate(() => sharedPayload.files[0].type), "image/png");
+      assert.deepEqual(await page.evaluate(() => sharedPayload.keys.sort()), ["files", "title"]);
       const nativeEvents = events.filter(event => event.event === "share_native_used").length;
       await page.evaluate(() => { window.cancelShare = true; });
       await page.locator("[data-share-native]").click();
       assert.equal(events.filter(event => event.event === "share_native_used").length, nativeEvents);
+      await page.evaluate(() => { window.cancelShare = false; window.failShare = true; });
+      await page.locator("[data-share-native]").click();
+      assert.match(await page.locator('.prediction-share-dialog [role="status"]').textContent(), /Download the image/);
+      assert.equal(await page.locator("[data-share-download]").isEnabled(), true);
+      await page.evaluate(() => { window.failShare = false; });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: path.join(output, `share-${sport}-mobile.png`), fullPage: true });
       await page.screenshot({ path: path.join(output, `share-${sport}-mobile-viewport.png`) });
       assert.equal(await page.locator(".prediction-share-dialog").evaluate(node => node.scrollWidth <= node.clientWidth), true);
       await page.getByRole("button", { name: "Close sharing" }).click();
+      await page.locator(".saved-card").screenshot({ path: path.join(output, `share-${sport}-saved-card-mobile.png`) });
+      assert.equal(await page.locator(".saved-card").evaluate(node => node.scrollWidth <= node.clientWidth), true);
+      const rowTops = await page.locator(".saved-card-actions").first().locator("button").evaluateAll(buttons => buttons.map(button => Math.round(button.getBoundingClientRect().top)));
+      assert.equal(new Set(rowTops).size, 1, "Open bracket, Share bracket, and Delete fit one mobile row");
+      await page.evaluate(() => { window.disableImageSharing = true; });
+      await shareBracket.click();
+      await page.locator("[data-share-download]:not([disabled])").waitFor();
+      assert.equal(await page.locator("[data-share-native]").isVisible(), false);
+      assert.match(await page.locator('.prediction-share-dialog [role="status"]').textContent(), /Download the image/);
+      assert.doesNotMatch(await page.locator(".prediction-share-dialog").textContent(), /share link|public bracket link|copy.*link|copy.*url/i);
+      const unsupportedDownloading = page.waitForEvent("download");
+      await page.locator("[data-share-download]").click();
+      await (await unsupportedDownloading).saveAs(path.join(output, `share-${sport}-unsupported-download.png`));
+      await page.screenshot({ path: path.join(output, `share-${sport}-download-only-mobile.png`) });
+      await page.getByRole("button", { name: "Close sharing" }).click();
+      await page.evaluate(() => { window.disableImageSharing = false; });
       await page.getByRole("button", { name: "Share my results", exact: true }).click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       const label = await page.locator("canvas").getAttribute("aria-label");
@@ -183,14 +210,14 @@ const server = http.createServer((request, response) => {
       assert.equal(await page.evaluate(() => allGamesPicked()), true);
       await page.evaluate(() => setPredictionEditingLocked(true));
       assert.equal(await page.locator("#save-prediction").isDisabled(), true);
-      assert.equal(await page.getByRole("button", { name: "Share my picks", exact: true }).isEnabled(), true);
+      assert.equal(await shareBracket.isEnabled(), true);
       // Missing/CORS-blocked logos must still yield a downloadable, origin-clean PNG.
       await context.route("https://a.espncdn.com/**", route => sport === "nfl" ? route.abort() : route.fulfill({
         status: 200, contentType: "image/png",
         headers: { "access-control-allow-origin": "https://not-permitted.example" },
         body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRZkAAAAASUVORK5CYII=", "base64"),
       }));
-      await page.getByRole("button", { name: "Share my picks", exact: true }).click();
+      await shareBracket.click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       assert.equal(await page.locator("canvas").evaluate(node => (node.bracketLogos || []).filter(logo => logo.src.includes("teamlogos")).length), 0);
       assert.match(await page.locator("canvas").getAttribute("aria-label"), /Full playoff bracket/);
@@ -201,13 +228,18 @@ const server = http.createServer((request, response) => {
       await context.unroute("https://a.espncdn.com/**");
     }
     await context.close();
-    const anonymous = await boot(false);
+    const anonymous = await boot(false, false);
     for (const sport of ["nfl", "nba"]) {
       await anonymous.page.goto(`${origin}/leaderboard.html?player=JakeH${sport === "nba" ? "&sport=nba" : ""}`, { waitUntil: "networkidle" });
       await anonymous.page.locator("#public-bracket-content .public-champion").waitFor();
       assert.equal(await anonymous.page.evaluate(() => state.signedIn), false);
       await anonymous.page.getByRole("button", { name: "Share results", exact: true }).click();
       await anonymous.page.locator("[data-share-download]:not([disabled])").waitFor();
+      assert.equal(await anonymous.page.locator("[data-share-native]").isVisible(), false);
+      assert.equal(await anonymous.page.locator(".prediction-share-dialog input, .prediction-share-dialog a, [data-share-copy]").count(), 0);
+      const anonymousDownloading = anonymous.page.waitForEvent("download");
+      await anonymous.page.locator("[data-share-download]").click();
+      await (await anonymousDownloading).saveAs(path.join(output, `share-${sport}-anonymous-download.png`));
       await anonymous.page.getByRole("button", { name: "Close sharing" }).click();
       await anonymous.page.locator("#close-public-bracket").click();
       await anonymous.page.locator("#upset-leaderboard-mode").click();
@@ -218,9 +250,10 @@ const server = http.createServer((request, response) => {
     }
     assert.deepEqual(errors, []);
     for (const event of events) assert.doesNotMatch(JSON.stringify(event), /JakeH|PRIVATE|fixture|password|invite/);
-    for (const name of ["share_card_opened", "share_image_generated", "share_native_used", "share_image_downloaded", "share_link_copied"]) assert.ok(events.some(event => event.event === name));
+    for (const name of ["share_card_opened", "share_image_generated", "share_native_used", "share_image_downloaded"]) assert.ok(events.some(event => event.event === name));
+    assert.ok(!events.some(event => event.event === "share_link_copied"));
     await anonymous.context.close();
-    console.log("Browser checks passed: page loading, account modal, home group creation/invite, NFL/NBA randomize/save/reload/lock, public anonymous links, Classic/Upset Edge sharing, PNG downloads, clipboard, native image sharing/cancel, and mobile overflow.");
+    console.log("Browser checks passed: page loading, account modal, home group creation/invite, NFL/NBA randomize/save/reload/lock, anonymous public brackets, accessible share icon/text, Classic/Upset Edge images, image-only native sharing/cancel/error, download-only fallbacks, missing logos, and mobile overflow.");
   } finally {
     await browser.close();
     server.close();

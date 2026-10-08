@@ -3034,14 +3034,12 @@ body .champion-display strong {
   flex-wrap: wrap;
 }
 
-.prediction-share-link-label {
-  display: block;
-  margin-block: 20px 8px;
+.prediction-share-icon {
+  flex-shrink: 0;
 }
 
-.prediction-share-dialog input {
-  width: 100%;
-  min-width: 0;
+.prediction-share-dialog [data-share-native][hidden] {
+  display: none;
 }
 
 @media (max-width: 600px) {
@@ -3678,13 +3676,19 @@ body .champion-display strong {
 
 .saved-card-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
 .saved-card-actions button {
   min-height: 36px;
-  padding: 0 13px;
+  padding: 0 10px;
   font-size: 11px;
+}
+
+.saved-result-actions {
+  margin-top: 8px;
 }
 
 .delete-button {

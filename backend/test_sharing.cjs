@@ -21,7 +21,7 @@ function context(sport = "nfl") {
       groupName: "PRIVATE", inviteCode: "PRIVATE", profileKey: "PRIVATE", password: "PRIVATE" } };
 }
 
-test("cards and URLs contain only public fields for both sports", async () => {
+test("image models contain only public fields and never create bracket URLs", async () => {
   const { createShareModel } = await modelModule;
   for (const sport of ["nfl", "nba"]) {
     const model = createShareModel(context(sport));
@@ -30,10 +30,7 @@ test("cards and URLs contain only public fields for both sports", async () => {
     assert.deepEqual(model.matchup, ["Team One", "Team Two"]);
     assert.deepEqual(model.conferences.map(c => c.name), sport === "nba" ? ["West", "East"] : ["AFC", "NFC"]);
     assert.doesNotMatch(JSON.stringify(model), /PRIVATE|ownerId|memberId|email|invite|password|profileKey/);
-    const url = new URL(model.url);
-    assert.equal(url.origin, "https://dev.predictplayoffs.com");
-    assert.equal(url.pathname, "/leaderboard");
-    assert.deepEqual([...url.searchParams.keys()], sport === "nba" ? ["player", "sport"] : ["player"]);
+    assert.equal("url" in model, false);
   }
 });
 
@@ -57,27 +54,43 @@ test("results use the selected public scoring mode without inventing remaining p
 });
 
 test("public names reject emails, IDs, malformed links, and oversized values", async () => {
-  const { publicPredictionUrl } = await modelModule;
+  const { publicPlayerName } = await modelModule;
   for (const player of ["private@example.com", "<script>", "a".repeat(36), "ab", "a/b", "a?token", null]) {
-    assert.throws(() => publicPredictionUrl({ origin: "https://example.com", player, sport: "nfl" }));
+    assert.throws(() => publicPlayerName(player));
   }
-  const url = publicPredictionUrl({ origin: "http://localhost:8000/picks.html?group=PRIVATE#secret", player: "O'Brien Jr", sport: "nba", local: true });
-  assert.equal(new URL(url).searchParams.get("player"), "O'Brien Jr");
-  assert.equal(new URL(url).pathname, "/leaderboard.html");
-  assert.doesNotMatch(url, /PRIVATE|secret/);
+  assert.equal(publicPlayerName("O'Brien Jr"), "O'Brien Jr");
 });
 
-test("native sharing prefers the image and falls back to the public URL", async () => {
+test("native sharing accepts only image files and never falls back to a URL", async () => {
   const { nativeSharePayload, createShareModel } = await modelModule;
   const model = createShareModel(context());
   const file = { type: "image/png" };
   const navigator = { share() {}, canShare: payload => payload.files[0] === file };
-  assert.deepEqual(nativeSharePayload(model, file, navigator).files, [file]);
+  assert.deepEqual(nativeSharePayload(model, file, navigator), { title: "JakeH's Predict Playoffs bracket", files: [file] });
+  assert.equal(nativeSharePayload(model, null, navigator), null);
   navigator.canShare = () => false;
-  assert.equal("files" in nativeSharePayload(model, file, navigator), false);
+  assert.equal(nativeSharePayload(model, file, navigator), null);
   navigator.canShare = () => { throw new Error("policy"); };
-  assert.equal(nativeSharePayload(model, file, navigator).url, model.url);
+  assert.equal(nativeSharePayload(model, file, navigator), null);
+  assert.equal(nativeSharePayload(model, file, { share() {} }), null);
   assert.equal(nativeSharePayload(model, file, {}), null);
+});
+
+test("share controls have visible text, a decorative standard share icon, and matching accessible names", () => {
+  const source = fs.readFileSync(`${__dirname}/../frontend/share-entry.js`, "utf8");
+  const sandbox = vm.createContext({ document: { createElement: tag => ({ tag, children: [], attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    appendChild(node) { this.children.push(node); }, addEventListener() {} }) } });
+  vm.runInContext(source, sandbox);
+  const button = sandbox.createPredictionShareButton("JakeH");
+  assert.equal(button.children[0].textContent, "Share bracket");
+  assert.equal(button.attributes["aria-label"], "Share bracket");
+  assert.match(button.innerHTML, /<svg[^>]+aria-hidden="true"[^>]+focusable="false"/);
+  assert.equal((button.innerHTML.match(/<circle /g) || []).length, 3);
+  assert.match(button.innerHTML, /<path /);
+  const results = sandbox.createPredictionShareButton("JakeH", "results", "classic", "Share results");
+  assert.equal(results.children[0].textContent, "Share results");
+  assert.equal(results.attributes["aria-label"], "Share results");
 });
 
 test("sharing inside a group refetches public data and never uses the group board", async () => {
@@ -206,11 +219,12 @@ test("share analytics ignore all supplied identifiers and respect privacy signal
       document: { cookie: "" }, fetch: async (_url, options) => payloads.push(JSON.parse(options.body)) };
     sandbox.window = sandbox;
     vm.runInNewContext(source, sandbox);
-    for (const event of ["share_card_opened", "share_image_generated", "share_native_used", "share_image_downloaded", "share_link_copied"]) {
+    for (const event of ["share_card_opened", "share_image_generated", "share_native_used", "share_image_downloaded"]) {
       sandbox.siteAnalytics.track(event, { player: "PRIVATE", groupId: "PRIVATE", url: "PRIVATE" });
       if (!blocked) assert.deepEqual(payloads.at(-1), { event, page: "/groups" });
     }
-    assert.equal(payloads.length, blocked ? 0 : 5);
+    sandbox.siteAnalytics.track("share_link_copied", {});
+    assert.equal(payloads.length, blocked ? 0 : 4);
   }
 });
 

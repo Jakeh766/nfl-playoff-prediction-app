@@ -48,7 +48,7 @@ export async function renderShareCard(model, { logoUrl } = {}) {
   canvas.width = 1200;
   canvas.height = 630;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Your browser could not generate an image. Copy the public link instead.");
+  if (!ctx) throw new Error("Your browser could not generate an image. Please try again.");
   const ink = "#10223a", muted = "#566479", accent = "#e33b3f", line = "#dcd9d1";
   ctx.fillStyle = "#f5f3ee";
   ctx.fillRect(0, 0, 1200, 630);
@@ -216,5 +216,5 @@ export async function renderShareCard(model, { logoUrl } = {}) {
 }
 
 export function canvasPng(canvas) {
-  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Image generation failed. Copy the public link instead.")), "image/png"));
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Image generation failed. Please try again.")), "image/png"));
 }
