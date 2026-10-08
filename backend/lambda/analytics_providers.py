@@ -258,7 +258,7 @@ def goatcounter(config, start, end):
         metrics.append(metric("Unique visits per page", number(totals.get("total", 0)) - events,
                               note="Fallback GoatCounter statistic: repeat loads of a page within a session count once; different pages add visits."))
         tables.append(table("Unique visits by page", [("page", "Page", "text"), ("visits", "Unique visits", "number")],
-                            [{"page": hit["path"].removeprefix("/prod") if environment == "prod" else hit["path"], "visits": number(hit["count"])} for hit in paths]))
+                            [{"page": (hit["path"].removeprefix("/prod") or "/") if environment == "prod" else hit["path"], "visits": number(hit["count"])} for hit in paths]))
     return {"metrics": metrics, "tables": tables,
             "note": f"GoatCounter · cookieless {environment} traffic. Distinct visitors and sessions share one short-lived estimate across public pages, not permanent people. Daily sessions deduplicate per day and must not be summed for range-wide distinct sessions. " + coverage_note,
             "_cache_seconds": cache_seconds}

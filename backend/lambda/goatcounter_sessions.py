@@ -40,7 +40,7 @@ def public_paths(environment):
     if environment == "dev":
         return PUBLIC_PATHS
     if environment == "prod":
-        return frozenset("/prod" + path for path in PUBLIC_PATHS)
+        return frozenset("/prod" + ("" if path == "/" else path) for path in PUBLIC_PATHS)
     raise ValueError("Invalid traffic environment")
 
 
@@ -103,7 +103,7 @@ def traffic_counts(compressed, start, end, collected_from, expected_rows, *, env
         days.setdefault(day, {"sessions": set(), "pageviews": 0})
         days[day]["sessions"].add(normalized)
         days[day]["pageviews"] += 1
-        page = path.removeprefix("/prod") if environment == "prod" else path
+        page = (path.removeprefix("/prod") or "/") if environment == "prod" else path
         pages[page] = pages.get(page, 0) + 1
         first, last = sessions.get(normalized, (created_at, created_at))
         sessions[normalized] = (min(first, created_at), max(last, created_at))

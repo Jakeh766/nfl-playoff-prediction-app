@@ -159,7 +159,7 @@ test("production retains privacy guards on all public routes and excludes privat
   for (const route of ["/", "/nba", "/picks", "/leaderboard", "/scoring", "/privacy"]) {
     const app = boot({ config: { environment: "prod" }, url: `https://predictplayoffs.com${route}?sport=nba&invite=secret#private` });
     app.load();
-    assertSafeRequest(app, `/prod${["/picks", "/leaderboard", "/scoring"].includes(route) ? `/nba${route}` : route}`);
+    assertSafeRequest(app, `/prod${["/picks", "/leaderboard", "/scoring"].includes(route) ? `/nba${route}` : route === "/" ? "" : route}`);
   }
   for (const options of [{ gpc: true }, { dnt: "1" }, { url: "https://predictplayoffs.com/admin/analytics" },
     { url: "https://predictplayoffs.com/groups?invite=secret" }]) {

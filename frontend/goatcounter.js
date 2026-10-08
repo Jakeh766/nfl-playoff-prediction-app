@@ -18,7 +18,7 @@
     };
     const publicPage = sportPages[route]?.[sport] || window.location.pathname;
     // Both environments reuse one site; production owns a fixed path namespace.
-    const page = (window.AUTH_CONFIG.environment === "prod" ? "/prod" : "") + publicPage;
+    const page = window.AUTH_CONFIG.environment === "prod" ? "/prod" + (publicPage === "/" ? "" : publicPage) : publicPage;
     const title = `Predict Playoffs — ${page === "/" ? "home" : page.slice(1).replace(/\.html$/, "")}`;
     let referrer = "";
     try {

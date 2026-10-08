@@ -205,7 +205,7 @@ its own cache/pool/client/parameters. Dev retains the `nfl-playoff-predictor-dev
 prefix. GoatCounter traffic runs on allowlisted public pages in both environments,
 respecting GPC/DNT without cookies, account identifiers, raw queries or invite codes.
 The existing `predictplayoffs` site and read/export token are reused. Production
-records fixed `/prod/...` virtual paths; exports and fallback stats filter exact
+records fixed `/prod/...` virtual paths (`/prod` for home, matching GoatCounter's trailing-slash normalization); exports and fallback stats filter exact
 environment paths. Legacy unprefixed traffic remains dev-only. Production CSP
 permits only the existing GoatCounter script and count origins. Active-time
 collection remains dev-only.
