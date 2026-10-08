@@ -150,6 +150,15 @@ class SessionTests(unittest.TestCase):
         hosted_header[3] = "User-Agent"
         self.assertEqual(sessions.distinct_count(export(rows, hosted_header), START, END, COLLECTED, len(rows)), 1)
 
+    def test_unpadded_provider_session_halves_deduplicate_without_boundary_collisions(self):
+        # GoatCounter's zint.Uint128.Format prints each half without zero padding.
+        rows = [row(session="1-23"), row(session="0000000000000001-0000000000000023"),
+                row(session="00000000000000010000000000000023"), row(session="12-3"), row(session="0-ab")]
+        self.assertEqual(self.count(rows), 3)
+        for malformed in ("0-0", "-1", "1-", "1-2-3", "1-" + "f" * 17):
+            with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                self.count([row(session=malformed)])
+
     def test_truncated_corrupt_or_oversized_exports_never_return_partial_counts(self):
         with self.assertRaises(ValueError):
             sessions.distinct_count(export([row()]), START, END, COLLECTED, 2)

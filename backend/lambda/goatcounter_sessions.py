@@ -88,10 +88,15 @@ def traffic_counts(compressed, start, end, collected_from, expected_rows, *, env
         if not begin <= created_at < finish:
             continue
         # zint.Uint128.String uses two 64-bit hex halves separated by a dash.
-        # Normalize the equivalent contiguous encoding without retaining IDs.
-        if not re.fullmatch(r"(?:[0-9a-fA-F]{16}-[0-9a-fA-F]{16}|[0-9a-fA-F]{1,32})", session):
+        # Each half omits leading zeroes. Preserve the 64-bit boundary when
+        # normalizing; concatenating unpadded halves would merge distinct IDs.
+        if not re.fullmatch(r"(?:[0-9a-fA-F]{1,16}-[0-9a-fA-F]{1,16}|[0-9a-fA-F]{1,32})", session):
             raise ExportUnavailable("Export session information is missing or invalid.")
-        normalized = int(session.replace("-", ""), 16)
+        if "-" in session:
+            high, low = session.split("-")
+            normalized = (int(high, 16) << 64) | int(low, 16)
+        else:
+            normalized = int(session, 16)
         if normalized == 0:
             raise ExportUnavailable("Export session information is missing or invalid.")
         day = created_at.date().isoformat()
