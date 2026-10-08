@@ -268,7 +268,7 @@ class SessionTests(unittest.TestCase):
         self.assertNotIn("PRIVATE-TOKEN", json.dumps(report))
 
     def test_shared_export_is_reused_between_environments_without_mixed_counts(self):
-        rows = [row(), row(path="/prod/", session=SESSION_B),
+        rows = [row(), row(path="/prod", session=SESSION_B),
                 row(path="/prod/nba/picks", session=SESSION_B, created="2026-10-05T10:01:00Z"),
                 row(path="/prod/picks?invite=PRIVATE"), row(path="/prod/admin/analytics")]
         def request(suffix, **kw):
