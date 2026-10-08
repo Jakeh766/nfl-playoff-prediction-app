@@ -141,6 +141,14 @@ output "analytics_dashboard_url" {
   value = module.nfl_app.analytics_dashboard_url
 }
 
+output "admin_analytics_config_parameter" {
+  value = module.nfl_app.admin_analytics_config_parameter
+}
+
+output "admin_google_credentials_parameter" {
+  value = module.nfl_app.admin_google_credentials_parameter
+}
+
 # These moves preserve the existing production resources as they enter the module.
 moved {
   from = data.archive_file.lambda_zip

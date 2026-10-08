@@ -25,7 +25,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 async function boot(options = {}) {
   const elements = new Map(["analytics-main", "analytics-reports", "analytics-status", "analytics-access",
     "analytics-range", "analytics-start", "analytics-end", "analytics-preset", "analytics-apply", "admin-sign-out",
-    "analytics-tab-goatcounter", "analytics-tab-custom", "analytics-tab-seasons", "analytics-tab-search-console"]
+    "analytics-tab-goatcounter", "analytics-tab-custom", "analytics-tab-seasons", "analytics-tab-search-console",
+    "analytics-environment", "analytics-coverage"]
     .map(id => [id, new Element()]));
   elements.get("analytics-main").hidden = true;
   for (const provider of ["goatcounter", "custom", "seasons", "search-console"]) {
@@ -65,7 +66,7 @@ async function boot(options = {}) {
       const status = options.forbidden ? 403 : options.invalidRange && provider === "analytics" ? 400 : options.failedProvider === provider ? 503 : 200;
       return { status, ok: status === 200, json: async () => provider === "analytics" ?
         options.invalidRange ? { message: "Choose up to 93 days within the past year." } :
-        { providers: ["custom", "goatcounter", "seasons", "search-console"], environment: "dev" } :
+        { providers: ["custom", "goatcounter", "seasons", "search-console"], environment: options.environment || "dev" } :
         { provider, status: options.notConfigured === provider ? "not_configured" : "ok", metrics: [
           { label: provider === "custom" ? "<img onerror=secret>" : "Visits", value: 100, format: "number" },
           { label: "CTR", value: .025, format: "percent" }], tables: [{ title: "Top pages",
@@ -94,14 +95,30 @@ test("Today preset selects the current UTC day without changing completed-day pr
   assert.equal(app.elements.get("analytics-end").value, yesterday.toISOString().slice(0, 10));
 });
 
-test("signed-out, non-admin, lookalike groups and production redirect without any analytics API request", async () => {
+test("signed-out, non-admin, lookalike groups and unknown environments redirect without reports", async () => {
   for (const options of [{ noSession: true }, { groups: ["member"] }, { groups: ["administrator"] },
-    { groups: "admin" }, { environment: "prod" }]) {
+    { groups: "admin" }, { environment: "unknown" }, { environment: "prod", noSession: true },
+    { environment: "prod", groups: ["member"] }]) {
     const app = await boot(options);
     assert.deepEqual(app.redirects, ["/"]);
     assert.equal(app.requests.length, 0);
     assert.equal(app.elements.get("analytics-main").hidden, true);
   }
+});
+
+test("production admins verify access and see production coverage with unavailable traffic", async () => {
+  const app = await boot({ environment: "prod", reports: { goatcounter: {
+    status: "unavailable", metrics: [], tables: [],
+    message: "Traffic is unavailable in production because GoatCounter collection is disabled.",
+  } } });
+  assert.equal(app.requests.length, 5);
+  assert.equal(app.redirects.length, 0);
+  assert.equal(app.elements.get("analytics-main").hidden, false);
+  assert.match(app.elements.get("analytics-environment").textContent, /prod dashboard/);
+  assert.match(app.elements.get("analytics-coverage").textContent, /production does not collect them/);
+  assert.match(app.elements.get("analytics-reports").text, /GoatCounter collection is disabled/);
+  assert.match(app.elements.get("analytics-status").textContent, /3 of 4/);
+  assert.ok(app.requests.every(({ request }) => request.cache === "no-store"));
 });
 
 test("admins verify access server-side before revealing reports and send existing Cognito bearer token", async () => {

@@ -1,17 +1,22 @@
 async function refreshSavedPrediction() {
+  state.predictionLoading = true;
+  state.predictionLoadFailed = false;
+  updateSaveState();
   try {
     state.savedPrediction = await apiRequest("/api/prediction");
   } catch (error) {
-    if (error.status === 404) {
-      state.savedPrediction = null;
-    } else {
-      elements.emptyLocker.classList.remove("hidden");
-      elements.emptyLocker.textContent =
-        "Your saved bracket could not be loaded. Please refresh and try again.";
-      elements.emptyLocker.title = error.message;
-    }
+    if (error.status === 404) state.savedPrediction = null;
+    else state.predictionLoadFailed = true;
   }
-  renderSavedPrediction();
+  state.predictionLoading = false;
+  if (state.predictionsLocked && state.savedPrediction && !state.predictionLoadFailed) {
+    loadPredictionIntoEditor(false);
+  }
+  elements.predictionLoadError.classList.toggle("hidden", !state.predictionLoadFailed);
+  elements.predictionLoadError.textContent = state.predictionLoadFailed
+    ? "Your saved bracket could not be loaded. Refresh before saving or sharing."
+    : "";
+  updateSaveState();
 }
 
 function shuffled(values) {
@@ -223,10 +228,10 @@ function handleSeedChange(event) {
 
   state.bracketBuilt = false;
   state.picks = createEmptyPicks();
-  state.savedAt = null;
-  elements.bracketSection.classList.add("hidden");
+  elements.bracketSection.classList.toggle("hidden", !state.savedPrediction);
+  if (state.savedPrediction) renderBracket();
   elements.seedingMessage.textContent = "";
-  updateSaveState(false);
+  updateSaveState();
   renderConferenceSeeds(
     conference,
     conference === CONFERENCES[0] ? elements.afcSeeds : elements.nfcSeeds,
@@ -252,10 +257,10 @@ function handleDivisionWinnerChange(event) {
 
   state.bracketBuilt = false;
   state.picks = createEmptyPicks();
-  state.savedAt = null;
-  elements.bracketSection.classList.add("hidden");
+  elements.bracketSection.classList.toggle("hidden", !state.savedPrediction);
+  if (state.savedPrediction) renderBracket();
   elements.seedingMessage.textContent = "";
-  updateSaveState(false);
+  updateSaveState();
   renderConferenceSeeds(
     conference,
     conference === CONFERENCES[0] ? elements.afcSeeds : elements.nfcSeeds,
@@ -310,10 +315,9 @@ function buildBracket() {
     window.siteAnalytics?.track("bracket_created", { bracketType: SPORT });
   }
   state.bracketBuilt = true;
-  state.savedAt = null;
   renderBracket();
   elements.bracketSection.classList.remove("hidden");
-  updateSaveState(false);
+  updateSaveState();
   requestAnimationFrame(() => {
     elements.bracketSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -345,7 +349,6 @@ function randomizeBracket() {
   }
 
   state.bracketBuilt = true;
-  state.savedAt = null;
 
   for (const conference of CONFERENCES) {
     let games = getConferenceGames(conference);
@@ -374,7 +377,7 @@ function randomizeBracket() {
   renderSeedSelectors();
   renderBracket();
   elements.bracketSection.classList.remove("hidden");
-  updateSaveState(false);
+  updateSaveState();
   showToast("Random seeds and game picks are ready.");
 
   requestAnimationFrame(() => {
@@ -529,9 +532,8 @@ function handleGamePick(conference, gameId, teamName, isSuperBowl) {
   } else {
     state.picks[conference][gameId] = teamName;
   }
-  state.savedAt = null;
-  updateSaveState(false);
   renderBracket();
+  updateSaveState();
 
   if (!wasComplete && allGamesPicked()) {
     window.siteAnalytics?.track("bracket_completed", { bracketType: SPORT });
@@ -592,10 +594,8 @@ function allGamesPicked() {
 }
 
 async function savePrediction() {
-  if (state.predictionsLocked) {
-    showToast("Brackets are locked for the season.");
-    return;
-  }
+  if (state.predictionsLocked || state.predictionSaving || state.predictionDeleting || state.predictionLoading || state.predictionLoadFailed) return;
+  if (state.savedPrediction && !predictionHasUnsavedChanges()) return;
   if (!state.signedIn) {
     showAuthPanel("signIn", "Sign in to save this prediction to your account.");
     openAccountModal(elements.loginEmail);
@@ -621,8 +621,8 @@ async function savePrediction() {
     bracketBuilt: true,
   };
 
-  elements.savePrediction.disabled = true;
-  elements.savePrediction.textContent = "Saving…";
+  state.predictionSaving = true;
+  updateSaveState();
   try {
     const saved = await apiRequest("/api/prediction", {
       method: "PUT",
@@ -630,33 +630,109 @@ async function savePrediction() {
     });
     state.savedAt = saved.savedAt;
     state.savedPrediction = saved;
+    if (state.predictionsLocked) loadPredictionIntoEditor(false);
     window.siteAnalytics?.track("prediction_saved", { bracketType: SPORT });
-    updateSaveState(true);
-    renderSavedPrediction();
+    updateSaveState();
     if (elements.leaderboardBody) await loadLeaderboard();
     if (PAGE === "leaderboard" && state.activeGroupId) await loadGroupLeaderboard();
-    showToast("Prediction saved.");
+    showToast("Prediction saved");
   } catch (error) {
-    updateSaveState(false);
+    updateSaveState();
     showToast(`Could not save: ${error.message}`);
   } finally {
-    elements.savePrediction.disabled = state.predictionsLocked;
-    elements.savePrediction.textContent = "Save prediction";
+    state.predictionSaving = false;
+    updateSaveState();
   }
 }
 
-function updateSaveState(saved) {
-  elements.saveState.classList.toggle("saved", saved);
-  elements.saveState.querySelector("span:last-child").textContent = saved
-    ? "Saved online"
-    : "Unsaved changes";
+// Compare editable data, excluding scores and server metadata. Key ordering is
+// immaterial; arrays retain their seeding order. Older records may omit divisions.
+function predictionSnapshot(prediction, includeDivisions) {
+  const ordered = (value) => Array.isArray(value) ? value.map(ordered)
+    : value && typeof value === "object"
+      ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])]))
+      : value;
+  return JSON.stringify(ordered({ seeds: prediction.seeds, picks: prediction.picks,
+    bracketBuilt: Boolean(prediction.bracketBuilt),
+    ...(includeDivisions ? { divisionWinners: prediction.divisionWinners } : {}) }));
 }
 
-function openPrediction(scrollToPredictor = true) {
-  if (PAGE !== "picks") {
-    window.location.assign(sportUrl(LOCAL_PREVIEW ? "/picks.html" : "/picks"));
-    return;
+function predictionHasUnsavedChanges() {
+  const saved = state.savedPrediction;
+  // NBA persists no division winners; its empty server object and the editor's
+  // empty conference objects describe the same bracket.
+  const includeDivisions = !IS_NBA && Boolean(saved?.divisionWinners);
+  return !saved || predictionSnapshot(state, includeDivisions) !==
+    predictionSnapshot(saved, includeDivisions);
+}
+
+function canShareEditorPrediction() {
+  return Boolean(state.signedIn && state.savedPrediction && !state.predictionLoadFailed &&
+    !state.predictionLoading && !state.predictionSaving && !state.predictionDeleting && !predictionHasUnsavedChanges());
+}
+
+function updateSaveState() {
+  if (!elements.saveState) return;
+  const saved = state.savedPrediction;
+  const dirty = predictionHasUnsavedChanges();
+  const clean = Boolean(saved && !dirty);
+  state.savedAt = saved?.savedAt ?? null;
+  elements.saveState.classList.toggle("saved", clean);
+  const time = elements.saveState.querySelector("time");
+  time.removeAttribute("datetime");
+  if (clean && state.savedAt != null) {
+    const date = new Date(state.savedAt);
+    time.dateTime = date.toISOString();
+    time.textContent = "Saved " + new Intl.DateTimeFormat(undefined, {
+      year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    }).format(date);
+  } else {
+    time.textContent = saved && !state.predictionsLocked ? "Unsaved changes" : "Not saved yet";
   }
+  elements.savePrediction.textContent = state.predictionSaving ? "Saving…"
+    : saved ? "Save changes" : "Save prediction";
+  elements.savePrediction.disabled = state.predictionsLocked || state.predictionSaving ||
+    state.predictionDeleting || state.predictionLoading || state.predictionLoadFailed || clean;
+  elements.savePrediction.setAttribute("aria-busy", String(state.predictionSaving));
+  const share = elements.bracketShareSlot.querySelector("button");
+  if (share) share.disabled = !canShareEditorPrediction() || share.getAttribute("aria-busy") === "true";
+  const help = state.predictionLoadFailed ? "Refresh before sharing"
+    : !saved ? "Save your prediction before sharing"
+    : dirty ? "Save changes before sharing" : "";
+  elements.bracketShareHelp.textContent = help;
+  if (share) share.title = help;
+  elements.predictionSettings.classList.toggle("hidden", !state.signedIn || !saved);
+  elements.deletePrediction.disabled = state.predictionSaving || state.predictionDeleting;
+}
+
+function initializePredictionActions() {
+  const share = createPredictionShareButton(() => state.leaderboardName, "picks", "classic", "Share bracket", {
+    canShare: canShareEditorPrediction, onSettled: updateSaveState,
+  });
+  share.id = "share-bracket";
+  share.setAttribute("aria-describedby", "bracket-share-help");
+  elements.bracketShareSlot.prepend(share);
+  elements.deletePrediction.addEventListener("click", () => {
+    elements.deletePredictionConfirmation.classList.remove("hidden");
+    elements.deletePrediction.classList.add("hidden");
+    elements.cancelDeletePrediction.focus();
+  });
+  elements.cancelDeletePrediction.addEventListener("click", resetPredictionDeletion);
+  elements.confirmDeletePrediction.addEventListener("click", deletePrediction);
+  elements.accountDialog.addEventListener("close", () => {
+    if (!state.predictionDeleting) resetPredictionDeletion();
+  });
+  updateSaveState();
+}
+
+function resetPredictionDeletion() {
+  elements.deletePredictionConfirmation.classList.add("hidden");
+  elements.deletePrediction.classList.remove("hidden");
+  elements.deletePredictionMessage.textContent = "";
+  elements.deletePrediction.focus();
+}
+
+function loadPredictionIntoEditor(scrollToPredictor = true) {
   closeAccountModal();
   const stored = state.savedPrediction;
   state.seeds = stored?.seeds
@@ -685,11 +761,10 @@ function openPrediction(scrollToPredictor = true) {
   if (state.bracketBuilt && !validateSeeding()) {
     renderBracket();
     elements.bracketSection.classList.remove("hidden");
-    updateSaveState(Boolean(state.savedAt));
-    showToast("Loaded your saved prediction.");
+    updateSaveState();
   } else {
     elements.bracketSection.classList.add("hidden");
-    showToast("Ready for your picks.");
+    updateSaveState();
   }
 
   if (scrollToPredictor) {
@@ -699,122 +774,27 @@ function openPrediction(scrollToPredictor = true) {
   }
 }
 
-function resetGamePicks() {
-  if (state.predictionsLocked) return;
-  state.picks = createEmptyPicks();
-  state.savedAt = null;
-  renderBracket();
-  updateSaveState(false);
-  showToast("Game picks reset. Your seeding is unchanged.");
-}
-
-function createScoreSummary(score) {
-  const summary = document.createElement("section");
-  summary.className = "score-summary";
-  summary.setAttribute("aria-label", "Prediction score");
-
-  const top = document.createElement("div");
-  top.className = "score-summary-top";
-
-  const label = document.createElement("p");
-  label.className = "score-summary-label";
-  label.textContent = score.possible
-    ? `${score.total} OF ${score.possible} AVAILABLE`
-    : "CURRENT SCORE";
-
-  const total = document.createElement("strong");
-  total.className = "score-summary-total";
-  total.textContent = `${score.total} / ${score.maximum}`;
-  top.append(label, total);
-
-  const status = document.createElement("p");
-  status.className = "score-summary-status";
-  status.textContent = seasonStatusText(score.status);
-
-  const splits = document.createElement("div");
-  splits.className = "score-splits";
-  const regularSeason = document.createElement("span");
-  regularSeason.append("PLAYOFF FIELD + SEEDS", document.createElement("strong"));
-  regularSeason.querySelector("strong").textContent = `${score.regularSeason} pts`;
-  const playoffs = document.createElement("span");
-  playoffs.append("PLAYOFF ROUNDS", document.createElement("strong"));
-  playoffs.querySelector("strong").textContent = `${score.playoffs} pts`;
-  splits.append(regularSeason, playoffs);
-
-  summary.append(top, status, splits);
-  return summary;
-}
-
-function renderSavedPrediction() {
-  const prediction = state.savedPrediction;
-  elements.savedGrid.innerHTML = "";
-  elements.emptyLocker.classList.toggle("hidden", Boolean(prediction));
-  if (!prediction) return;
-
-  const card = document.createElement("article");
-  card.className = "saved-card";
-
-  const top = document.createElement("div");
-  top.className = "saved-card-top";
-
-  const identity = document.createElement("div");
-  const name = document.createElement("h3");
-  name.textContent = "Your saved bracket";
-  const time = document.createElement("time");
-  time.dateTime = new Date(prediction.savedAt).toISOString();
-  time.textContent = `Saved ${new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(prediction.savedAt))}`;
-  identity.append(name, time);
-  top.appendChild(identity);
-
-  const champion = document.createElement("div");
-  champion.className = "champion-chip";
-  champion.textContent = `★ Champion: ${prediction.picks.superBowl}`;
-
-  const scoreSummary = prediction.score
-    ? createScoreSummary(prediction.score)
-    : null;
-
-  const actions = document.createElement("div");
-  actions.className = "saved-card-actions";
-
-  const load = document.createElement("button");
-  load.type = "button";
-  load.className = "button button-secondary";
-  load.textContent = "Open bracket";
-  load.addEventListener("click", () => openPrediction());
-
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "delete-button";
-  remove.textContent = "Delete";
-  remove.setAttribute("aria-label", "Delete your saved prediction");
-  remove.addEventListener("click", deletePrediction);
-
-  actions.append(load, remove);
-  card.append(top, champion);
-  if (scoreSummary) card.appendChild(scoreSummary);
-  card.appendChild(actions);
-  elements.savedGrid.appendChild(card);
-}
-
 async function deletePrediction() {
+  if (!state.savedPrediction || state.predictionDeleting || state.predictionSaving) return;
+  state.predictionDeleting = true;
+  elements.confirmDeletePrediction.disabled = true;
+  elements.cancelDeletePrediction.disabled = true;
+  elements.confirmDeletePrediction.textContent = "Deleting…";
+  updateSaveState();
   try {
-    await apiRequest("/api/prediction", {
-      method: "DELETE",
-    });
+    await apiRequest("/api/prediction", { method: "DELETE" });
     state.savedPrediction = null;
-    state.savedAt = null;
-    renderSavedPrediction();
-    updateSaveState(false);
-    if (elements.leaderboardBody) await loadLeaderboard();
-    if (PAGE === "leaderboard" && state.activeGroupId) await loadGroupLeaderboard();
+    loadPredictionIntoEditor(false);
     showToast("Deleted your saved prediction.");
   } catch (error) {
-    showToast(`Could not delete: ${error.message}`);
+    elements.deletePredictionMessage.textContent = `Could not delete: ${error.message}`;
+  } finally {
+    state.predictionDeleting = false;
+    elements.confirmDeletePrediction.disabled = false;
+    elements.cancelDeletePrediction.disabled = false;
+    elements.confirmDeletePrediction.textContent = "Delete prediction";
+    if (!state.savedPrediction) resetPredictionDeletion();
+    updateSaveState();
   }
 }
 

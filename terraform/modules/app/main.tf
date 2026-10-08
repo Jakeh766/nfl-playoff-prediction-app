@@ -74,6 +74,66 @@ locals {
       source       = "${var.frontend_dir}/shell.js"
       content_type = "application/javascript; charset=utf-8"
     }
+    "teams.js" = {
+      source       = "${var.frontend_dir}/teams.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "ui.js" = {
+      source       = "${var.frontend_dir}/ui.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "auth.js" = {
+      source       = "${var.frontend_dir}/auth.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "group-navigation.js" = {
+      source       = "${var.frontend_dir}/group-navigation.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "api.js" = {
+      source       = "${var.frontend_dir}/api.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "prediction-window.js" = {
+      source       = "${var.frontend_dir}/prediction-window.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "group-actions.js" = {
+      source       = "${var.frontend_dir}/group-actions.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "bracket.js" = {
+      source       = "${var.frontend_dir}/bracket.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "standings.js" = {
+      source       = "${var.frontend_dir}/standings.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "public-bracket.js" = {
+      source       = "${var.frontend_dir}/public-bracket.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "leaderboard-table.js" = {
+      source       = "${var.frontend_dir}/leaderboard-table.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "share-entry.js" = {
+      source       = "${var.frontend_dir}/share-entry.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "sharing.js" = {
+      source       = "${var.frontend_dir}/sharing.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "share-model.js" = {
+      source       = "${var.frontend_dir}/share-model.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "share-card.js" = {
+      source       = "${var.frontend_dir}/share-card.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "app.js" = {
       source       = "${var.frontend_dir}/app.js"
       content_type = "application/javascript; charset=utf-8"
@@ -126,7 +186,7 @@ locals {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
       content_type = "image/svg+xml"
     }
-    }, var.environment == "dev" ? {
+    }, {
     "admin/analytics" = {
       source       = "${var.frontend_dir}/admin-analytics.html"
       content_type = "text/html; charset=utf-8"
@@ -139,7 +199,7 @@ locals {
       source       = "${var.frontend_dir}/admin-analytics.css"
       content_type = "text/css; charset=utf-8"
     }
-  } : {})
+  })
 }
 
 resource "aws_dynamodb_table" "win_totals_cache" {
@@ -605,14 +665,14 @@ resource "aws_lambda_function" "backend" {
       PROFILES_TABLE     = aws_dynamodb_table.profiles.name
       RESULTS_SEASON     = tostring(var.results_season)
       RESULTS_TABLE      = aws_dynamodb_table.season_results.name
-      }, var.environment == "dev" ? {
+      }, {
       ADMIN_COGNITO_ISSUER               = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
       ADMIN_COGNITO_CLIENT_ID            = aws_cognito_user_pool_client.browser.id
       ADMIN_ANALYTICS_CACHE_TABLE        = aws_dynamodb_table.admin_analytics_cache[0].name
       ADMIN_ANALYTICS_CONFIG_PARAMETER   = "/${local.resource_prefix}/admin-analytics/config"
       ADMIN_GOOGLE_CREDENTIALS_PARAMETER = "/${local.resource_prefix}/admin-analytics/google-service-account"
       ADMIN_ANALYTICS_LOG_GROUP          = local.analytics_log_group
-    } : {})
+    })
   }
 
   depends_on = [
@@ -922,7 +982,7 @@ resource "aws_s3_object" "frontend" {
   source        = each.value.source
   etag          = filemd5(each.value.source)
   content_type  = each.value.content_type
-  cache_control = contains(["robots.txt", "sitemap.xml"], each.key) ? "public, max-age=300, must-revalidate" : "public, max-age=86400, must-revalidate"
+  cache_control = contains(["sharing.js", "share-model.js", "share-card.js"], each.key) ? "public, no-cache, must-revalidate" : contains(["robots.txt", "sitemap.xml"], each.key) ? "public, max-age=300, must-revalidate" : "public, max-age=86400, must-revalidate"
 }
 
 # Publish HTML only after assets, so a new version cannot cache the previous release.
@@ -1035,7 +1095,7 @@ locals {
     "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "connect-src 'self' https://cognito-idp.${var.aws_region}.amazonaws.com ${join(" ", local.analytics_connections)}",
-    "img-src 'self' https://a.espncdn.com",
+    "img-src 'self' blob: https://a.espncdn.com",
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

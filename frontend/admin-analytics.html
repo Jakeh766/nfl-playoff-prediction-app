@@ -32,7 +32,7 @@
     <main id="analytics-main" class="analytics-main" hidden>
       <div class="analytics-heading">
         <div><h1>Analytics</h1><p>Explore visits, product activity and search performance.</p></div>
-        <span class="analytics-environment">Private · dev dashboard</span>
+        <span id="analytics-environment" class="analytics-environment">Private dashboard</span>
       </div>
       <form id="analytics-range" class="analytics-range">
         <label>Range<select id="analytics-preset"><option value="today">Today (UTC)</option><option value="7">Last 7 days</option><option value="28" selected>Last 28 days</option><option value="90">Last 90 days</option><option value="custom">Custom dates</option></select></label>
@@ -40,7 +40,7 @@
         <label>End date<input id="analytics-end" type="date" required /></label>
         <button class="button button-primary" id="analytics-apply" type="submit">Update reports</button>
       </form>
-      <p class="analytics-note">Traffic, activity and seasons measure dev; Google Search measures the connected production domain. Seasons covers all retained seasons, independent of the date range.</p>
+      <p id="analytics-coverage" class="analytics-note">Seasons covers all retained seasons, independent of the date range.</p>
       <p id="analytics-status" class="analytics-status" role="status" aria-live="polite"></p>
       <div class="analytics-tabs" role="tablist" aria-label="Analytics sections">
         <button id="analytics-tab-goatcounter" class="analytics-tab" type="button" role="tab" aria-selected="true" aria-controls="analytics-panel-goatcounter" aria-label="Traffic" data-provider="goatcounter">Traffic<span class="analytics-tab-state">Loading</span></button>

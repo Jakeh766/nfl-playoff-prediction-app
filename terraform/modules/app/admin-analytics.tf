@@ -1,13 +1,14 @@
-# These resources, routes, and permissions exist only in dev.
+# Each environment owns its group, cache, routes, and runtime permissions.
+# Keep count indexes stable so existing dev resources retain their state addresses.
 resource "aws_cognito_user_group" "admin" {
-  count        = var.environment == "dev" ? 1 : 0
+  count        = 1
   name         = "admin"
   user_pool_id = aws_cognito_user_pool.users.id
   description  = "Private Predict Playoffs analytics dashboard administrators"
 }
 
 resource "aws_dynamodb_table" "admin_analytics_cache" {
-  count        = var.environment == "dev" ? 1 : 0
+  count        = 1
   name         = "${local.resource_prefix}-admin-analytics-cache"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "cacheKey"
@@ -22,7 +23,7 @@ resource "aws_dynamodb_table" "admin_analytics_cache" {
 }
 
 resource "aws_iam_role_policy" "admin_analytics" {
-  count = var.environment == "dev" ? 1 : 0
+  count = 1
   name  = "${local.resource_prefix}-admin-analytics"
   role  = aws_iam_role.lambda.id
   policy = jsonencode({
@@ -60,10 +61,10 @@ resource "aws_iam_role_policy" "admin_analytics" {
 }
 
 resource "aws_apigatewayv2_route" "admin_analytics" {
-  for_each = var.environment == "dev" ? toset([
+  for_each = toset([
     "GET /api/admin/analytics",
     "GET /api/admin/analytics/{provider}",
-  ]) : toset([])
+  ])
   api_id             = aws_apigatewayv2_api.api.id
   route_key          = each.value
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
@@ -72,9 +73,9 @@ resource "aws_apigatewayv2_route" "admin_analytics" {
 }
 
 output "admin_analytics_config_parameter" {
-  value = var.environment == "dev" ? "/${local.resource_prefix}/admin-analytics/config" : null
+  value = "/${local.resource_prefix}/admin-analytics/config"
 }
 
 output "admin_google_credentials_parameter" {
-  value = var.environment == "dev" ? "/${local.resource_prefix}/admin-analytics/google-service-account" : null
+  value = "/${local.resource_prefix}/admin-analytics/google-service-account"
 }

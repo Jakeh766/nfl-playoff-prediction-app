@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(path.join(__dirname, "../frontend/app.js"), "utf8");
+const source = require("./frontend-source.cjs")("app.js");
 const deletion = source.slice(source.indexOf("async function submitDeleteAccount("),
   source.indexOf("\nlet groupMembershipRequest"));
 

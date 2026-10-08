@@ -1,33 +1,10 @@
-let toastTimer;
-
-function setPasswordVisibility(toggle, visible) {
-  const input = document.getElementById(toggle.getAttribute("aria-controls"));
-  if (!input) return;
-  input.type = visible ? "text" : "password";
-  toggle.setAttribute("aria-pressed", String(visible));
-  toggle.setAttribute("aria-label", visible ? "Hide password" : "Show password");
-}
-
-function resetPasswordVisibility(container = document) {
-  container.querySelectorAll("[data-password-toggle]").forEach((toggle) => {
-    setPasswordVisibility(toggle, false);
-  });
-}
-
-function showToast(message) {
-  clearTimeout(toastTimer);
-  elements.toast.textContent = message;
-  elements.toast.classList.add("show");
-  toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2800);
-}
-
 document.querySelectorAll(".conference-logo").forEach((logo) => {
   logo.addEventListener("error", () => logo.classList.add("logo-error"));
 });
 elements.buildBracket?.addEventListener("click", buildBracket);
 elements.randomizeBracket?.addEventListener("click", randomizeBracket);
 elements.savePrediction?.addEventListener("click", savePrediction);
-elements.resetPicks?.addEventListener("click", resetGamePicks);
+if (PAGE === "picks") initializePredictionActions();
 elements.signInForm.addEventListener("submit", submitSignIn);
 elements.createAccountForm.addEventListener("submit", submitCreateAccount);
 elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);
@@ -39,16 +16,6 @@ document.querySelectorAll("[data-password-toggle]").forEach((toggle) => {
   });
 });
 elements.leaderboardNameForm.addEventListener("submit", submitLeaderboardName);
-function explainNameValidation(input, maximumLength) {
-  input.setCustomValidity("");
-  if (input.validity.tooShort || input.validity.tooLong) {
-    input.setCustomValidity(`Use 3–${maximumLength} characters.`);
-  } else if (input.validity.patternMismatch) {
-    input.setCustomValidity(
-      "Use letters, numbers, spaces, periods, apostrophes, underscores, or hyphens.",
-    );
-  }
-}
 elements.leaderboardNameInput.addEventListener("invalid", () => {
   explainNameValidation(elements.leaderboardNameInput, 24);
 });
@@ -82,15 +49,16 @@ elements.groupDialog?.addEventListener("close", () => {
   elements.groupDialogMessage.textContent = "";
 });
 if (typeof initializeGroupSettings === "function") initializeGroupSettings();
-elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
-elements.editGroupSports?.addEventListener("click", openEditGroupSportsDialog);
-elements.editGroupSportsForm?.addEventListener("submit", submitEditGroupSports);
-elements.cancelEditGroupSports?.addEventListener("click", () => elements.editGroupSportsDialog.close());
-elements.leaveGroup?.addEventListener("click", () => {
-  const group = state.groups.find(
-    (candidate) => candidate.groupId === state.activeGroupId,
-  );
-  if (group) openLeaveGroupDialog(group);
+if (PAGE === "groups") {
+  elements.shareGroupInvite?.addEventListener("click", shareActiveGroupInvite);
+  elements.editGroupSports?.addEventListener("click", openEditGroupSportsDialog);
+  elements.editGroupSportsForm?.addEventListener("submit", submitEditGroupSports);
+  elements.cancelEditGroupSports?.addEventListener("click", () => elements.editGroupSportsDialog.close());
+  elements.leaveGroup?.addEventListener("click", () => {
+    const group = state.groups.find(
+      (candidate) => candidate.groupId === state.activeGroupId,
+    );
+    if (group) openLeaveGroupDialog(group);
 });
 elements.deleteGroup?.addEventListener("click", () => {
   const group = state.groups.find(
@@ -98,6 +66,7 @@ elements.deleteGroup?.addEventListener("click", () => {
   );
   if (group) openDeleteGroupDialog(group);
 });
+}
 elements.copyGroupInvite?.addEventListener("click", copyGroupInviteLink);
 elements.shareGroupInviteNative?.addEventListener("click", shareGroupInviteNatively);
 elements.closeGroupInvite?.addEventListener("click", () => {
@@ -108,9 +77,10 @@ elements.groupInviteDialog?.addEventListener("close", () => {
   elements.groupInviteMessage.textContent = "";
   elements.copyGroupInvite.textContent = "Copy invite link";
 });
-elements.leaveGroupForm?.addEventListener("submit", submitLeaveGroup);
-elements.cancelLeaveGroup?.addEventListener("click", () => {
-  if (!leaveGroupPending) elements.leaveGroupDialog.close();
+if (PAGE === "groups") {
+  elements.leaveGroupForm?.addEventListener("submit", submitLeaveGroup);
+  elements.cancelLeaveGroup?.addEventListener("click", () => {
+    if (!leaveGroupPending) elements.leaveGroupDialog.close();
 });
 elements.leaveGroupDialog?.addEventListener("cancel", (event) => {
   if (leaveGroupPending) event.preventDefault();
@@ -128,6 +98,7 @@ elements.deleteGroupDialog?.addEventListener("cancel", (event) => {
   if (deleteGroupPending) event.preventDefault();
 });
 elements.deleteGroupDialog?.addEventListener("close", resetDeleteGroupDialog);
+}
 elements.changeLeaderboardName.addEventListener("click", () => {
   closeAccountModal({ restoreFocus: false });
   openLeaderboardNameDialog(false);
@@ -236,13 +207,13 @@ async function initializeAuthentication() {
       if (!loadAuthSession()) return;
       openPrediction(false);
     } else if (PAGE === "groups") {
-      await refreshGroups();
+        await refreshGroups();
+      }
+    } catch (error) {
+      clearAuthSession();
+      renderAuthentication(false);
+      showAuthPanel("signIn", error.message);
     }
-  } catch (error) {
-    clearAuthSession();
-    renderAuthentication(false);
-    showAuthPanel("signIn", error.message);
-  }
 }
 
 if (PAGE === "picks") loadWinTotals();
@@ -250,3 +221,4 @@ if (elements.leaderboardBody && window.location.hash !== "#groups") loadLeaderbo
 if (["home", "picks"].includes(PAGE)) initializePredictionWindow();
 if (typeof renderHomeGroupInvite === "function") renderHomeGroupInvite();
 initializeAuthentication();
+if (typeof openPublicPredictionFromUrl === "function") openPublicPredictionFromUrl();

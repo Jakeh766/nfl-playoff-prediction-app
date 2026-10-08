@@ -17,6 +17,15 @@ class FrontendDeploymentTests(unittest.TestCase):
                 with self.subTest(page=page.name, script=script):
                     self.assertIn(script, deployed)
 
+        for script in (root / "frontend").glob("*.js"):
+            for dependency in re.findall(r'(?:from\s+|import\()"\./([^"?]+\.js)"', script.read_text(encoding="utf-8")):
+                with self.subTest(script=script.name, dependency=dependency):
+                    self.assertIn(dependency, deployed)
+        # Native relative imports cannot inherit a page's ?v= release parameter.
+        for module in ("sharing.js", "share-model.js", "share-card.js"):
+            self.assertIn(f'"{module}"', manifest)
+        self.assertIn('"public, no-cache, must-revalidate"', manifest)
+
 
 if __name__ == "__main__":
     unittest.main()

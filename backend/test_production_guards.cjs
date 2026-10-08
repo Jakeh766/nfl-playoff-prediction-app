@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 
-const app = fs.readFileSync(path.join(__dirname, "../frontend/app.js"), "utf8");
+const app = require("./frontend-source.cjs")("app.js");
 const picks = fs.readFileSync(path.join(__dirname, "../frontend/picks.js"), "utf8");
 function section(source, start, end) {
   const first = source.indexOf(start);

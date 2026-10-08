@@ -41,8 +41,13 @@ ANALYTICS_EVENTS = {
     "group_joined",
     "prediction_saved",
     "sign_in",
+    "share_card_opened",
+    "share_image_generated",
+    "share_native_used",
+    "share_image_downloaded",
+    "share_link_copied",
 }
-ANALYTICS_PAGES = {"/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"}
+ANALYTICS_PAGES = {"/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy", "/groups"}
 
 EXACT_SEED_POINTS = (5, 3, 3, 3, 2, 2, 2)
 NBA_EXACT_SEED_POINTS = (6, 4, 4, 4, 3, 3, 3, 3)
@@ -506,6 +511,8 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
 
     return {
         "leaderboardName": profile["leaderboardName"],
+        "season": results.get("season"),
+        "championStatus": prediction_champion_status(prediction, results),
         "savedAt": prediction.get("savedAt"),
         "vegasScore": score_prediction(prediction, results, "vegas"),
         "divisionWinners": {
@@ -537,6 +544,64 @@ def public_bracket(profile: dict, prediction: dict) -> dict:
             "maximum": score["maximum"],
         },
     }
+
+
+def prediction_champion_status(prediction: dict, results: dict) -> str | None:
+    """Use finalized field, games/series, and round results; never guess from live scores."""
+    champion = prediction.get("picks", {}).get("superBowl")
+    if not champion:
+        return None
+    rounds = results.get("roundWinners", {})
+    actual_champion = rounds.get("superBowlChampion")
+    if actual_champion:
+        return "won" if champion == actual_champion else "eliminated"
+    league_teams = NBA["teams"] if SPORT.get() == "nba" else {
+        c: [team for division in NFL_DIVISIONS[c].values() for team in division]
+        for c in conferences()
+    }
+    conference = next((c for c in conferences() if champion in league_teams[c]), None)
+    if not conference:
+        return None
+    actual_seeds = results.get("seeds", {}).get(conference, [])
+    field = set(results.get("playoffTeams", {}).get(conference, [])) | set(actual_seeds)
+    field.discard("")
+    field_complete = len(field) == len(exact_seed_values())
+    if field_complete and champion not in field:
+        return "eliminated"
+    conference_champion = rounds.get("conferenceChampions", {}).get(conference)
+    if conference_champion and champion != conference_champion:
+        return "eliminated"
+    # NFL games settle elimination immediately; NBA needs four wins in the series.
+    series = {}
+    for game in results.get("processedGames", {}).values():
+        if game.get("round") == "regularSeason" or not game.get("winner"):
+            continue
+        teams = game.get("teams", [])
+        if champion not in teams or game["winner"] == champion:
+            continue
+        if SPORT.get() != "nba":
+            return "eliminated"
+        key = (game.get("round"), tuple(sorted(teams)), game["winner"])
+        series[key] = series.get(key, 0) + 1
+        if series[key] >= 4:
+            return "eliminated"
+    # Manual round overrides may not have game records. Only a completed round
+    # can rule out a team this way (the NFL #1 seed bypasses the wild-card round).
+    uncertain = False
+    for category, required in (("wildCard", 4 if SPORT.get() == "nba" else 3), ("divisional", 2)):
+        winners = [team for team in rounds.get(category, []) if team in league_teams[conference]]
+        if category == "wildCard" and SPORT.get() != "nba" and actual_seeds and champion == actual_seeds[0]:
+            continue
+        if len(set(winners)) != required:
+            # Sparse manual results can omit the losing team. Without a game
+            # record, don't label an unconfirmed pick as still alive.
+            known_game = any(game.get("round") == category and champion in game.get("teams", [])
+                             for game in results.get("processedGames", {}).values())
+            uncertain |= bool(winners) and champion not in winners and not known_game
+            continue
+        if champion not in winners:
+            return "eliminated"
+    return "alive" if field_complete and not uncertain else None
 
 
 def get_public_bracket(leaderboard_name: str) -> dict | None:

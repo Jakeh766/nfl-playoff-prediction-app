@@ -1,4 +1,4 @@
-"""Dev-only reports. Only API Gateway-verified Cognito admin claims are trusted."""
+"""Private reports. Only API Gateway-verified Cognito admin claims are trusted."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -149,7 +149,8 @@ def cached_report(provider, start, end):
 
 
 def handler(event, _context):
-    if os.environ.get("ENVIRONMENT") != "dev":
+    environment = os.environ.get("ENVIRONMENT")
+    if environment not in {"dev", "prod"}:
         return response(404, {"message": "Not found"})
     status = authorize(event)
     if status != 200:
@@ -162,11 +163,17 @@ def handler(event, _context):
     except ValueError as error:
         return response(400, {"message": str(error)})
     if path == "/api/admin/analytics":
-        return response(200, {"environment": "dev", "providers": list(NAMES),
+        return response(200, {"environment": environment, "providers": list(NAMES),
                               "range": {"start": str(start), "end": str(end), "timezone": "UTC"}})
     provider = path.removeprefix("/api/admin/analytics/")
     if provider not in NAMES:
         return response(404, {"message": "Not found"})
+    if environment == "prod" and provider == "goatcounter":
+        # Production deliberately has no public traffic collector. Do not read
+        # provider settings/cache or risk presenting development traffic here.
+        return response(200, {"provider": provider, "name": NAMES[provider], "status": "unavailable",
+                              "message": "Traffic is unavailable in production because GoatCounter collection is disabled.",
+                              "metrics": [], "tables": []})
     try:
         return response(200, cached_report(provider, start, end))
     except Exception:

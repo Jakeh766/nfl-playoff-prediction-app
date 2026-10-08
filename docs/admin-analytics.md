@@ -1,6 +1,8 @@
 # Admin analytics
 
-Open `/admin/analytics` on dev with an existing Cognito user in the `admin` group.
+Open `/admin/analytics` in either environment with an existing Cognito user in
+that environment's `admin` group. After explicitly approved production promotion,
+production is at `https://predictplayoffs.com/admin/analytics`.
 The unindexed static shell contains no reports, credentials or public tracking.
 Every report requires API Gateway-verified Cognito claims and server-side admin
 authorization. Authentication session format and storage are unchanged.
@@ -9,16 +11,19 @@ authorization. Authentication session format and storage are unchanged.
 
 | Section | Source and coverage | Reports |
 |---|---|---|
-| Traffic | GoatCounter public dev pages | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
-| PredictPlayoffs activity | Dev AWS product events and aggregate active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Active time by day, page and sport |
-| Seasons | Retained dev DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season |
-| Google Search | Search Console `sc-domain:predictplayoffs.com`, including subdomains | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
+| Traffic | GoatCounter public dev pages; unavailable in production | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
+| PredictPlayoffs activity | The environment's AWS product events; dev also has active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Active time by day, page and sport is unavailable in production |
+| Seasons | The environment's retained DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season |
+| Google Search | Separately configured Search Console property; production queries only production hosts | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
 
 The default is 28 completed days. Today (UTC), 7/28/90 completed days and custom
 ranges are available; the server accepts up to 93 inclusive days within the last
 year. Traffic/activity dates are UTC; Search Console uses Pacific dates and final
 web-search data, which can lag several days. Search Console measures the connected
-production domain, not the dev CloudFront hostname. This does not deploy production.
+configured property, not the dev CloudFront hostname. Production accepts
+`sc-domain:predictplayoffs.com` or `https://predictplayoffs.com/`; every production
+query, including totals, filters pages to HTTPS `predictplayoffs.com` and
+`www.predictplayoffs.com`, excluding development or other subdomains.
 
 Use the Traffic, Activity, Seasons, and Google Search tabs to switch sections without
 reloading reports. Activity totals are grouped by accounts/access, brackets, and
@@ -145,14 +150,69 @@ unavailable totals; measured days remain visible. First day and today are partia
 When exports are unavailable, standard per-page unique visits remain available
 with an explicit fallback label; they are not raw pageviews.
 
-## One-time AWS setup
+## One-time development AWS setup
 
-1. **Before the first deployment**, have your authorized bootstrap administrator apply the change in `terraform/bootstrap/main.tf` through the established bootstrap process. It adds only Cognito `CreateGroup`, `GetGroup`, `UpdateGroup`, and `DeleteGroup` permissions to the **dev** deployment role, restricted to development-tagged pools. The production deployment policy is unchanged. Until this is done, dev deployment cannot create/read the group. No local Terraform apply is part of the application's normal deployment flow.
-2. Let GitHub Actions deploy `dev`, or rerun its deployment after the prerequisite is complete. Terraform manages the `admin` group and an on-demand DynamoDB report cache. If the dev pool already has an `admin` group, import it into `module.nfl_app.aws_cognito_user_group.admin[0]` through your established dev Terraform process (Cognito import ID: `<dev-pool-id>/admin`). Admin routes, assets, environment variables, and runtime permissions exist only in dev.
+1. **Before the first dev deployment**, have your authorized bootstrap administrator apply `terraform/bootstrap` through the established bootstrap process. Its dev policy permits Cognito `CreateGroup`, `GetGroup`, `UpdateGroup`, and `DeleteGroup`, restricted to development-tagged pools. No local application Terraform apply is part of normal deployment.
+2. Let GitHub Actions deploy `dev`, or rerun its deployment after the prerequisite is complete. Terraform manages the `admin` group and an on-demand DynamoDB report cache separately in each environment. If the dev pool already has an `admin` group, import it into `module.nfl_app.aws_cognito_user_group.admin[0]` through your established dev Terraform process (Cognito import ID: `<dev-pool-id>/admin`).
 3. In the AWS console, select the **development** Cognito pool and add your existing verified user to `admin`. Terraform grants nobody membership automatically. The browser and backend cannot assign memberships. Existing JWTs can retain membership for their one-hour lifetime; the JWT authorizer does not perform a live group lookup or token revocation check on every request. Plan membership removals accordingly.
 4. In Systems Manager → Parameter Store, create two **Standard SecureString** parameters in `us-east-1`, using the default AWS-managed `aws/ssm` encryption key. Enter credentials directly in the console, never in Git, frontend files, Terraform variables, deployment logs, or chat.
 
 The existing dev group is adopted by the declarative import in `terraform/envs/dev/imports.tf`, using `us-east-1_aoY8qzW0r/admin`. GitHub Actions plans and applies the import with the existing dev OIDC role and remote dev state; no local apply is needed. The import preserves group membership and permissions. Its first plan may update the group's description in place, but must not create, replace, or delete the group. After applying, rerun the dev deployment and verify its plan refreshes the group from state without creating it. Keep the idempotent import block as a record of the adoption; it has no effect once the group is in state.
+
+## Production setup and promotion
+
+1. A separately authenticated bootstrap administrator must plan and apply
+   `terraform/bootstrap` before production promotion; see
+   [the bootstrap process](../terraform/bootstrap/README.md). The production
+   OIDC role needs the four Cognito group lifecycle operations against pools
+   tagged `Project=nfl-playoff-predictor`, `Environment=prod`, plus table
+   lifecycle/read-metadata operations on exactly
+   `nfl-playoff-predictor-admin-analytics-cache`. No group-membership, SSM-value,
+   DynamoDB-data, or additional dev-resource permissions are added to it.
+   Existing API, S3, Lambda-role and log permissions cover the other additions.
+2. Review a refreshed production Terraform plan using the existing authorized
+   deployment process and production remote state before applying. The constrained
+   `codex-audit` role cannot read production state or inspect IAM policies; mocked
+   test plans are configuration checks, not live plans. Stop if a plan destroys or
+   replaces the Cognito pool, databases, API, distribution, or any unrelated
+   resource. Expect the group, cache, runtime policy, two JWT routes, three
+   admin frontend objects, Lambda configuration/code and related asset versions.
+   The shared Lambda archive also updates the results-updater's code hash.
+   Public HTML updates reflect the shared asset version without changing guards.
+   If production already has an unmanaged `admin` group, adopt it with a
+   production-specific declarative import using `<production-pool-id>/admin`;
+   never copy the dev import or membership into production.
+3. Promote only when explicitly authorized, using
+   [production promotion](production-promotion.md). Production GitHub Actions
+   packages the same Linux/Python 3.12 Google dependencies as dev and applies
+   only the production root. Pushing `dev` does not deploy production.
+4. Create/populate the two production parameters listed below privately.
+   Terraform manages their names and read permissions, not secret values.
+   Missing config/credentials shows Google Search as setup needed; AWS reports
+   remain available. Do not copy dev service-account keys or provider tokens.
+5. After deployment, in the AWS Console select **US East (N. Virginia)**, open
+   **Amazon Cognito → User pools**, and select production pool
+   `nfl-playoff-predictor-users` (confirm its ID against production Terraform's
+   `cognito_user_pool_id` output). Choose **Groups → admin → Add users**,
+   select your existing production user, and choose **Add**. Terraform creates
+   an empty group and never assigns users. No IAM role needs to be attached to
+   the group. Sign out and back in at `predictplayoffs.com` for new group claims,
+   then open `/admin/analytics`. Do not select the `-dev-` pool.
+
+Production reads `nfl-playoff-predictor-predictions`,
+`nfl-playoff-predictor-groups`, `/aws/lambda/nfl-playoff-predictor-backend`, and
+its own cache/pool/client/parameters. Dev retains the `nfl-playoff-predictor-dev`
+prefix. GoatCounter and active-time collectors remain dev-only, including
+server-side validation and production CSP exclusions. **No GoatCounter
+production configuration is needed**: traffic is explicitly unavailable and
+does not read provider settings or call GoatCounter, even if a token is placed
+in production config. Production activity uses existing GPC/DNT-aware product
+events; no additional tracking is enabled.
+
+Membership removal is not immediate revocation: existing JWT group claims can
+last up to one hour. API Gateway validates JWTs; the backend rechecks the expected
+environment's issuer/client, token times and exact `admin` claim before any
+cache/provider access. It does not perform a live membership lookup.
 
 ## Server-side configuration
 
@@ -162,8 +222,10 @@ Use the existing Standard SecureString parameters in us-east-1:
 |---|---|
 | `/nfl-playoff-predictor-dev/admin-analytics/config` | GoatCounter and Search Console settings |
 | `/nfl-playoff-predictor-dev/admin-analytics/google-service-account` | Complete Google service account JSON key |
+| `/nfl-playoff-predictor/admin-analytics/config` | Production Search Console settings only; no GoatCounter token |
+| `/nfl-playoff-predictor/admin-analytics/google-service-account` | Complete JSON key for a separate production Google service account |
 
-Configuration example (enter real credentials privately, never in Git or chat):
+Development configuration example (enter real credentials privately, never in Git or chat):
 
 ```json
 {
@@ -176,14 +238,36 @@ Configuration example (enter real credentials privately, never in Git or chat):
 }
 ```
 
-GoatCounter's token needs **Read statistics** and **Export**, restricted to the
+Production config value (this contains no credentials):
+
+```json
+{"search_console":{"site_url":"sc-domain:predictplayoffs.com"}}
+```
+
+Create both production parameters as **Standard SecureString** in `us-east-1`
+with the default AWS-managed `aws/ssm` key. The Google parameter takes the complete
+Google-generated JSON key, including its `client_email` and `private_key`, entered
+directly in Parameter Store. Use a distinct production service account and key;
+never put either in Terraform, deployment variables, Git, logs, tests, docs,
+frontend configuration or chat. Customer-managed encryption keys would need a
+separate scoped decrypt grant; this setup uses `aws/ssm`.
+
+For production, enable **Google Search Console API** in the production service
+account's Google Cloud project. In Search Console select the verified
+**predictplayoffs.com** domain property, open **Settings → Users and permissions
+→ Add user**, enter the production service-account email, and grant **Restricted**
+access. Dev's credentials and access remain separately managed. The server uses
+only `webmasters.readonly`; do not grant domain delegation or project Editor.
+Alternatively configure the verified `https://predictplayoffs.com/` URL-prefix
+property and grant the account access to that property.
+
+GoatCounter's dev token needs **Read statistics** and **Export**, restricted to the
 connected site, without record/site/user management permissions. Google uses
 `google-auth` with only `webmasters.readonly`. Enable Search Console API and add
 the service account to the already verified property with performance-report
 read access (Restricted is sufficient). No domain delegation or project Editor
 role is needed. Obsolete provider settings are ignored and can be removed
-privately from the dev parameter. No secret rotation or AWS mutation is needed
-for this code deployment.
+privately from the dev parameter. Production needs its own setup above.
 
 The existing DynamoDB cache lasts 15 minutes, with five-minute error/setup
 cooldowns and conditional refresh leases. Config reloads after five minutes.
@@ -199,7 +283,7 @@ eight-hour identifying link does not delete historical random session IDs;
 review its pageview retention settings separately.
 
 Redirects are blocked, errors sanitized, responses private and no-store, and no
-provider tokens reach the browser. Existing dev OIDC deployment, authorization
+provider tokens reach the browser. Separate OIDC deployment, authorization
 and narrowly scoped runtime permissions remain. Run `scripts/check.ps1 -Scope All`,
 then push dev for GitHub Actions deployment. Do not apply locally or promote prod.
 

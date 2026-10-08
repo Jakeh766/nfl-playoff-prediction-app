@@ -108,6 +108,7 @@ Pushing to `dev` automatically checks and deploys the development app.
 Production uses the separate `prod` branch and is promoted deliberately after
 validation.
 
-The development app also has a private analytics dashboard for admins. Read
+Both environments have a private analytics dashboard restricted to their own
+Cognito admins; production traffic and active-time collection remain disabled. Read
 [analytics setup and metric definitions](docs/admin-analytics.md) or the app's
 [privacy policy](https://predictplayoffs.com/privacy) for collection details.

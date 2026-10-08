@@ -30,7 +30,7 @@ Choose checks based on the files you changed:
 | `Frontend` | Syntax of every top-level frontend JavaScript file and all `backend/test_*.cjs` tests |
 | `Backend` | Syntax of every top-level Lambda Python file and all `backend/test_*.py` tests |
 | `Email` | Custom email sender tests |
-| `Terraform` | Formatting and validation of bootstrap, dev, and prod configurations |
+| `Terraform` | Formatting and validation of bootstrap, dev, and prod configurations; AWS-mocked analytics plan tests for both environments |
 | `All` | Everything above |
 
 `scripts/check-frontend.cjs` is shared by local checks and both deployment
@@ -120,8 +120,10 @@ an estimate from current standings. See [group history](group-history.md).
 
 ## Analytics
 
-The development-only page `/admin/analytics` combines GoatCounter traffic,
-first-party AWS activity, and Google Search Console reports. Its credentials
+The private page `/admin/analytics` combines the environment's AWS activity and
+season data with separately configured Google Search Console reports. Dev also
+has GoatCounter traffic and active-time reports; production leaves those
+metrics unavailable and preserves its collector guards. Provider credentials
 stay on the server, and access requires Cognito admin membership. See
 [admin analytics](admin-analytics.md) for setup and metric definitions.
 
