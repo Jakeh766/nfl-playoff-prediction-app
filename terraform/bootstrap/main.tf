@@ -672,6 +672,23 @@ data "aws_iam_policy_document" "github_prod_deploy" {
   }
 
   statement {
+    sid = "ProdAdminAnalyticsCache"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTable",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+      "dynamodb:UpdateTable",
+      "dynamodb:UpdateTimeToLive",
+    ]
+    resources = ["arn:aws:dynamodb:${var.aws_region}:${local.account_id}:table/${var.project_name}-admin-analytics-cache"]
+  }
+
+  statement {
     sid     = "ProdLambdaFunction"
     actions = ["lambda:*"]
     resources = [
@@ -777,6 +794,31 @@ data "aws_iam_policy_document" "github_prod_deploy" {
     condition {
       test     = "StringEquals"
       variable = "aws:RequestTag/Environment"
+      values   = ["prod"]
+    }
+  }
+
+  statement {
+    # Cognito authorizes group operations against the owning user pool; groups
+    # have no separate IAM resource ARN or group-name condition key.
+    sid = "ManageProdCognitoGroups"
+    actions = [
+      "cognito-idp:CreateGroup",
+      "cognito-idp:GetGroup",
+      "cognito-idp:UpdateGroup",
+      "cognito-idp:DeleteGroup",
+    ]
+    resources = ["arn:aws:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
       values   = ["prod"]
     }
   }

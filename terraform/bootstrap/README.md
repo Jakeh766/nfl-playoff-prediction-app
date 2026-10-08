@@ -35,6 +35,24 @@ terraform -chdir=terraform/bootstrap plan
 terraform -chdir=terraform/bootstrap apply
 ```
 
+## Production admin analytics permissions
+
+Before promoting production admin analytics, the bootstrap administrator must
+review and apply this root using the process above. `ManageProdCognitoGroups`
+adds only `CreateGroup`, `GetGroup`, `UpdateGroup`, and `DeleteGroup`, scoped to
+user pools with both the application Project tag and `Environment=prod`.
+Cognito group IAM operations use the owning pool ARN; there is no separate group
+ARN/name condition. It grants no user-membership operations.
+
+`ProdAdminAnalyticsCache` grants only table lifecycle and read-metadata operations
+on the exact production analytics-cache ARN. Existing production API, frontend,
+Lambda and inline-role-policy grants already cover those related changes.
+Neither the deployment role nor Terraform reads provider parameter values;
+only the runtime Lambda receives two exact `ssm:GetParameter` grants.
+The read-only `codex-audit` role remains unchanged: it cannot read remote
+Terraform state, inspect deployment IAM, or perform bootstrap administration.
+See [admin analytics setup](../../docs/admin-analytics.md) for promotion and secrets.
+
 ## Production response-header policy permission
 
 The browser-security deployment creates a custom CloudFront response-header
