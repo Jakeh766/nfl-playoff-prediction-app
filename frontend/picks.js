@@ -659,8 +659,11 @@ function predictionSnapshot(prediction, includeDivisions) {
 
 function predictionHasUnsavedChanges() {
   const saved = state.savedPrediction;
-  return !saved || predictionSnapshot(state, Boolean(saved.divisionWinners)) !==
-    predictionSnapshot(saved, Boolean(saved.divisionWinners));
+  // NBA persists no division winners; its empty server object and the editor's
+  // empty conference objects describe the same bracket.
+  const includeDivisions = !IS_NBA && Boolean(saved?.divisionWinners);
+  return !saved || predictionSnapshot(state, includeDivisions) !==
+    predictionSnapshot(saved, includeDivisions);
 }
 
 function canShareEditorPrediction() {

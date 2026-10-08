@@ -106,6 +106,22 @@ test("comparison ignores scores and object key order, and supports older records
   assert.equal(sandbox.predictionHasUnsavedChanges(), false);
 });
 
+test("NBA's canonical empty division object does not disable sharing after a successful save", async () => {
+  const { sandbox, state, share, elements } = boot();
+  sandbox.IS_NBA = true;
+  state.divisionWinners = { West: {}, East: {} };
+  state.savedPrediction.divisionWinners = {};
+  sandbox.updateSaveState();
+  assert.equal(share.disabled, false);
+  assert.equal(elements.savePrediction.disabled, true);
+  state.picks.superBowl = "Three";
+  sandbox.apiRequest = async (_path, options) => ({ ...JSON.parse(options.body),
+    divisionWinners: {}, savedAt: Date.UTC(2026, 9, 8, 15, 14) });
+  await sandbox.savePrediction();
+  assert.equal(share.disabled, false);
+  assert.equal(elements.savePrediction.disabled, true);
+});
+
 test("saving changes updates the timestamp and avoids duplicate writes", async () => {
   const { sandbox, state, time, share, calls, toasts } = boot();
   await sandbox.savePrediction();
