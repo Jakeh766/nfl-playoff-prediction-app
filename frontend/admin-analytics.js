@@ -533,6 +533,14 @@
       const params = new URLSearchParams({ start: start.value, end: end.value });
       const session = await api(`/api/admin/analytics?${params}`, token);
       if (denied) return;
+      const production = session.environment === "prod";
+      coverage.goatcounter = production ? ["Production traffic", "Collection disabled in production"] : ["Dev traffic", "GoatCounter"];
+      coverage.custom = [production ? "Production activity" : "Dev activity", "First-party AWS"];
+      coverage.seasons = [production ? "Production seasons" : "Dev seasons", "Saved brackets and group competition records"];
+      document.getElementById("analytics-environment").textContent = `Private · ${session.environment} dashboard`;
+      document.getElementById("analytics-coverage").textContent = session.environment === "prod"
+        ? "Activity and seasons measure production; Google Search covers predictplayoffs.com. Traffic and active time are unavailable because production does not collect them. Seasons covers all retained seasons, independent of the date range."
+        : "Traffic, activity and seasons measure dev; Google Search measures the connected property. Seasons covers all retained seasons, independent of the date range.";
       main.hidden = false;
       access.hidden = true;
       clearReports();
@@ -590,6 +598,6 @@
   for (const input of [start, end]) input.addEventListener("change", () => { preset.value = "custom"; });
   form.addEventListener("submit", loadReports);
   dates();
-  if (window.AUTH_CONFIG?.environment !== "dev") redirect();
+  if (!["dev", "prod"].includes(window.AUTH_CONFIG?.environment)) redirect();
   else loadReports();
 })();

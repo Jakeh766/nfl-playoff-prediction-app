@@ -186,7 +186,7 @@ locals {
       source       = "${var.frontend_dir}/assets/predict-playoffs-mark.svg"
       content_type = "image/svg+xml"
     }
-    }, var.environment == "dev" ? {
+    }, {
     "admin/analytics" = {
       source       = "${var.frontend_dir}/admin-analytics.html"
       content_type = "text/html; charset=utf-8"
@@ -199,7 +199,7 @@ locals {
       source       = "${var.frontend_dir}/admin-analytics.css"
       content_type = "text/css; charset=utf-8"
     }
-  } : {})
+  })
 }
 
 resource "aws_dynamodb_table" "win_totals_cache" {
@@ -665,14 +665,14 @@ resource "aws_lambda_function" "backend" {
       PROFILES_TABLE     = aws_dynamodb_table.profiles.name
       RESULTS_SEASON     = tostring(var.results_season)
       RESULTS_TABLE      = aws_dynamodb_table.season_results.name
-      }, var.environment == "dev" ? {
+      }, {
       ADMIN_COGNITO_ISSUER               = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
       ADMIN_COGNITO_CLIENT_ID            = aws_cognito_user_pool_client.browser.id
       ADMIN_ANALYTICS_CACHE_TABLE        = aws_dynamodb_table.admin_analytics_cache[0].name
       ADMIN_ANALYTICS_CONFIG_PARAMETER   = "/${local.resource_prefix}/admin-analytics/config"
       ADMIN_GOOGLE_CREDENTIALS_PARAMETER = "/${local.resource_prefix}/admin-analytics/google-service-account"
       ADMIN_ANALYTICS_LOG_GROUP          = local.analytics_log_group
-    } : {})
+    })
   }
 
   depends_on = [

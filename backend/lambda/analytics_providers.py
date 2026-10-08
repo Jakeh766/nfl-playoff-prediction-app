@@ -115,8 +115,11 @@ BRACKET_EVENTS = {"bracket_created", "bracket_completed", "prediction_saved"}
 
 
 def custom(_config, start, end):
+    environment = os.environ.get("ENVIRONMENT")
+    if environment not in {"dev", "prod"}:
+        raise ValueError("Invalid analytics environment")
     # One bounded aggregate query, never individual log records or identifiers.
-    query = ('filter type = "site_analytics" and environment = "dev" '
+    query = (f'filter type = "site_analytics" and environment = "{environment}" '
              '| stats count(*) as count by datefloor(@timestamp, 1d) as day, event, '
              'coalesce(bracketType, "unknown") as bracketType | sort day asc')
     rows = cloudwatch_query(query, start, end)
@@ -139,12 +142,16 @@ def custom(_config, start, end):
             bracket_daily.setdefault((day, kind), {key: 0 for key in BRACKET_EVENTS})[event] += count
     totals = {key: sum(row[key] for row in daily.values()) for key, _ in ACTIVITY}
     engagement_note = "Total active time across public page visits; pauses after 1 minute idle. GPC and Do Not Track exclude collection."
-    try:
-        active = engagement.report(start, end)
-    except Exception:
-        # A counter read failure must not hide existing product activity or leak errors.
+    if environment == "prod":
         active = {"value": None, "daily": {}, "rows": []}
-        engagement_note = "Active time is temporarily unavailable. Product activity remains available."
+        engagement_note = "Active time is unavailable in production because active-time collection is disabled. Product activity remains available."
+    else:
+        try:
+            active = engagement.report(start, end)
+        except Exception:
+            # A counter read failure must not hide product activity or leak errors.
+            active = {"value": None, "daily": {}, "rows": []}
+            engagement_note = "Active time is temporarily unavailable. Product activity remains available."
     daily_rows, cumulative = [], 0
     for day, counts in daily.items():
         total = sum(counts.values())
@@ -169,10 +176,12 @@ def custom(_config, start, end):
             "tables": [day_table, table("Brackets by type", type_columns, type_rows), by_day,
                        table("Active time by page", [("page", "Page", "text"), ("sport", "Sport", "text"),
                                                     ("seconds", "Active time", "seconds")], active["rows"])],
-            "note": "AWS · dev only. Browser-reported successful actions, not database totals or a conversion funnel. Group joins and invite joins are separate. Created brackets are built brackets. Older bracket events without a type remain historical / unknown. Deletions and type breakdowns begin with this release. GPC/DNT suppress collection."}
+            "note": f"AWS · {environment}. Browser-reported successful actions, not database totals or a conversion funnel. Group joins and invite joins are separate. Created brackets are built brackets. Older bracket events without a type remain historical / unknown. Deletions and type breakdowns begin with this release. GPC/DNT suppress collection."}
 
 
 def goatcounter(config, start, end):
+    if os.environ.get("ENVIRONMENT") != "dev":
+        raise NotConfigured()
     settings = config.get("goatcounter", {})
     token, site = settings.get("token"), settings.get("site", "predictplayoffs")
     if not token:
@@ -293,9 +302,18 @@ def search_console(config, start, end):
         raise NotConfigured()
     if not (site.startswith("sc-domain:") or site.startswith("https://")):
         raise ValueError("Invalid Search Console property")
+    if os.environ.get("ENVIRONMENT") == "prod" and site not in {
+            "sc-domain:predictplayoffs.com", "https://predictplayoffs.com/"}:
+        raise ValueError("Invalid production Search Console property")
     token = google_token()
     url = f"https://www.googleapis.com/webmasters/v3/sites/{quote(site, safe='')}/searchAnalytics/query"
     base = {"startDate": str(start), "endDate": str(end), "type": "web", "dataState": "final"}
+    if os.environ.get("ENVIRONMENT") == "prod":
+        # Domain properties include subdomains. Every production query is
+        # constrained to the public production hosts, including totals.
+        base["dimensionFilterGroups"] = [{"groupType": "and", "filters": [{
+            "dimension": "page", "operator": "includingRegex",
+            "expression": r"^https://(www\.)?predictplayoffs\.com/"}]}]
     dimensions = [None, "date", "query", "page", "country", "device"]
     def fetch_dimension(dimension):
         body = base if dimension is None else {**base, "dimensions": [dimension], "rowLimit": 93 if dimension == "date" else 20}

@@ -17,7 +17,7 @@ CONFIG = (ROOT / "terraform/modules/app/main.tf").read_text(encoding="utf-8")
 class BrowserSecurityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        assets = re.search(r'  frontend_files = merge\(\{.*?\n  \} : \{\}\)', CONFIG, re.S)[0]
+        assets = re.search(r'  frontend_files = merge\(\{.*?\n  \}\)', CONFIG, re.S)[0]
         rendering = re.search(r'locals \{\n  # One content-derived release version.*?\n\}', CONFIG, re.S)[0]
         security = re.search(r'locals \{\n  analytics_connections.*?\n\}', CONFIG, re.S)[0]
         fixture = 'variable "frontend_dir" { default = ' + json.dumps((ROOT / "frontend").as_posix()) + ' }\n'

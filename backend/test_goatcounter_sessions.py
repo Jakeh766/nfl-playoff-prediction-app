@@ -176,7 +176,7 @@ class SessionTests(unittest.TestCase):
 
     def setUp(self):
         self.cache = ExportCache()
-        self.patchers = [patch.dict(os.environ, {"ADMIN_ANALYTICS_CACHE_TABLE": "dev-cache"}),
+        self.patchers = [patch.dict(os.environ, {"ENVIRONMENT": "dev", "ADMIN_ANALYTICS_CACHE_TABLE": "dev-cache"}),
             patch.object(sessions.boto3, "resource", return_value=types.SimpleNamespace(Table=lambda _name: self.cache)),
             patch.object(sessions.time, "time", return_value=NOW)]
         for patcher in self.patchers:

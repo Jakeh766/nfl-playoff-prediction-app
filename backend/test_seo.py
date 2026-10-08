@@ -216,7 +216,7 @@ class SeoTests(unittest.TestCase):
     def test_terraform_renders_release_versions_without_aws(self):
         """Evaluate the real module expressions without a backend, providers, or credentials."""
         config = (ROOT / "terraform/modules/app/main.tf").read_text()
-        assets = re.search(r'  frontend_files = merge\(\{.*?\n  \} : \{\}\)', config, re.S)[0]
+        assets = re.search(r'  frontend_files = merge\(\{.*?\n  \}\)', config, re.S)[0]
         rendering = re.search(r'locals \{\n  # One content-derived release version.*?\n\}', config, re.S)[0]
         fixture = 'variable "frontend_dir" { default = ' + json.dumps((ROOT / "frontend").as_posix()) + ' }\n'
         fixture += 'variable "environment" { default = "dev" }\n'
@@ -249,11 +249,9 @@ class SeoTests(unittest.TestCase):
         production = results["prod"]
         self.assertEqual(production.returncode, 0, production.stderr)
         rendered_prod = json.loads(json.loads(production.stdout))
-        self.assertEqual(set(rendered_prod["pages"]), set(rendered["pages"]) - {"admin/analytics"})
-        self.assertFalse(any(key.startswith("admin") for key in rendered_prod["files"]))
-        public_files = [p for p in files if not p.name.startswith("admin-")]
-        expected_prod = hashlib.sha256(''.join(hashlib.md5(p.read_bytes()).hexdigest() for p in public_files).encode()).hexdigest()[:16]
-        self.assertEqual(rendered_prod["version"], expected_prod)
+        self.assertEqual(set(rendered_prod["pages"]), set(rendered["pages"]))
+        self.assertTrue({"admin/analytics", "admin-analytics.js", "admin-analytics.css"}.issubset(rendered_prod["files"]))
+        self.assertEqual(rendered_prod["version"], expected)
 
     def test_environment_and_publication_guards(self):
         config = (ROOT / "terraform/modules/app/main.tf").read_text()

@@ -60,7 +60,7 @@ try {
   Invoke-NativeCommand -FilePath $venvPython -ArgumentList @("-m", "pip", "install", "-r", "backend/admin-requirements.txt")
 
   if (-not $SkipTerraform) {
-    foreach ($terraformDirectory in @("terraform/bootstrap", "terraform/envs/dev", "terraform/envs/prod")) {
+    foreach ($terraformDirectory in @("terraform/bootstrap", "terraform/envs/dev", "terraform/envs/prod", "terraform/modules/app")) {
       if (-not (Test-Path -LiteralPath "$terraformDirectory/.terraform")) {
         Invoke-NativeCommand -FilePath terraform -ArgumentList @("-chdir=$terraformDirectory", "init", "-backend=false", "-input=false")
       }

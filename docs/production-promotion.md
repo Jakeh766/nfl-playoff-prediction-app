@@ -15,13 +15,16 @@ do not require removing commits or manually deleting features before each releas
 | NFL picks after the deadline | Reopened for testing | Locked; API rejects saves with HTTP 423 | `backend/lambda/app.py` (`prediction_window`), `terraform/envs/prod/terraform.tfvars` |
 | NBA picks | Follow the NBA deadline; no NFL testing override | Follow the NBA deadline | `backend/lambda/nba_season.json`, `frontend/sports.js` |
 | Demo participants and groups | Seeded by the dev workflow | Never seeded by the prod workflow | `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml` |
-| Private admin analytics page and API | Available to Cognito admins | Page, routes, and supporting resources excluded | `terraform/modules/app/main.tf`, `terraform/modules/app/admin-analytics.tf` |
+| Private admin analytics page and API | Available to dev Cognito admins | Available only to production Cognito admins; separate pool/group/cache/parameters | `terraform/modules/app/main.tf`, `terraform/modules/app/admin-analytics.tf`, `backend/lambda/admin_analytics.py` |
 | GoatCounter and active-time measurements | Enabled subject to GPC/DNT | Disabled by environment guards | `frontend/goatcounter.js`, `frontend/engagement.js`, `backend/lambda/engagement.py` |
 
 Production's current NFL lock is `2026-09-10T00:20:00Z`. Advance it only as an
 intentional season-maintenance change. Keep it separate from reopening dev for
 testing. Production still collects guarded first-party aggregate activity via
-`frontend/monitoring.js`; the private reporting interface remains dev-only.
+`frontend/monitoring.js`; the private reporting interface reports production
+events and saved-season data. GoatCounter traffic and active engagement time
+remain explicitly unavailable in production. Enabling reports must never enable
+additional collection.
 
 Terraform sets `environment = "prod"` in `terraform/envs/prod/main.tf` and
 generates both `window.AUTH_CONFIG.environment` and the Lambda `ENVIRONMENT`
@@ -45,6 +48,14 @@ does not enable the dev-only NFL override.
 5. Push the checked changes and open a PR targeting `prod`. Record the preserved
    environment differences and validation in its description. Merge only when
    production deployment is requested.
+   Before the first production admin-analytics promotion, apply the narrowly
+   scoped production deployment-role changes through the separate bootstrap
+   administrator process. Review a refreshed production plan against remote
+   state: stop on destructive/replacement or unrelated changes. Mocked Terraform
+   test plans do not establish live-state safety. Follow
+   [production admin analytics setup](admin-analytics.md#production-setup-and-promotion)
+   for exact parameters, separate Google credentials, and manual Cognito
+   membership. The app deployment never assigns admin membership automatically.
 6. After deployment, check production's public prediction-window response and
    picks page: NFL picks must be locked, with no randomize action. NBA must use
    its own deadline. Do not use real user predictions as a release probe.

@@ -65,6 +65,7 @@ try {
       }
       Invoke-NativeCommand -FilePath terraform -ArgumentList @("-chdir=$terraformDirectory", "validate")
     }
+    Invoke-NativeCommand -FilePath terraform -ArgumentList @("-chdir=terraform/modules/app", "test")
   }
 
   Write-Host "Requested checks passed: $($Scope -join ', ')"

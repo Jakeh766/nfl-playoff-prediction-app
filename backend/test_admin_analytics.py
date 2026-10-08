@@ -107,9 +107,45 @@ class AdminTests(unittest.TestCase):
             self.assertEqual(admin.handler(request, None)["statusCode"], 403)
             request["requestContext"]["http"]["method"] = "POST"
             self.assertEqual(admin.handler(request, None)["statusCode"], 403)
-        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(admin, "cached_report") as report:
+        with patch.dict(os.environ, {"ENVIRONMENT": "unknown"}), patch.object(admin, "cached_report") as report:
             self.assertEqual(admin.handler(event("custom"), None)["statusCode"], 404)
             report.assert_not_called()
+
+    def test_production_authorization_is_pool_specific_before_any_report_access(self):
+        application = importlib.import_module("app")
+        prod = {**ENV, "ENVIRONMENT": "prod", "ADMIN_COGNITO_ISSUER": "https://cognito-idp.us-east-1.amazonaws.com/prod-pool",
+                "ADMIN_COGNITO_CLIENT_ID": "prod-client"}
+        with patch.dict(os.environ, prod), patch.object(admin, "cached_report", return_value={"metrics": []}) as report:
+            for provider in ["", *admin.NAMES, "unknown"]:
+                valid = event(provider, iss=prod["ADMIN_COGNITO_ISSUER"], client_id="prod-client")
+                member = event(provider, ["member"], iss=prod["ADMIN_COGNITO_ISSUER"], client_id="prod-client")
+                self.assertEqual(application.handler(member, None)["statusCode"], 403)
+                self.assertEqual(application.handler(event(provider), None)["statusCode"], 401)
+                unsigned = event(provider)
+                unsigned["requestContext"].pop("authorizer")
+                unsigned["headers"] = {"Authorization": "Bearer forged-admin-token"}
+                self.assertEqual(application.handler(unsigned, None)["statusCode"], 401)
+                report.assert_not_called()
+                result = application.handler(valid, None)
+                self.assertEqual(result["statusCode"], 404 if provider == "unknown" else 200)
+                self.assertEqual(result["headers"]["Cache-Control"], "private, no-store")
+                if not provider:
+                    self.assertEqual(json.loads(result["body"])["environment"], "prod")
+                elif provider == "goatcounter":
+                    self.assertEqual(json.loads(result["body"])["status"], "unavailable")
+                    report.assert_not_called()
+                elif provider in admin.NAMES:
+                    report.assert_called_once()
+                report.reset_mock()
+
+    def test_production_traffic_does_not_read_cache_config_or_call_provider(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(admin, "cached_report") as report, \
+                patch.object(admin, "settings") as settings:
+            result = admin.handler(event("goatcounter"), None)
+            self.assertEqual(result["statusCode"], 200)
+            self.assertIn("collection is disabled", result["body"])
+            report.assert_not_called()
+            settings.assert_not_called()
 
     def test_date_ranges_are_bounded_and_cannot_be_used_for_query_injection(self):
         for params in ({"start": "2026-01-01"}, {"start": "2026-02-30", "end": "2026-03-01"},
@@ -242,6 +278,48 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(kinds["NBA"]["bracket_created"], 2)
         self.assertEqual(kinds["Historical / unknown"]["bracket_created"], 3)
 
+    def test_activity_queries_own_environment_and_prod_never_reads_engagement(self):
+        for environment in ("dev", "prod"):
+            self.active.reset_mock()
+            with patch.dict(os.environ, {"ENVIRONMENT": environment}), patch.object(providers, "cloudwatch_query", return_value=[]) as query:
+                report = providers.custom({}, self.start, self.end)
+                self.assertIn(f'environment = "{environment}"', query.call_args.args[0])
+                self.assertIn(f"AWS · {environment}", report["note"])
+                if environment == "prod":
+                    self.active.assert_not_called()
+                    self.assertIsNone(report["engagement"]["value"])
+                    self.assertIn("collection is disabled", report["engagement"]["note"])
+                    self.assertEqual(report["tables"][-1]["rows"], [])
+                else:
+                    self.active.assert_called_once()
+        with patch.dict(os.environ, {"ENVIRONMENT": 'dev" | filter true'}), patch.object(providers, "cloudwatch_query") as query:
+            with self.assertRaises(ValueError):
+                providers.custom({}, self.start, self.end)
+            query.assert_not_called()
+
+    def test_production_search_is_restricted_to_production_hosts_on_every_query(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(providers, "google_token", return_value="server-only") as token, \
+                patch.object(providers, "http_json", return_value={}) as http:
+            for site in ("sc-domain:dev.predictplayoffs.com", "https://dev.example.com/", "sc-domain:other.com"):
+                with self.assertRaises(ValueError):
+                    providers.search_console({"search_console": {"site_url": site}}, self.start, self.end)
+                token.assert_not_called()
+                http.assert_not_called()
+            for site in ("sc-domain:predictplayoffs.com", "https://predictplayoffs.com/"):
+                http.reset_mock()
+                providers.search_console({"search_console": {"site_url": site}}, self.start, self.end)
+                self.assertEqual(http.call_count, 6)
+                for call in http.call_args_list:
+                    filters = call.args[2]["dimensionFilterGroups"][0]["filters"]
+                    self.assertEqual(filters, [{"dimension": "page", "operator": "includingRegex",
+                                               "expression": r"^https://(www\.)?predictplayoffs\.com/"}])
+
+    def test_production_goatcounter_adapter_cannot_call_dev_provider(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(providers, "http_json") as http:
+            with self.assertRaises(providers.NotConfigured):
+                providers.goatcounter({"goatcounter": {"site": "predictplayoffs", "token": "test-token"}}, self.start, self.end)
+            http.assert_not_called()
+
     def test_search_totals_daily_and_all_breakdowns(self):
         def answer(url, token, body):
             self.assertEqual(token, "SERVER-SECRET")
@@ -301,12 +379,31 @@ class ProviderTests(unittest.TestCase):
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_bootstrap_additions_are_scoped_without_membership_or_data_access(self):
+        config = (ROOT / "terraform/bootstrap/main.tf").read_text()
+        group = config.split('sid = "ManageProdCognitoGroups"', 1)[1].split('\n  statement {', 1)[0]
+        self.assertIn('userpool/*', group)
+        self.assertIn('aws:ResourceTag/Project', group)
+        self.assertIn('aws:ResourceTag/Environment', group)
+        self.assertIn('values   = ["prod"]', group)
+        for operation in ("CreateGroup", "GetGroup", "UpdateGroup", "DeleteGroup"):
+            self.assertIn(f'"cognito-idp:{operation}"', group)
+        self.assertNotIn("AdminAddUserToGroup", group)
+        self.assertNotIn("AdminRemoveUserFromGroup", group)
+        cache = config.split('sid = "ProdAdminAnalyticsCache"', 1)[1].split('\n  statement {', 1)[0]
+        self.assertIn('table/${var.project_name}-admin-analytics-cache', cache)
+        for forbidden in ('"dynamodb:*"', "GetItem", "Scan", "Query", "PutItem", "ssm:"):
+            self.assertNotIn(forbidden, cache)
+        for operation in ("CreateTable", "DescribeTable", "DescribeTimeToLive", "UpdateTimeToLive", "ListTagsOfResource"):
+            self.assertIn(f'"dynamodb:{operation}"', cache)
+
     def test_admin_routes_use_native_cognito_jwt_authorizer_and_no_public_tracking_scripts(self):
         config = (ROOT / "terraform/modules/app/admin-analytics.tf").read_text()
         self.assertIn('"GET /api/admin/analytics/{provider}"', config)
         self.assertIn('authorization_type = "JWT"', config)
         self.assertIn('authorizer_id      = aws_apigatewayv2_authorizer.cognito.id', config)
-        self.assertIn('count        = var.environment == "dev" ? 1 : 0', config)
+        self.assertNotIn('var.environment == "dev"', config)
+        self.assertIn('count        = 1', config)
         self.assertIn('name         = "admin"', config)
         self.assertNotIn('"ssm:*"', config)
         page = (ROOT / "frontend/admin-analytics.html").read_text()
@@ -315,9 +412,11 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn('/goatcounter.js', page)
         self.assertNotIn('/monitoring.js', page)
         self.assertNotIn('src="/analytics.js', page)
-        workflow = (ROOT / ".github/workflows/deploy-dev.yml").read_text()
-        self.assertIn('--target backend/lambda/vendor', workflow)
-        self.assertIn('--python-version 3.12', workflow)
+        for environment in ("dev", "prod"):
+            workflow = (ROOT / f".github/workflows/deploy-{environment}.yml").read_text()
+            self.assertIn('--target backend/lambda/vendor', workflow)
+            self.assertIn('--python-version 3.12', workflow)
+        self.assertNotIn("seed_dev.py", workflow)
 
 
 if __name__ == "__main__":

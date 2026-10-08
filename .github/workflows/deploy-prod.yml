@@ -64,6 +64,11 @@ jobs:
       - name: Validate Terraform
         run: terraform -chdir=terraform/envs/prod validate
 
+      - name: Test isolated admin analytics plans
+        run: |
+          terraform -chdir=terraform/modules/app init -backend=false
+          terraform -chdir=terraform/modules/app test
+
   deploy:
     name: Deploy prod
     needs: test
@@ -89,6 +94,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "24"
+
+      - name: Set up Python for analytics dependencies
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
 
       - name: Check deployment configuration
         shell: bash
@@ -130,7 +140,10 @@ jobs:
           done
 
       - name: Plan prod deployment
-        run: terraform -chdir=terraform/envs/prod plan -out=tfplan
+        # Match the Lambda runtime; credentials come only from production SSM.
+        run: |
+          python3 -m pip install -r backend/admin-requirements.txt --target backend/lambda/vendor --platform manylinux2014_x86_64 --python-version 3.12 --only-binary=:all:
+          terraform -chdir=terraform/envs/prod plan -out=tfplan
 
       - name: Apply prod deployment
         run: terraform -chdir=terraform/envs/prod apply tfplan

@@ -68,6 +68,11 @@ jobs:
       - name: Validate Terraform
         run: terraform -chdir=terraform/envs/dev validate
 
+      - name: Test isolated admin analytics plans
+        run: |
+          terraform -chdir=terraform/modules/app init -backend=false
+          terraform -chdir=terraform/modules/app test
+
   deploy:
     name: Deploy dev
     needs: test

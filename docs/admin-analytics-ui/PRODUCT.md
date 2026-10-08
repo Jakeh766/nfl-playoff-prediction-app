@@ -1,6 +1,6 @@
 # Admin analytics product contract
 
-This document covers only the private `/admin/analytics` surface in the development environment. It records implemented behavior, not a new roadmap. The deployment, provider configuration, and security setup guide remains [admin-analytics.md](../admin-analytics.md).
+This document covers the private `/admin/analytics` surface in dev and production. It records implemented behavior, not a new roadmap. The deployment, provider configuration, and security setup guide remains [admin-analytics.md](../admin-analytics.md).
 
 ## Audience and access
 
@@ -8,7 +8,7 @@ The dashboard serves the developer with existing Cognito `admin` membership. Ord
 
 ## Reports and interpretation
 
-Three independently loaded sections show Traffic (GoatCounter), PredictPlayoffs activity (AWS), and Google Search (Search Console), in that order. A sticky tab bar displays one section at a time and indicates each provider's readiness. Traffic/activity cover dev; search covers the configured production domain. Selected-range totals, daily metric selectors and directly visible breakdown tables answer the main questions. Sessions and rates are not additive. Provider dates, timezone, freshness and missing coverage remain explicit.
+Four independently loaded sections show Traffic (GoatCounter), PredictPlayoffs activity (AWS), Seasons (DynamoDB), and Google Search (Search Console), in that order. A sticky tab bar displays one section at a time and indicates each provider's readiness. Activity and seasons cover the signed-in environment. Traffic and active time remain unavailable in production; search queries production hosts using separate credentials. Selected-range totals, daily metric selectors and directly visible breakdown tables answer the main questions. Sessions and rates are not additive. Provider dates, timezone, freshness and missing coverage remain explicit.
 
 Activity totals are grouped into accounts/access, brackets, and groups. Search has a selector for query, page, country, or device; each selection retains the full returned table without another API request. Tables scroll locally with sticky headers. The selected section and metric survive date updates in memory; they are not written to browser storage.
 
