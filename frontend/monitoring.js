@@ -3,7 +3,7 @@
     const config = window.AUTH_CONFIG || {};
     const page = window.location.pathname === "/index.html" ? "/" :
       window.location.pathname.replace(/\.html$/, "");
-    const pages = new Set(["/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy"]);
+    const pages = new Set(["/", "/nba", "/leaderboard", "/picks", "/scoring", "/privacy", "/groups"]);
     const permitted = () => ["dev", "prod"].includes(config.environment) && pages.has(page) &&
       navigator.doNotTrack !== "1" && !navigator.globalPrivacyControl;
     if (["dev", "prod"].includes(config.environment) && pages.has(page)) {
@@ -29,7 +29,7 @@
       } catch (_error) { /* Analytics cleanup must not interrupt authentication. */ }
     }
     const events = new Set(["account_created", "account_deleted", "sign_in", "prediction_saved",
-      "group_created", "group_joined", "group_invite_joined", "bracket_created", "bracket_completed"]);
+      "group_created", "group_joined", "group_invite_joined", "bracket_created", "bracket_completed", "share_card_opened", "share_image_generated", "share_native_used", "share_image_downloaded", "share_link_copied"]);
     const bracketEvents = new Set(["bracket_created", "bracket_completed", "prediction_saved"]);
     function track(event, details = {}) {
       try {

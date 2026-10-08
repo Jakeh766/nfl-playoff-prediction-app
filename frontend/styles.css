@@ -3013,6 +3013,42 @@ body .champion-display strong {
 @media (hover: hover) and (pointer: fine) {
   .group-settings-actions .text-link:hover, .group-setting-editor summary:hover { text-decoration: underline; text-underline-offset: 4px; }
 }
+
+.prediction-share-dialog {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.prediction-share-preview {
+  margin-block: 20px;
+  min-height: 80px;
+}
+
+.prediction-share-preview canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+.prediction-share-dialog .dialog-actions {
+  flex-wrap: wrap;
+}
+
+.prediction-share-link-label {
+  display: block;
+  margin-block: 20px 8px;
+}
+
+.prediction-share-dialog input {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .prediction-share-dialog .dialog-actions .button {
+    flex: 1 1 100%;
+  }
+}
 .group-detail .group-inline-form button:disabled, .group-detail .group-inline-form select:disabled { opacity: 0.6; cursor: not-allowed; }
 #group-competition-message:empty, #group-commissioner-message:empty { display: none; }
 .group-danger-zone h3 { color: var(--danger-text); }

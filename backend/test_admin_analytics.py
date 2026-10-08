@@ -210,14 +210,14 @@ class ProviderTests(unittest.TestCase):
                                     "rows": [{"page": "Leaderboard", "sport": "NBA", "seconds": 125}]}
         with patch.object(providers, "cloudwatch_query", return_value=[]):
             result = providers.custom({}, self.start, self.end)
-            self.assertEqual(len(result["metrics"]), 9)
+            self.assertEqual(len(result["metrics"]), 14)
             self.assertEqual(result["engagement"]["value"], 125)
             self.assertEqual(result["engagement"]["format"], "seconds")
             self.assertEqual([row["active_time"] for row in result["tables"][0]["rows"]], [None, 125, None, None])
             self.assertEqual(result["tables"][-1]["rows"], self.active.return_value["rows"])
             self.active.side_effect = RuntimeError("secret must not escape")
             result = providers.custom({}, self.start, self.end)
-            self.assertEqual(len(result["metrics"]), 9)
+            self.assertEqual(len(result["metrics"]), 14)
             self.assertIsNone(result["engagement"]["value"])
             self.assertNotIn("secret", json.dumps(result))
 

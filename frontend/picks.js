@@ -790,7 +790,12 @@ function renderSavedPrediction() {
   remove.setAttribute("aria-label", "Delete your saved prediction");
   remove.addEventListener("click", deletePrediction);
 
-  actions.append(load, remove);
+  const share = createPredictionShareButton(() => state.leaderboardName);
+  actions.append(load, share);
+  if (prediction.score?.possible > 0) {
+    actions.appendChild(createPredictionShareButton(() => state.leaderboardName, "results"));
+  }
+  actions.appendChild(remove);
   card.append(top, champion);
   if (scoreSummary) card.appendChild(scoreSummary);
   card.appendChild(actions);

@@ -221,3 +221,4 @@ if (elements.leaderboardBody && window.location.hash !== "#groups") loadLeaderbo
 if (["home", "picks"].includes(PAGE)) initializePredictionWindow();
 if (typeof renderHomeGroupInvite === "function") renderHomeGroupInvite();
 initializeAuthentication();
+if (typeof openPublicPredictionFromUrl === "function") openPublicPredictionFromUrl();

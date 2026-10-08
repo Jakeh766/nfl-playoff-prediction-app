@@ -106,6 +106,9 @@ def cloudwatch_query(query, start, end):
 ACTIVITY = [("sign_in", "Sign-ins"), ("account_created", "Accounts created"),
             ("account_deleted", "Accounts deleted"), ("bracket_created", "Brackets created"),
             ("bracket_completed", "Brackets completed"), ("prediction_saved", "Brackets saved"),
+            ("share_card_opened", "Share cards opened"), ("share_image_generated", "Share images generated"),
+            ("share_native_used", "Native shares"), ("share_image_downloaded", "Share images downloaded"),
+            ("share_link_copied", "Share links copied"),
             ("group_created", "Groups created"), ("group_joined", "Group joins"),
             ("group_invite_joined", "Invite joins")]
 BRACKET_EVENTS = {"bracket_created", "bracket_completed", "prediction_saved"}

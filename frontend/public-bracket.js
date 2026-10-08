@@ -116,7 +116,20 @@ function renderPublicBracket(bracket, scoringMode = "classic") {
   name.textContent = championName;
   champion.appendChild(name);
   elements.publicBracketContent.append(conferences, champion);
-
+  if (typeof createPredictionShareButton === "function") {
+    const actions = document.createElement("div");
+    actions.className = "saved-card-actions";
+    const picks = createPredictionShareButton(bracket.leaderboardName, "picks", scoringMode);
+    const isOwn = state.signedIn && state.leaderboardName === bracket.leaderboardName;
+    if (!isOwn) picks.textContent = "Share picks";
+    actions.appendChild(picks);
+    if (score.possible > 0) {
+      const results = createPredictionShareButton(bracket.leaderboardName, "results", scoringMode);
+      if (!isOwn) results.textContent = "Share results";
+      actions.appendChild(results);
+    }
+    elements.publicBracketContent.appendChild(actions);
+  }
 }
 
 async function openPublicBracket(entry) {
@@ -144,4 +157,16 @@ async function openPublicBracket(entry) {
       "This bracket could not be loaded. Please try again.";
     elements.publicBracketStatus.title = error.message;
   }
+}
+
+async function openPublicPredictionFromUrl() {
+  if (PAGE !== "leaderboard") return;
+  const player = new URLSearchParams(window.location.search).get("player");
+  if (!player) return;
+  if (player.length < 3 || player.length > 24 ||
+      !/^[A-Za-z0-9][A-Za-z0-9 ._'’\-]*[A-Za-z0-9]$/.test(player)) {
+    showToast("This public bracket link is invalid.");
+    return;
+  }
+  await openPublicBracket({ leaderboardName: player });
 }

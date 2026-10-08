@@ -118,6 +118,22 @@ locals {
       source       = "${var.frontend_dir}/leaderboard-table.js"
       content_type = "application/javascript; charset=utf-8"
     }
+    "share-entry.js" = {
+      source       = "${var.frontend_dir}/share-entry.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "sharing.js" = {
+      source       = "${var.frontend_dir}/sharing.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "share-model.js" = {
+      source       = "${var.frontend_dir}/share-model.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
+    "share-card.js" = {
+      source       = "${var.frontend_dir}/share-card.js"
+      content_type = "application/javascript; charset=utf-8"
+    }
     "app.js" = {
       source       = "${var.frontend_dir}/app.js"
       content_type = "application/javascript; charset=utf-8"
@@ -966,7 +982,7 @@ resource "aws_s3_object" "frontend" {
   source        = each.value.source
   etag          = filemd5(each.value.source)
   content_type  = each.value.content_type
-  cache_control = contains(["robots.txt", "sitemap.xml"], each.key) ? "public, max-age=300, must-revalidate" : "public, max-age=86400, must-revalidate"
+  cache_control = contains(["sharing.js", "share-model.js", "share-card.js"], each.key) ? "public, no-cache, must-revalidate" : contains(["robots.txt", "sitemap.xml"], each.key) ? "public, max-age=300, must-revalidate" : "public, max-age=86400, must-revalidate"
 }
 
 # Publish HTML only after assets, so a new version cannot cache the previous release.
