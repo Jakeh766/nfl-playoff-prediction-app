@@ -28,7 +28,7 @@ implementation uses native ES modules loaded only when someone opens a card.
 | `share-entry.js` | Small adapter that fetches public data and lazily loads sharing | Home, My Picks, Leaderboard, Groups |
 | `sharing.js` | Accessible preview dialog, native sharing, download, link copy | On demand |
 | `share-model.js` | Public-field allowlist, shared bracket-rule adapter, public URL, share capability fallback | On demand |
-| `share-card.js` | Full bracket 1200×630 canvas/PNG renderer | On demand |
+| `share-card.js` | Full bracket 2400×1260 canvas/PNG renderer | On demand |
 | `monitoring.js`, `goatcounter.js`, `engagement.js` | Existing guarded analytics | Existing page placement |
 | `bootstrap.js` | Page-aware event binding and initialization | Main pages |
 
@@ -38,10 +38,11 @@ framework, bundler, dependency installation, or build step was added.
 ## Sharing and privacy
 
 Saving a prediction exposes a standard share icon and visible **Share bracket**
-text in the saved bracket card, with a matching accessible label.
-**Share my results** appears when the score's `possible` field indicates that
-results have settled (including a player with zero earned points). Read-only
-public brackets offer both actions as applicable; results respect the selected
+text in the bracket action row, with a matching accessible label. Sharing is
+disabled before saving and while the draft has unsaved changes. There is no
+separate saved-prediction card. Read-only public brackets offer picks and results
+actions when scoring has started (including a player with zero earned points);
+results respect the selected
 Classic or Upset Edge mode and use its overall rank and score.
 
 The image is generated locally as a PNG, with the site's trophy, colors, and
@@ -64,7 +65,11 @@ the image download for attachment to a message or post. Sharing never creates,
 copies, or sends a public bracket URL. Image generation failures prompt a retry;
 native-share failures retain the download action. Cancellation leaves the preview
 open without a success event. The ready dialog shows only the preview and image
-actions; status text is reserved for loading, errors, and action confirmations.
+actions, with a short manual-upload fallback hint. The preview displays the exact
+PNG bytes and supports browser save menus; native sharing starts automatically
+when user activation remains valid, or from a fresh image-share tap otherwise.
+See [bracket image sharing](bracket-image-sharing.md) for compatibility review
+and the boundary between automated simulations and physical-device testing.
 Existing anonymous read-only brackets on the
 leaderboard remain available independently of this image-only sharing flow.
 

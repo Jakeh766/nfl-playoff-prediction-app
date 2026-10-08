@@ -65,7 +65,10 @@ class BrowserSecurityTests(unittest.TestCase):
             self.assertIn("https://cognito-idp.us-east-1.amazonaws.com", directives["connect-src"])
             self.assertIn("'self'", directives["connect-src"])
             self.assertIn("https://a.espncdn.com", directives["img-src"])
-            self.assertEqual(directives["img-src"], {"'self'", "https://a.espncdn.com"})
+            self.assertEqual(directives["img-src"], {"'self'", "blob:", "https://a.espncdn.com"})
+            # Generated PNG previews need blob images, never blob scripts/frames.
+            for directive in ("script-src", "frame-src", "object-src"):
+                self.assertNotIn("blob:", directives[directive])
             self.assertEqual(directives["connect-src"], {"'self'", "https://cognito-idp.us-east-1.amazonaws.com"} |
                              ({"https://predictplayoffs.goatcounter.com"} if env == "dev" else set()))
             self.assertEqual("https://gc.zgo.at" in directives["script-src"], env == "dev")

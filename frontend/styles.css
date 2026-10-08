@@ -3057,7 +3057,7 @@ body .champion-display strong {
   min-height: 80px;
 }
 
-.prediction-share-preview canvas {
+.prediction-share-preview img {
   display: block;
   width: 100%;
   height: auto;
@@ -3079,6 +3079,13 @@ body .champion-display strong {
 .prediction-share-dialog .dialog-message:empty {
   min-height: 0;
   margin: 0;
+}
+
+.prediction-share-help {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @media (max-width: 600px) {

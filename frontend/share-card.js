@@ -1,4 +1,14 @@
 // Full bracket export using the site's typography, colors, and trophy asset.
+import { MAX_SHARE_IMAGE_BYTES } from "./share-model.js";
+
+async function waitForShareAsset(promise, timeoutMs = 4000) {
+  let timer;
+  try {
+    await Promise.race([Promise.resolve(promise).catch(() => {}),
+      new Promise(resolve => { timer = setTimeout(resolve, timeoutMs); })]);
+  } finally { clearTimeout(timer); }
+}
+
 // Only the existing public ESPN logo paths are eligible for export.
 export async function loadShareLogos(model, logoUrl, { timeoutMs = 4000 } = {}) {
   const logos = new Map();
@@ -46,19 +56,23 @@ export function shareConnectorPoints(source, target, side) {
 
 export async function renderShareCard(model, { logoUrl } = {}) {
   const logoPromise = loadShareLogos(model, logoUrl);
-  await Promise.all([
-    document.fonts?.load('500 60px "Oswald"'),
-    document.fonts?.load('700 32px "DM Sans"'),
-  ]);
   const mark = new Image();
   mark.src = "/assets/predict-playoffs-mark.svg";
-  await mark.decode().catch(() => {});
-  const logos = await logoPromise;
+  const [logos] = await Promise.all([
+    logoPromise,
+    waitForShareAsset(document.fonts?.load('500 60px "Oswald"')),
+    waitForShareAsset(document.fonts?.load('700 32px "DM Sans"')),
+    waitForShareAsset(mark.decode?.()),
+  ]);
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 630;
+  // Keep the established 1200 × 630 layout, with sharper text/logos in apps
+  // that resize or compress attachments. This is independent of device DPR.
+  const exportScale = 2;
+  canvas.width = 1200 * exportScale;
+  canvas.height = 630 * exportScale;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Your browser could not generate an image. Please try again.");
+  ctx.scale(exportScale, exportScale);
   const ink = "#10223a", muted = "#566479", accent = "#e33b3f", line = "#dcd9d1";
   ctx.fillStyle = "#f5f3ee";
   ctx.fillRect(0, 0, 1200, 630);
@@ -217,6 +231,18 @@ export async function renderShareCard(model, { logoUrl } = {}) {
   return canvas;
 }
 
-export function canvasPng(canvas) {
-  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Image generation failed. Please try again.")), "image/png"));
+export async function canvasPng(canvas) {
+  const blob = await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob)
+    : reject(new Error("Image generation failed. Please try again.")), "image/png"));
+  if (blob.type !== "image/png" || blob.size < 45 || blob.size > MAX_SHARE_IMAGE_BYTES) {
+    throw new Error("The bracket image could not be exported as a PNG.");
+  }
+  const header = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82];
+  const dimensions = new DataView(header.buffer);
+  if (!signature.every((value, index) => header[index] === value) ||
+      dimensions.getUint32(16) !== canvas.width || dimensions.getUint32(20) !== canvas.height) {
+    throw new Error("The bracket image could not be exported as a PNG.");
+  }
+  return blob;
 }

@@ -1,4 +1,18 @@
 // Only public, explicitly selected fields may cross into the image/share payload.
+export const MAX_SHARE_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export function shareImageFilename(model) {
+  const season = /^(20\d{2})(?:[–-](\d{2,4}))?$/.exec(model.season);
+  const label = season ? season.slice(1).filter(Boolean).join("-") : "season";
+  return `predict-playoffs-${model.sport === "NBA" ? "nba" : "nfl"}-${label}-${model.kind === "results" ? "results" : "bracket"}.png`;
+}
+
+export function isShareImageFile(file) {
+  return typeof File === "function" && file instanceof File &&
+    file.type === "image/png" && file.size > 0 && file.size <= MAX_SHARE_IMAGE_BYTES &&
+    /\.png$/i.test(file.name);
+}
+
 export function publicPlayerName(value) {
   if (typeof value !== "string" || value.length < 3 || value.length > 24 ||
       !/^[A-Za-z0-9][A-Za-z0-9 ._'’\-]*[A-Za-z0-9]$/.test(value)) {
@@ -59,10 +73,10 @@ export function createShareModel({ bracket, sport, season, kind = "picks", mode 
 }
 
 export function nativeSharePayload(model, file, navigator) {
-  if (!file || typeof navigator.share !== "function" || typeof navigator.canShare !== "function") return null;
+  if (!isShareImageFile(file) || typeof navigator?.share !== "function" || typeof navigator.canShare !== "function") return null;
   try {
     if (navigator.canShare({ files: [file] })) return {
-      title: `${model.player}'s Predict Playoffs bracket${model.kind === "results" ? " results" : ""}`,
+      title: model.kind === "results" ? "My playoff bracket results" : "My playoff bracket",
       files: [file],
     };
   } catch (_error) { /* File sharing can be disabled by browser policy. */ }

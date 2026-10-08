@@ -61,6 +61,12 @@ team logos and Google Fonts. Only dev additionally permits GoatCounter's script
 and collection endpoints. Removed optional analytics hosts are no longer allowed.
 There are no wildcards and the policy stays below CloudFront's size limit.
 
+`img-src` also permits `blob:` for the locally generated bracket PNG preview.
+The preview shows the same validated bytes that are shared or downloaded and
+supports native image-save menus. Blob URLs are revoked when the preview closes,
+with a short delay after a download so Safari can finish resolving the file.
+Blob scripts, objects, and frames remain prohibited.
+
 Other headers are `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, and Permissions-Policy denying camera, microphone,
 geolocation, payment, and USB. HSTS with max-age 31536000 is configured only for a

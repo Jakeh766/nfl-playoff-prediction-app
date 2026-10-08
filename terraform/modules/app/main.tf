@@ -1095,7 +1095,7 @@ locals {
     "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "connect-src 'self' https://cognito-idp.${var.aws_region}.amazonaws.com ${join(" ", local.analytics_connections)}",
-    "img-src 'self' https://a.espncdn.com",
+    "img-src 'self' blob: https://a.espncdn.com",
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

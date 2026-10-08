@@ -78,9 +78,9 @@ test("public names reject emails, IDs, malformed links, and oversized values", a
 test("native sharing accepts only image files and never falls back to a URL", async () => {
   const { nativeSharePayload, createShareModel } = await modelModule;
   const model = createShareModel(context());
-  const file = { type: "image/png" };
+  const file = new File(["PNG fixture"], "predict-playoffs-nfl-2026-bracket.png", { type: "image/png" });
   const navigator = { share() {}, canShare: payload => payload.files[0] === file };
-  assert.deepEqual(nativeSharePayload(model, file, navigator), { title: "JakeH's Predict Playoffs bracket", files: [file] });
+  assert.deepEqual(nativeSharePayload(model, file, navigator), { title: "My playoff bracket", files: [file] });
   assert.equal(nativeSharePayload(model, null, navigator), null);
   navigator.canShare = () => false;
   assert.equal(nativeSharePayload(model, file, navigator), null);
@@ -88,6 +88,82 @@ test("native sharing accepts only image files and never falls back to a URL", as
   assert.equal(nativeSharePayload(model, file, navigator), null);
   assert.equal(nativeSharePayload(model, file, { share() {} }), null);
   assert.equal(nativeSharePayload(model, file, {}), null);
+  assert.equal(nativeSharePayload(model, file, { share() {}, canShare: true }), null);
+});
+
+test("share files use safe season filenames and reject empty, spoofed, wrong-type or oversized images", async () => {
+  const { shareImageFilename, isShareImageFile, nativeSharePayload, MAX_SHARE_IMAGE_BYTES } = await modelModule;
+  assert.equal(shareImageFilename({ sport: "NFL", season: "2026", kind: "picks" }), "predict-playoffs-nfl-2026-bracket.png");
+  assert.equal(shareImageFilename({ sport: "NBA", season: "2026–27", kind: "results" }), "predict-playoffs-nba-2026-27-results.png");
+  assert.equal(shareImageFilename({ sport: "NBA", season: "PRIVATE/URL", kind: "picks" }), "predict-playoffs-nba-season-bracket.png");
+  const navigator = { share() { throw new Error("must not share"); }, canShare() { throw new Error("must not check an invalid file"); } };
+  for (const file of [null, { size: 100, name: "image.png", type: "image/png" },
+    new File([], "image.png", { type: "image/png" }),
+    new File(["jpeg"], "image.png", { type: "image/jpeg" }),
+    new File(["png"], "image.jpg", { type: "image/png" }),
+    new File([new Uint8Array(MAX_SHARE_IMAGE_BYTES + 1)], "image.png", { type: "image/png" })]) {
+    assert.equal(isShareImageFile(file), false);
+    assert.equal(nativeSharePayload({}, file, navigator), null);
+  }
+});
+
+test("PNG export verifies MIME, signature, dimensions, size and failed encodes", async () => {
+  const { canvasPng } = await import("../frontend/share-card.js");
+  const { MAX_SHARE_IMAGE_BYTES } = await modelModule;
+  const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRZkAAAAASUVORK5CYII=", "base64");
+  const png = new Blob([bytes], { type: "image/png" });
+  const canvas = { width: 1, height: 1, toBlob(callback, type) { assert.equal(type, "image/png"); callback(png); } };
+  assert.equal(await canvasPng(canvas), png);
+  for (const blob of [null, new Blob([], { type: "image/png" }),
+    new Blob([bytes], { type: "image/jpeg" }), new Blob([new Uint8Array(68)], { type: "image/png" }),
+    new Blob([new Uint8Array(MAX_SHARE_IMAGE_BYTES + 1)], { type: "image/png" })]) {
+    await assert.rejects(canvasPng({ ...canvas, toBlob: callback => callback(blob) }));
+  }
+  await assert.rejects(canvasPng({ ...canvas, width: 1200 }), /PNG/);
+  await assert.rejects(canvasPng({ ...canvas, toBlob() { throw new DOMException("Blocked", "SecurityError"); } }));
+});
+
+test("image download cleans temporary anchors and propagates failures for the visible save fallback", async () => {
+  const { downloadShareImage, usesIosImageSaving } = await import("../frontend/sharing.js");
+  const previousDocument = global.document;
+  const anchors = [];
+  let fail = false;
+  global.document = { body: { appendChild() {} }, createElement: () => {
+    const anchor = { click() { if (fail) throw new Error("Blocked"); }, remove() { this.removed = true; } };
+    anchors.push(anchor); return anchor;
+  } };
+  try {
+    downloadShareImage("blob:local-png", "predict-playoffs-nfl-2026-bracket.png");
+    assert.equal(anchors[0].href, "blob:local-png");
+    assert.equal(anchors[0].download, "predict-playoffs-nfl-2026-bracket.png");
+    assert.equal(anchors[0].removed, true);
+    fail = true;
+    assert.throws(() => downloadShareImage("blob:local-png", "bracket.png"), /Blocked/);
+    assert.equal(anchors[1].removed, true);
+    assert.throws(() => downloadShareImage("https://example.com/bracket", "bracket.png"), /unavailable/);
+    assert.equal(usesIosImageSaving({ userAgent: "iPhone" }), true);
+    assert.equal(usesIosImageSaving({ platform: "MacIntel", maxTouchPoints: 5 }), true);
+    assert.equal(usesIosImageSaving({ platform: "MacIntel", maxTouchPoints: 0 }), false);
+    assert.equal(usesIosImageSaving({ userAgent: "Android" }), false);
+  } finally { global.document = previousDocument; }
+});
+
+test("object URLs are revoked on close and retained briefly for asynchronous downloads", async () => {
+  const { releaseShareImageUrl } = await import("../frontend/sharing.js");
+  const previousRevoke = URL.revokeObjectURL, previousTimeout = global.setTimeout;
+  const revoked = [], pending = [];
+  URL.revokeObjectURL = url => revoked.push(url);
+  global.setTimeout = (callback, delay) => pending.push({ callback, delay });
+  try {
+    releaseShareImageUrl(null);
+    releaseShareImageUrl("blob:preview");
+    assert.deepEqual(revoked, ["blob:preview"]);
+    releaseShareImageUrl("blob:download", true);
+    assert.equal(pending[0].delay, 60_000);
+    assert.deepEqual(revoked, ["blob:preview"]);
+    pending[0].callback();
+    assert.deepEqual(revoked, ["blob:preview", "blob:download"]);
+  } finally { URL.revokeObjectURL = previousRevoke; global.setTimeout = previousTimeout; }
 });
 
 test("share controls have visible text, a decorative standard share icon, and matching accessible names", () => {
