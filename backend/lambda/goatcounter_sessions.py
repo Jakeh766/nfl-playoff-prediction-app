@@ -36,8 +36,17 @@ def timestamp(value):
     return parsed.astimezone(timezone.utc)
 
 
-def traffic_counts(compressed, start, end, collected_from, expected_rows):
+def public_paths(environment):
+    if environment == "dev":
+        return PUBLIC_PATHS
+    if environment == "prod":
+        return frozenset("/prod" + path for path in PUBLIC_PATHS)
+    raise ValueError("Invalid traffic environment")
+
+
+def traffic_counts(compressed, start, end, collected_from, expected_rows, *, environment="dev"):
     """All public paths, all rows (not just FirstVisit), one set for the whole range."""
+    allowed_paths = public_paths(environment)
     if len(compressed) > MAX_COMPRESSED:
         raise ExportUnavailable("Export exceeds the compressed size limit.")
     try:
@@ -73,7 +82,7 @@ def traffic_counts(compressed, start, end, collected_from, expected_rows):
             raise ExportUnavailable("Export event or bot field is invalid.")
         # Exact allowlist: a private URL (even one with a public-looking path
         # plus query/fragment) must not contribute to the public visitor count.
-        if event not in {"false", "0"} or bot != "0" or path not in PUBLIC_PATHS:
+        if event not in {"false", "0"} or bot != "0" or path not in allowed_paths:
             continue
         created_at = timestamp(created)
         if not begin <= created_at < finish:
@@ -89,7 +98,8 @@ def traffic_counts(compressed, start, end, collected_from, expected_rows):
         days.setdefault(day, {"sessions": set(), "pageviews": 0})
         days[day]["sessions"].add(normalized)
         days[day]["pageviews"] += 1
-        pages[path] = pages.get(path, 0) + 1
+        page = path.removeprefix("/prod") if environment == "prod" else path
+        pages[page] = pages.get(page, 0) + 1
         first, last = sessions.get(normalized, (created_at, created_at))
         sessions[normalized] = (min(first, created_at), max(last, created_at))
     if rows != expected_rows:
@@ -104,8 +114,8 @@ def distinct_count(compressed, start, end, collected_from, expected_rows):
 
 
 def export_snapshot(site, request):
-    """Store only a provider export ID/time, never its contents, in the dev cache."""
-    table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
+    """Share only an export ID/time/reservation across environments, never reports."""
+    table = boto3.resource("dynamodb").Table(os.environ.get("GOATCOUNTER_EXPORT_CACHE_TABLE") or os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
     key = {"cacheKey": f"goatcounter-export:v1:{site}"}
     now = int(time.time())
     item = table.get_item(Key=key, ConsistentRead=True).get("Item", {})
@@ -157,7 +167,7 @@ def report(settings, start, end, request, *, include_traffic=False):
     def finish(ttl):
         return (result, ttl, traffic) if include_traffic else (result, ttl)
     if not settings.get("sessions_started_at"):
-        result["note"] += " Enable Individual pageviews and Sessions, grant Export permission, and record sessions_started_at in dev configuration."
+        result["note"] += " Enable Individual pageviews and Sessions, grant Export permission, and record sessions_started_at in this environment's configuration."
         return finish(900)
     try:
         collected_from = timestamp(settings["sessions_started_at"])
@@ -172,8 +182,9 @@ def report(settings, start, end, request, *, include_traffic=False):
             return finish(30)
         compressed, rows, as_of = snapshot
         if as_of < collected_from:
-            raise ExportUnavailable("The export predates Individual pageviews collection.")
-        traffic = traffic_counts(compressed, start, end, collected_from, rows)
+            result["note"] += " The shared export predates this environment's collection. Its next hourly refresh will include new views."
+            return finish(60)
+        traffic = traffic_counts(compressed, start, end, collected_from, rows, environment=os.environ.get("ENVIRONMENT", "dev"))
         traffic.update(covered=covered, collectedFrom=collected_from.isoformat(), asOf=as_of.isoformat())
         result["value"] = traffic["sessions"] if covered else None
         result["note"] += (f" Export requested {as_of.isoformat()}; refreshed at most hourly. "

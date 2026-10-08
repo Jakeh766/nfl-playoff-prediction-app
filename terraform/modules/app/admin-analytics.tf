@@ -28,11 +28,17 @@ resource "aws_iam_role_policy" "admin_analytics" {
   role  = aws_iam_role.lambda.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
         Resource = aws_dynamodb_table.admin_analytics_cache[0].arn
+      },
+      {
+        # Seasons reads only projected reporting fields from this environment.
+        Effect   = "Allow"
+        Action   = ["dynamodb:Scan"]
+        Resource = aws_dynamodb_table.groups.arn
       },
       {
         Effect = "Allow"
@@ -56,7 +62,18 @@ resource "aws_iam_role_policy" "admin_analytics" {
         Action   = ["logs:GetQueryResults", "logs:StopQuery"]
         Resource = "*"
       },
-    ]
+      ], var.environment == "prod" ? [{
+        # One GoatCounter site has one hourly export quota. Share only its existing
+        # metadata item; production cannot read dev reports or engagement counters.
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:UpdateItem"]
+        Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-dev-admin-analytics-cache"
+        Condition = {
+          "ForAllValues:StringEquals" = {
+            "dynamodb:LeadingKeys" = ["goatcounter-export:v1:predictplayoffs"]
+          }
+        }
+    }] : [])
   })
 }
 

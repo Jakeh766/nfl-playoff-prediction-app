@@ -11,7 +11,7 @@ authorization. Authentication session format and storage are unchanged.
 
 | Section | Source and coverage | Reports |
 |---|---|---|
-| Traffic | GoatCounter public dev pages; unavailable in production | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
+| Traffic | GoatCounter public pages in the signed-in environment; fixed production labels exclude dev traffic | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
 | PredictPlayoffs activity | The environment's AWS product events; dev also has active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Active time by day, page and sport is unavailable in production |
 | Seasons | The environment's retained DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season |
 | Google Search | Separately configured Search Console property; production queries only production hosts | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
@@ -46,7 +46,7 @@ without season metadata belong to the configured NFL season. New saves record
 their sport and season explicitly. Historical competitions exist only where
 archives were retained. The report uses two paginated, projected table scans with
 a shared ten-second time budget and a 100-page limit per table; incomplete scans fail instead of returning partial
-totals. No additional IAM permissions or infrastructure are needed. Its private
+totals. The admin runtime policy grants `dynamodb:Scan` on only that environment's groups table; predictions already have Scan permission. Its private
 15-minute cache is shared across date selections. No names, account IDs, group IDs,
 passwords, invite codes or picks are included in the report.
 
@@ -202,12 +202,20 @@ The existing dev group is adopted by the declarative import in `terraform/envs/d
 Production reads `nfl-playoff-predictor-predictions`,
 `nfl-playoff-predictor-groups`, `/aws/lambda/nfl-playoff-predictor-backend`, and
 its own cache/pool/client/parameters. Dev retains the `nfl-playoff-predictor-dev`
-prefix. GoatCounter and active-time collectors remain dev-only, including
-server-side validation and production CSP exclusions. **No GoatCounter
-production configuration is needed**: traffic is explicitly unavailable and
-does not read provider settings or call GoatCounter, even if a token is placed
-in production config. Production activity uses existing GPC/DNT-aware product
-events; no additional tracking is enabled.
+prefix. GoatCounter traffic runs on allowlisted public pages in both environments,
+respecting GPC/DNT without cookies, account identifiers, raw queries or invite codes.
+The existing `predictplayoffs` site and read/export token are reused. Production
+records fixed `/prod/...` virtual paths; exports and fallback stats filter exact
+environment paths. Legacy unprefixed traffic remains dev-only. Production CSP
+permits only the existing GoatCounter script and count origins. Active-time
+collection remains dev-only.
+
+The hourly export reservation and ID/time are shared in the existing dev cache.
+Production has only GetItem/UpdateItem on `goatcounter-export:v1:predictplayoffs`
+using a DynamoDB LeadingKeys condition; it cannot read dev reports or engagement
+counters. Raw exports and session IDs stay in memory. Reports and application
+records remain in their own environment. No additional site, table or schedule
+is created.
 
 Membership removal is not immediate revocation: existing JWT group claims can
 last up to one hour. API Gateway validates JWTs; the backend rechecks the expected
@@ -222,8 +230,8 @@ Use the existing Standard SecureString parameters in us-east-1:
 |---|---|
 | `/nfl-playoff-predictor-dev/admin-analytics/config` | GoatCounter and Search Console settings |
 | `/nfl-playoff-predictor-dev/admin-analytics/google-service-account` | Complete Google service account JSON key |
-| `/nfl-playoff-predictor/admin-analytics/config` | Production Search Console settings only; no GoatCounter token |
-| `/nfl-playoff-predictor/admin-analytics/google-service-account` | Complete JSON key for a separate production Google service account |
+| `/nfl-playoff-predictor/admin-analytics/config` | GoatCounter and Search Console settings, with production collection start |
+| `/nfl-playoff-predictor/admin-analytics/google-service-account` | Existing working Google service-account key reused as explicitly authorized |
 
 Development configuration example (enter real credentials privately, never in Git or chat):
 
@@ -238,17 +246,18 @@ Development configuration example (enter real credentials privately, never in Gi
 }
 ```
 
-Production config value (this contains no credentials):
-
-```json
-{"search_console":{"site_url":"sc-domain:predictplayoffs.com"}}
-```
+For production, privately add the existing dev GoatCounter `site` and `token`
+to the current config parameter, preserving `search_console` and other settings.
+Record the production collector activation time in `sessions_started_at`, rather
+than copying dev's historical start. Do not modify the Google credential parameter
+or dev parameters. Production has no historical traffic before activation; use
+Today (UTC) to verify new views. Full-range metrics require collection coverage.
 
 Create both production parameters as **Standard SecureString** in `us-east-1`
 with the default AWS-managed `aws/ssm` key. The Google parameter takes the complete
 Google-generated JSON key, including its `client_email` and `private_key`, entered
-directly in Parameter Store. Use a distinct production service account and key;
-never put either in Terraform, deployment variables, Git, logs, tests, docs,
+directly in Parameter Store. The existing working service account is reused for
+production as explicitly authorized; never put credentials in Terraform, deployment variables, Git, logs, tests, docs,
 frontend configuration or chat. Customer-managed encryption keys would need a
 separate scoped decrypt grant; this setup uses `aws/ssm`.
 
@@ -256,23 +265,23 @@ For production, enable **Google Search Console API** in the production service
 account's Google Cloud project. In Search Console select the verified
 **predictplayoffs.com** domain property, open **Settings → Users and permissions
 → Add user**, enter the production service-account email, and grant **Restricted**
-access. Dev's credentials and access remain separately managed. The server uses
+access. The already-authorized shared account requires no new Google setup. The server uses
 only `webmasters.readonly`; do not grant domain delegation or project Editor.
 Alternatively configure the verified `https://predictplayoffs.com/` URL-prefix
 property and grant the account access to that property.
 
-GoatCounter's dev token needs **Read statistics** and **Export**, restricted to the
+GoatCounter's shared token needs **Read statistics** and **Export**, restricted to the
 connected site, without record/site/user management permissions. Google uses
 `google-auth` with only `webmasters.readonly`. Enable Search Console API and add
 the service account to the already verified property with performance-report
 read access (Restricted is sufficient). No domain delegation or project Editor
 role is needed. Obsolete provider settings are ignored and can be removed
-privately from the dev parameter. Production needs its own setup above.
+privately from the appropriate parameter. Preserve the existing working Google setup.
 
 The existing DynamoDB cache lasts 15 minutes, with five-minute error/setup
 cooldowns and conditional refresh leases. Config reloads after five minutes.
 Traffic export preparation retries after 30 seconds; failed exports use 60 seconds.
-An hourly export reservation is shared across ranges and Lambda containers,
+An hourly export reservation is shared across environments, ranges and Lambda containers,
 including uncertain failed creation. Four requests/second and one bounded GET
 retry handle GoatCounter quotas; export creation is never retried.
 Exports are bounded to 2 MB compressed, 10 MB decompressed and 100,000 rows;
@@ -285,7 +294,7 @@ review its pageview retention settings separately.
 Redirects are blocked, errors sanitized, responses private and no-store, and no
 provider tokens reach the browser. Separate OIDC deployment, authorization
 and narrowly scoped runtime permissions remain. Run `scripts/check.ps1 -Scope All`,
-then push dev for GitHub Actions deployment. Do not apply locally or promote prod.
+then push dev for GitHub Actions deployment. Verify both tabs in dev before an explicitly authorized dev → prod PR promotion; never apply locally.
 
 References: [GoatCounter sessions](https://www.goatcounter.com/help/sessions),
 [CSV exports](https://www.goatcounter.com/help/export),

@@ -106,18 +106,18 @@ test("signed-out, non-admin, lookalike groups and unknown environments redirect 
   }
 });
 
-test("production admins verify access and see production coverage with unavailable traffic", async () => {
+test("production admins verify access and see available production traffic", async () => {
   const app = await boot({ environment: "prod", reports: { goatcounter: {
-    status: "unavailable", metrics: [], tables: [],
-    message: "Traffic is unavailable in production because GoatCounter collection is disabled.",
+    status: "ok", metrics: [{ label: "Pageviews", value: 2, format: "number" }], tables: [],
+    note: "GoatCounter · cookieless prod traffic.",
   } } });
   assert.equal(app.requests.length, 5);
   assert.equal(app.redirects.length, 0);
   assert.equal(app.elements.get("analytics-main").hidden, false);
   assert.match(app.elements.get("analytics-environment").textContent, /prod dashboard/);
-  assert.match(app.elements.get("analytics-coverage").textContent, /production does not collect them/);
-  assert.match(app.elements.get("analytics-reports").text, /GoatCounter collection is disabled/);
-  assert.match(app.elements.get("analytics-status").textContent, /3 of 4/);
+  assert.match(app.elements.get("analytics-coverage").textContent, /Traffic measures public production pages/);
+  assert.match(app.elements.get("analytics-reports").text, /GoatCounter · production pages only/);
+  assert.match(app.elements.get("analytics-status").textContent, /4 of 4/);
   assert.ok(app.requests.every(({ request }) => request.cache === "no-store"));
 });
 

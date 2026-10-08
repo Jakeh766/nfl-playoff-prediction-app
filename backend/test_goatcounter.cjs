@@ -86,8 +86,8 @@ function assertSafeRequest(app, expectedPath) {
 }
 
 test("GoatCounter starts without browser storage", () => {
-  for (const environment of ["dev"]) {
-    const app = boot({ environment });
+  for (const environment of ["dev", "prod"]) {
+    const app = boot({ config: { environment } });
     assert.equal(app.scripts.length, 1);
     assert.equal(app.scripts[0].dataset.goatcounter, "https://predictplayoffs.goatcounter.com/count");
     assert.equal(app.scripts[0].src, "//gc.zgo.at/count.js");
@@ -97,7 +97,7 @@ test("GoatCounter starts without browser storage", () => {
     assert.equal(app.context.goatcounter.no_events, true);
     assert.deepEqual(app.storageReads, []);
     app.load();
-    assertSafeRequest(app, "/nfl/picks");
+    assertSafeRequest(app, environment === "prod" ? "/prod/nfl/picks" : "/nfl/picks");
     assert.equal(new URL(app.requests[0].url).searchParams.get("r"), "https://dev.example.com");
     assert.deepEqual(app.storageReads, []);
   }
@@ -139,9 +139,9 @@ test("referrers are restricted to HTTP(S) origins, without credentials, paths, q
   }
 });
 
-test("production, absent/unknown configuration, private paths, GPC, and DNT never load GoatCounter", () => {
+test("absent/unknown configuration, private paths, GPC, and DNT never load GoatCounter", () => {
   for (const options of [
-    { config: { environment: "prod" } }, { config: { environment: "preview" } },
+    { config: { environment: "preview" } },
     { config: {} }, { config: null }, { config: undefined },
     { url: "https://dev.example.com/private/person" },
     { url: "https://dev.example.com/picks/secret" },
@@ -153,6 +153,24 @@ test("production, absent/unknown configuration, private paths, GPC, and DNT neve
     assert.equal(app.requests.length, 0);
     assert.equal(app.context.goatcounter, undefined);
   }
+});
+
+test("production retains privacy guards on all public routes and excludes private pages", () => {
+  for (const route of ["/", "/nba", "/picks", "/leaderboard", "/scoring", "/privacy"]) {
+    const app = boot({ config: { environment: "prod" }, url: `https://predictplayoffs.com${route}?sport=nba&invite=secret#private` });
+    app.load();
+    assertSafeRequest(app, `/prod${["/picks", "/leaderboard", "/scoring"].includes(route) ? `/nba${route}` : route}`);
+  }
+  for (const options of [{ gpc: true }, { dnt: "1" }, { url: "https://predictplayoffs.com/admin/analytics" },
+    { url: "https://predictplayoffs.com/groups?invite=secret" }]) {
+    const app = boot({ ...options, config: { environment: "prod" } });
+    assert.equal(app.scripts.length, 0);
+    assert.equal(app.requests.length, 0);
+  }
+  const app = boot({ config: { environment: "prod" } });
+  app.context.navigator.globalPrivacyControl = true;
+  app.load();
+  assert.equal(app.requests.length, 0);
 });
 
 test("privacy signals arriving while the asynchronous script loads prevent any pageview", () => {

@@ -669,6 +669,7 @@ resource "aws_lambda_function" "backend" {
       ADMIN_COGNITO_ISSUER               = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
       ADMIN_COGNITO_CLIENT_ID            = aws_cognito_user_pool_client.browser.id
       ADMIN_ANALYTICS_CACHE_TABLE        = aws_dynamodb_table.admin_analytics_cache[0].name
+      GOATCOUNTER_EXPORT_CACHE_TABLE     = "${var.project_name}-dev-admin-analytics-cache"
       ADMIN_ANALYTICS_CONFIG_PARAMETER   = "/${local.resource_prefix}/admin-analytics/config"
       ADMIN_GOOGLE_CREDENTIALS_PARAMETER = "/${local.resource_prefix}/admin-analytics/google-service-account"
       ADMIN_ANALYTICS_LOG_GROUP          = local.analytics_log_group
@@ -1081,7 +1082,7 @@ moved {
 }
 
 locals {
-  analytics_connections = var.environment == "dev" ? ["https://predictplayoffs.goatcounter.com"] : []
+  analytics_connections = ["https://predictplayoffs.goatcounter.com"]
   structured_data_hashes = distinct(flatten([
     for html in values(local.frontend_pages) : [
       for block in regexall("(?s)<script type=\"application/ld\\+json\">(.*?)</script>", html) :
@@ -1090,7 +1091,7 @@ locals {
   ]))
   content_security_policy = join("; ", [
     "default-src 'self'",
-    "script-src 'self' ${join(" ", local.structured_data_hashes)}${var.environment == "dev" ? " https://gc.zgo.at" : ""}",
+    "script-src 'self' ${join(" ", local.structured_data_hashes)} https://gc.zgo.at",
     "script-src-attr 'none'",
     "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",

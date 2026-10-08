@@ -8,6 +8,7 @@ import os
 import re
 import time
 import uuid
+from urllib.error import HTTPError
 
 import boto3
 
@@ -98,8 +99,8 @@ def cached_report(provider, start, end):
     # DynamoDB cache and leases work across Lambda containers. Authorization is
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
-    version = "v6" if provider == "custom" else "v4"
-    key = "v1:seasons:all" if provider == "seasons" else f"{version}:{provider}:{start}:{end}"
+    version = "v6" if provider == "custom" else "v5" if provider == "goatcounter" else "v4"
+    key = "v2:seasons:all" if provider == "seasons" else f"{version}:{provider}:{start}:{end}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})
     if int(item.get("freshUntil", 0)) > now and item.get("report"):
@@ -134,7 +135,14 @@ def cached_report(provider, start, end):
         result.update(status="not_configured", message="Connect this provider using the admin analytics setup guide.",
                       metrics=[], tables=[])
         ttl = 300
-    except Exception:
+    except Exception as error:
+        # Only allowlisted provider names and fixed status codes; never exception
+        # text, requests, credentials, URLs or application records.
+        code = getattr(error, "response", {}).get("Error", {}).get("Code")
+        reason = code if code in {"AccessDeniedException", "ProvisionedThroughputExceededException"} else "report_failed"
+        if isinstance(error, HTTPError) and type(error.code) is int and 100 <= error.code <= 599:
+            reason = f"HTTP_{error.code}"
+        print(json.dumps({"type": "admin_analytics_error", "provider": provider, "reason": reason}))
         # Provider bodies/errors can contain tokens, user data, or signed URLs.
         # No exception text is sent to the browser or written to logs.
         result.update(status="unavailable", message="This provider is unavailable. Check its credentials and permissions, then try again later.",
@@ -168,12 +176,6 @@ def handler(event, _context):
     provider = path.removeprefix("/api/admin/analytics/")
     if provider not in NAMES:
         return response(404, {"message": "Not found"})
-    if environment == "prod" and provider == "goatcounter":
-        # Production deliberately has no public traffic collector. Do not read
-        # provider settings/cache or risk presenting development traffic here.
-        return response(200, {"provider": provider, "name": NAMES[provider], "status": "unavailable",
-                              "message": "Traffic is unavailable in production because GoatCounter collection is disabled.",
-                              "metrics": [], "tables": []})
     try:
         return response(200, cached_report(provider, start, end))
     except Exception:
