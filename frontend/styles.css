@@ -3042,6 +3042,11 @@ body .champion-display strong {
   display: none;
 }
 
+.prediction-share-dialog .dialog-message:empty {
+  min-height: 0;
+  margin: 0;
+}
+
 @media (max-width: 600px) {
   .prediction-share-dialog .dialog-actions .button {
     flex: 1 1 100%;

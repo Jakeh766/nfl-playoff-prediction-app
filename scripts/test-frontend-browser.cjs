@@ -54,6 +54,19 @@ const server = http.createServer((request, response) => {
         }
         return drawImage.apply(this, args);
       };
+      for (const method of ["beginPath", "moveTo", "lineTo", "stroke"]) {
+        const original = CanvasRenderingContext2D.prototype[method];
+        CanvasRenderingContext2D.prototype[method] = function (...args) {
+          if (this.canvas.width === 1200 && this.canvas.height === 630) {
+            if (method === "beginPath") this.sharePath = [];
+            if (method === "moveTo" || method === "lineTo") this.sharePath?.push(args.slice(0, 2));
+            if (method === "stroke" && this.strokeStyle === "#536a84" && this.lineWidth === 2) {
+              (this.canvas.bracketPaths || (this.canvas.bracketPaths = [])).push(this.sharePath);
+            }
+          }
+          return original.apply(this, args);
+        };
+      }
     }, { signedIn, hasNativeShare });
     await context.route("**/auth-config.js", route => route.fulfill({ contentType: "application/javascript", body: 'window.AUTH_CONFIG = {environment:"dev", clientId:"fixture", region:"us-east-1"};' }));
     await context.route("**/api/**", async route => {
@@ -122,6 +135,22 @@ const server = http.createServer((request, response) => {
       await page.locator(".saved-card").screenshot({ path: path.join(output, `share-${sport}-saved-card-desktop.png`) });
       await shareBracket.click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
+      assert.equal(await page.locator('.prediction-share-dialog [role="status"]').textContent(), "");
+      assert.equal(await page.locator('.prediction-share-dialog [role="status"]').evaluate(node => node.getBoundingClientRect().height), 0);
+      assert.doesNotMatch(await page.locator(".prediction-share-dialog").textContent(), /Your full saved bracket|Private group details are excluded|Ready to share your bracket image/);
+      const paths = await page.locator("canvas").evaluate(node => node.bracketPaths);
+      assert.equal(paths.length, 14, "every advancement has a connector");
+      const centers = new Set([224, 312, 400, 488, 268, 444, 356]);
+      for (const points of paths) {
+        assert.equal(points.length, 4);
+        for (const [, y] of points) assert.ok(centers.has(y), "connector meets the matchup center");
+        assert.equal(points[1][0], points[2][0], "connector bend is vertical");
+      }
+      if (sport === "nba") {
+        const firstRound = paths.filter(points => points[0][0] === 176 && points[3][0] === 196)
+          .map(points => [points[0][1], points[3][1]]).sort((a, b) => a[0] - b[0]);
+        assert.deepEqual(firstRound, [[224, 268], [312, 268], [400, 444], [488, 444]]);
+      }
       assert.deepEqual(await page.locator(".prediction-share-preview canvas").evaluate(node => [node.width, node.height]), [1200, 630]);
       const bracketLabel = await page.locator("canvas").getAttribute("aria-label");
       assert.match(bracketLabel, /Full playoff bracket/);
@@ -181,7 +210,7 @@ const server = http.createServer((request, response) => {
       await shareBracket.click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       assert.equal(await page.locator("[data-share-native]").isVisible(), false);
-      assert.match(await page.locator('.prediction-share-dialog [role="status"]').textContent(), /Download the image/);
+      assert.equal(await page.locator('.prediction-share-dialog [role="status"]').textContent(), "");
       assert.doesNotMatch(await page.locator(".prediction-share-dialog").textContent(), /share link|public bracket link|copy.*link|copy.*url/i);
       const unsupportedDownloading = page.waitForEvent("download");
       await page.locator("[data-share-download]").click();

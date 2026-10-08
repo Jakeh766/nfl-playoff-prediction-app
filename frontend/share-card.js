@@ -34,6 +34,16 @@ export function shareTeamName(name) {
   return name.endsWith("Trail Blazers") ? "Trail Blazers" : name.split(" ").at(-1);
 }
 
+// Matchup centers keep the bracket geometry stable when a different team wins.
+export function shareConnectorPoints(source, target, side) {
+  const fromX = side === 0 ? source.x + source.width : source.x;
+  const toX = side === 0 ? target.x : target.x + target.width;
+  const fromY = source.y + source.height / 2;
+  const toY = target.y + target.height / 2;
+  const middle = (fromX + toX) / 2;
+  return [[fromX, fromY], [middle, fromY], [middle, toY], [toX, toY]];
+}
+
 export async function renderShareCard(model, { logoUrl } = {}) {
   const logoPromise = loadShareLogos(model, logoUrl);
   await Promise.all([
@@ -105,36 +115,28 @@ export async function renderShareCard(model, { logoUrl } = {}) {
       selected: conference.seeds[0]?.name || "", bye: true } : null;
     return [bye ? [bye, ...first] : first, conference.rounds[1].games, conference.rounds[2].games]
       .map((games, round) => games.map((game, index) => ({ ...game, x: columns[side][round],
-        y: roundCenters[round][index] - height / 2, side, width })));
+        y: roundCenters[round][index] - height / 2, side, width, height })));
   });
   const finalTeams = model.matchup.map((name, side) =>
     model.conferences[side].seeds.find(t => t?.name === name) || (name ? { name, seed: null } : null));
-  const final = { teams: finalTeams, selected: model.champion, x: 522, y: 320, width: 156 };
-  const selectedRow = game => game.teams.findIndex(t => t?.name === game.selected);
-  const rowY = (game, row) => game.y + row * 36 + 18;
-  function connect(source, target, targetRow, side) {
-    const row = selectedRow(source);
-    if (row < 0) return;
-    const fromX = side === 0 ? source.x + source.width : source.x;
-    const toX = side === 0 ? target.x : target.x + target.width;
-    const middle = (fromX + toX) / 2;
+  const final = { teams: finalTeams, selected: model.champion, x: 522, y: 320, width: 156, height };
+  function connect(source, target, side) {
+    const points = shareConnectorPoints(source, target, side);
     ctx.beginPath();
-    ctx.moveTo(fromX, rowY(source, row));
-    ctx.lineTo(middle, rowY(source, row));
-    ctx.lineTo(middle, rowY(target, targetRow));
-    ctx.lineTo(toX, rowY(target, targetRow));
+    ctx.moveTo(...points[0]);
+    points.slice(1).forEach(point => ctx.lineTo(...point));
     ctx.strokeStyle = "#536a84";
     ctx.lineWidth = 2;
     ctx.stroke();
   }
   positioned.forEach((rounds, side) => {
-    rounds.slice(1).forEach((targets, index) => targets.forEach(target => target.teams.forEach((team, row) => {
+    rounds.slice(1).forEach((targets, index) => targets.forEach(target => target.teams.forEach(team => {
       if (!team) return;
       const source = rounds[index].find(game => game.selected === team.name);
-      if (source) connect(source, target, row, side);
+      if (source) connect(source, target, side);
     })));
     const source = rounds[2][0];
-    if (source && finalTeams[side]?.name === source.selected) connect(source, final, side, side);
+    if (source && finalTeams[side]?.name === source.selected) connect(source, final, side);
   });
 
   function drawLogo(name, x, y, size) {

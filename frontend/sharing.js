@@ -13,7 +13,6 @@ export async function openShareCard(context) {
     <div class="dialog-heading"><h2 id="prediction-share-title">${model.kind === "results" ? "Share my results" : "Share bracket"}</h2>
       <button class="dialog-close" type="button" aria-label="Close sharing">×</button></div>
     <div class="prediction-share-preview" aria-busy="true"></div>
-    <p class="input-hint">Your full saved bracket, ready to share. Private group details are excluded.</p>
     <p class="dialog-message" role="status" aria-live="polite">Generating your image…</p>
     <div class="dialog-actions">
       <button class="button button-primary" data-share-native type="button" hidden disabled>Share image</button>
@@ -77,9 +76,7 @@ export async function openShareCard(context) {
     const canShareImage = Boolean(nativeSharePayload(model, file, navigator));
     native.hidden = !canShareImage;
     native.disabled = !canShareImage;
-    status.textContent = canShareImage
-      ? "Ready to share your bracket image."
-      : "Download the image and attach it to your message or post.";
+    status.textContent = "";
   } catch (_error) {
     status.textContent = "Could not generate your bracket image. Close this window and try again.";
   } finally {

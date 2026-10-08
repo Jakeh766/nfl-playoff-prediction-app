@@ -49,7 +49,8 @@ Oswald/DM Sans fonts. Both picks and results exports show the complete saved
 bracket: every seeded team, matchup, chosen winner, conference champion, final,
 and champion pick. Results add a compact overall-rank/score line. NFL byes and
 divisional reseeding use the same `buildConferenceGames` rules as the page; NBA
-keeps its fixed bracket. Winning paths connect the rounds and selected winners
+keeps its fixed bracket. Connections meet matchup centers so picking a different
+team does not shift the line geometry. Winning paths connect the rounds and selected winners
 are highlighted. Compact franchise names and consistently sized team logos make
 the bracket easier to scan, with logos repeated in the final and champion area.
 Logos reuse `teamLogoUrl` and the existing ESPN CDN, with anonymous CORS,
@@ -62,7 +63,9 @@ image file via Web Share. When file sharing is unavailable, the dialog offers
 the image download for attachment to a message or post. Sharing never creates,
 copies, or sends a public bracket URL. Image generation failures prompt a retry;
 native-share failures retain the download action. Cancellation leaves the preview
-open without a success event. Existing anonymous read-only brackets on the
+open without a success event. The ready dialog shows only the preview and image
+actions; status text is reserved for loading, errors, and action confirmations.
+Existing anonymous read-only brackets on the
 leaderboard remain available independently of this image-only sharing flow.
 
 Sharing always refetches the anonymous public bracket and public leaderboard.

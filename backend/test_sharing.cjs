@@ -21,6 +21,20 @@ function context(sport = "nfl") {
       groupName: "PRIVATE", inviteCode: "PRIVATE", profileKey: "PRIVATE", password: "PRIVATE" } };
 }
 
+test("bracket connectors use symmetric matchup centers regardless of the selected row", async () => {
+  const { shareConnectorPoints } = await import("../frontend/share-card.js");
+  const source = { x: 32, y: 188, width: 144, height: 72, selected: "Top team" };
+  const target = { x: 196, y: 232, width: 144, height: 72 };
+  const expected = [[176, 224], [186, 224], [186, 268], [196, 268]];
+  assert.deepEqual(shareConnectorPoints(source, target, 0), expected);
+  source.selected = "Bottom team";
+  assert.deepEqual(shareConnectorPoints(source, target, 0), expected);
+  const mirrored = shareConnectorPoints({ ...source, x: 1024 }, { ...target, x: 860 }, 1);
+  assert.deepEqual(mirrored, expected.map(([x, y]) => [1200 - x, y]));
+  assert.deepEqual(shareConnectorPoints({ x: 360, y: 320, width: 144, height: 72 },
+    { x: 522, y: 320, width: 156, height: 72 }, 0), [[504, 356], [513, 356], [513, 356], [522, 356]]);
+});
+
 test("image models contain only public fields and never create bracket URLs", async () => {
   const { createShareModel } = await modelModule;
   for (const sport of ["nfl", "nba"]) {
