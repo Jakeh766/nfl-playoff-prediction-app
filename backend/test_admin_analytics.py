@@ -131,21 +131,36 @@ class AdminTests(unittest.TestCase):
                 self.assertEqual(result["headers"]["Cache-Control"], "private, no-store")
                 if not provider:
                     self.assertEqual(json.loads(result["body"])["environment"], "prod")
-                elif provider == "goatcounter":
-                    self.assertEqual(json.loads(result["body"])["status"], "unavailable")
-                    report.assert_not_called()
                 elif provider in admin.NAMES:
                     report.assert_called_once()
                 report.reset_mock()
 
-    def test_production_traffic_does_not_read_cache_config_or_call_provider(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(admin, "cached_report") as report, \
-                patch.object(admin, "settings") as settings:
+    def test_production_traffic_uses_authorized_private_cache_and_provider(self):
+        adapter = Mock(return_value={"metrics": [], "tables": [], "note": "Production traffic"})
+        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(admin, "settings", return_value={}) as settings, \
+                patch.dict(admin.PROVIDERS, goatcounter=adapter):
             result = admin.handler(event("goatcounter"), None)
-            self.assertEqual(result["statusCode"], 200)
-            self.assertIn("collection is disabled", result["body"])
-            report.assert_not_called()
-            settings.assert_not_called()
+            self.assertEqual(json.loads(result["body"])["status"], "ok")
+            self.assertEqual(result["headers"]["Cache-Control"], "private, no-store")
+            settings.assert_called_once()
+            adapter.assert_called_once()
+
+    def test_season_failure_logs_only_allowlisted_diagnostics(self):
+        class Denied(Exception):
+            response = {"Error": {"Code": "AccessDeniedException", "Message": "SECRET invite user"}}
+        with patch.dict(admin.PROVIDERS, seasons=Mock(side_effect=Denied("SECRET"))), patch("builtins.print") as log:
+            result = admin.handler(event("seasons"), None)
+            self.assertEqual(json.loads(result["body"])["status"], "unavailable")
+            log.assert_called_once_with(json.dumps({"type": "admin_analytics_error", "provider": "seasons", "reason": "AccessDeniedException"}))
+            self.assertNotIn("SECRET", result["body"])
+
+    def test_http_failure_logs_only_status_without_credentials_or_upstream_url(self):
+        error = HTTPError("https://private.example/SECRET", 400, "SECRET token", {}, None)
+        with patch.object(admin, "settings", return_value={}), patch.dict(admin.PROVIDERS, goatcounter=Mock(side_effect=error)), patch("builtins.print") as log:
+            result = admin.handler(event("goatcounter"), None)
+            self.assertEqual(json.loads(result["body"])["status"], "unavailable")
+            log.assert_called_once_with(json.dumps({"type": "admin_analytics_error", "provider": "goatcounter", "reason": "HTTP_400"}))
+            self.assertNotIn("SECRET", result["body"])
 
     def test_date_ranges_are_bounded_and_cannot_be_used_for_query_injection(self):
         for params in ({"start": "2026-01-01"}, {"start": "2026-02-30", "end": "2026-03-01"},
@@ -314,11 +329,22 @@ class ProviderTests(unittest.TestCase):
                     self.assertEqual(filters, [{"dimension": "page", "operator": "includingRegex",
                                                "expression": r"^https://(www\.)?predictplayoffs\.com/"}])
 
-    def test_production_goatcounter_adapter_cannot_call_dev_provider(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}), patch.object(providers, "http_json") as http:
-            with self.assertRaises(providers.NotConfigured):
-                providers.goatcounter({"goatcounter": {"site": "predictplayoffs", "token": "test-token"}}, self.start, self.end)
-            http.assert_not_called()
+    def test_traffic_stats_are_filtered_to_exact_environment_paths(self):
+        for environment in ("dev", "prod"):
+            prefix = "/prod" if environment == "prod" else ""
+            def answer(url, token):
+                query = parse_qs(urlsplit(url).query)
+                self.assertEqual(query["path_by_name"], ["true"])
+                self.assertEqual(set(query["include_paths"][0].split(",")),
+                                 providers.goatcounter_sessions.public_paths(environment))
+                return {"total": 2, "total_events": 0} if "/total?" in url else {"hits": [{"path": prefix + "/nba/picks", "count": 2},
+                                                                                          {"path": "/private?secret", "count": 99}]}
+            with patch.dict(os.environ, {"ENVIRONMENT": environment}), patch.object(providers, "http_json", side_effect=answer):
+                result = providers.goatcounter({"goatcounter": {"token": "test-token"}}, self.start, self.end)
+            self.assertEqual(result["metrics"][-1]["value"], 2)
+            self.assertEqual(result["tables"][-1]["rows"], [{"page": "/nba/picks", "visits": 2}])
+            self.assertIn(f"cookieless {environment} traffic", result["note"])
+            self.assertNotIn("secret", json.dumps(result))
 
     def test_search_totals_daily_and_all_breakdowns(self):
         def answer(url, token, body):

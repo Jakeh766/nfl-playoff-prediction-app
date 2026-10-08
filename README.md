@@ -109,6 +109,6 @@ Production uses the separate `prod` branch and is promoted deliberately after
 validation.
 
 Both environments have a private analytics dashboard restricted to their own
-Cognito admins; production traffic and active-time collection remain disabled. Read
+Cognito admins; production traffic uses the existing guarded GoatCounter site; active-time collection remains dev-only. Read
 [analytics setup and metric definitions](docs/admin-analytics.md) or the app's
 [privacy policy](https://predictplayoffs.com/privacy) for collection details.

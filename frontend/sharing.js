@@ -79,7 +79,6 @@ export async function openShareCard(context) {
     try {
       await navigator.share(payload);
       track("share_native_used");
-      if (dialog.open) status.textContent = "Image sent to your share app.";
     } catch (error) {
       // Cancellation and an empty OS share sheet both use AbortError.
       if (dialog.open && error?.name !== "AbortError") {
@@ -127,9 +126,8 @@ export async function openShareCard(context) {
     const canShareImage = Boolean(nativeSharePayload(model, file, navigator));
     native.hidden = !canShareImage;
     native.disabled = !canShareImage;
-    help.hidden = false;
-    help.textContent = "If your app isn’t listed, download the PNG and upload it there." +
-      (usesIosImageSaving(navigator) ? " Downloads go to Files. Touch and hold the image for save options." : "");
+    help.textContent = usesIosImageSaving(navigator) ? "Downloads go to Files. Touch and hold the image for save options." : "";
+    help.hidden = !help.textContent;
     status.textContent = "";
     // Slow assets can outlast transient activation. Do not force a share call
     // after it expires; the visible button supplies a fresh gesture instead.

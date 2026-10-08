@@ -180,8 +180,8 @@ def custom(_config, start, end):
 
 
 def goatcounter(config, start, end):
-    if os.environ.get("ENVIRONMENT") != "dev":
-        raise NotConfigured()
+    environment = os.environ.get("ENVIRONMENT")
+    allowed_paths = goatcounter_sessions.public_paths(environment)
     settings = config.get("goatcounter", {})
     token, site = settings.get("token"), settings.get("site", "predictplayoffs")
     if not token:
@@ -189,7 +189,10 @@ def goatcounter(config, start, end):
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", site):
         raise ValueError("Invalid GoatCounter site")
     base = f"https://{site}.goatcounter.com/api/v0"
-    query = urlencode({"start": f"{start}T00:00:00Z", "end": f"{end}T23:00:00Z"})
+    # Explicit path filters apply to totals AND fallback tables. Never use the
+    # shared site's unfiltered total, which includes the other environment.
+    query = urlencode({"start": f"{start}T00:00:00Z", "end": f"{end}T23:00:00Z",
+                       "path_by_name": "true", "include_paths": ",".join(sorted(allowed_paths))})
     # GoatCounter permits four requests per second. Three populated pages need
     # five requests; bound the burst even when independent calls run in parallel.
     starts, lock = deque(maxlen=4), Lock()
@@ -219,9 +222,9 @@ def goatcounter(config, start, end):
     # Only paginated endpoints accept limit; /stats/total rejects it with 400.
     with ThreadPoolExecutor(max_workers=2) as executor:
         totals, hits = list(executor.map(request,
-                                        [f"total?{query}", f"hits?{query}&limit=10"]))
+                                        [f"total?{query}", f"hits?{query}&limit=100"]))
     paths = [hit for hit in hits.get("hits") or []
-             if not hit.get("event") and hit.get("path") in goatcounter_sessions.PUBLIC_PATHS]
+             if not hit.get("event") and hit.get("path") in allowed_paths]
     events = number(totals.get("total_events", 0))
     sessions, cache_seconds, traffic = goatcounter_sessions.report(settings, start, end, api_request, include_traffic=True)
     sessions["label"] = "Distinct visitors / sessions"
@@ -255,9 +258,9 @@ def goatcounter(config, start, end):
         metrics.append(metric("Unique visits per page", number(totals.get("total", 0)) - events,
                               note="Fallback GoatCounter statistic: repeat loads of a page within a session count once; different pages add visits."))
         tables.append(table("Unique visits by page", [("page", "Page", "text"), ("visits", "Unique visits", "number")],
-                            [{"page": hit["path"], "visits": number(hit["count"])} for hit in paths]))
+                            [{"page": hit["path"].removeprefix("/prod") if environment == "prod" else hit["path"], "visits": number(hit["count"])} for hit in paths]))
     return {"metrics": metrics, "tables": tables,
-            "note": "GoatCounter · cookieless dev traffic. Distinct visitors and sessions share one short-lived estimate across public pages, not permanent people. Daily sessions deduplicate per day and must not be summed for range-wide distinct sessions. " + coverage_note,
+            "note": f"GoatCounter · cookieless {environment} traffic. Distinct visitors and sessions share one short-lived estimate across public pages, not permanent people. Daily sessions deduplicate per day and must not be summed for range-wide distinct sessions. " + coverage_note,
             "_cache_seconds": cache_seconds}
 
 

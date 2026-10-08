@@ -85,6 +85,11 @@ run "dev_admin_resources" {
 run "prod_admin_resources" {
   command = plan
   override_resource {
+    target          = aws_dynamodb_table.groups
+    override_during = plan
+    values          = { arn = "arn:aws:dynamodb:us-east-1:123456789012:table/nfl-playoff-predictor-groups" }
+  }
+  override_resource {
     target          = aws_dynamodb_table.admin_analytics_cache[0]
     override_during = plan
     values          = { arn = "arn:aws:dynamodb:us-east-1:123456789012:table/nfl-playoff-predictor-admin-analytics-cache" }
@@ -116,11 +121,11 @@ run "prod_admin_resources" {
       contains(keys(aws_s3_object.frontend_pages), "admin/analytics") &&
       contains(keys(aws_s3_object.frontend), "admin-analytics.js") &&
       contains(keys(aws_s3_object.frontend), "admin-analytics.css") &&
-      !strcontains(local.content_security_policy, "goatcounter") &&
-      !strcontains(local.content_security_policy, "gc.zgo.at") &&
+      strcontains(local.content_security_policy, "https://predictplayoffs.goatcounter.com") &&
+      strcontains(local.content_security_policy, "https://gc.zgo.at") &&
       toset(keys(jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")))) == toset(["environment", "clientId", "region"])
     )
-    error_message = "Production must deploy the private shell without enabling collectors or exposing provider config."
+    error_message = "Production must permit the guarded GoatCounter collector without exposing provider config."
   }
   assert {
     condition = (
@@ -128,9 +133,19 @@ run "prod_admin_resources" {
       aws_lambda_function.backend.environment[0].variables.PREDICTIONS_TABLE == "nfl-playoff-predictor-predictions" &&
       aws_lambda_function.backend.environment[0].variables.GROUPS_TABLE == "nfl-playoff-predictor-groups" &&
       aws_lambda_function.backend.environment[0].variables.ADMIN_COGNITO_ISSUER == "https://cognito-idp.us-east-1.amazonaws.com/${aws_cognito_user_pool.users.id}" &&
-      aws_lambda_function.backend.environment[0].variables.ADMIN_COGNITO_CLIENT_ID == aws_cognito_user_pool_client.browser.id &&
-      !strcontains(aws_iam_role_policy.admin_analytics[0].policy, "nfl-playoff-predictor-dev")
+      aws_lambda_function.backend.environment[0].variables.ADMIN_COGNITO_CLIENT_ID == aws_cognito_user_pool_client.browser.id
     )
     error_message = "Runtime reports and IAM must point only to production data, cache, pool, and client."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_iam_role_policy.admin_analytics[0].policy).Statement[1].Action == ["dynamodb:Scan"] &&
+      jsondecode(aws_iam_role_policy.admin_analytics[0].policy).Statement[1].Resource == aws_dynamodb_table.groups.arn &&
+      jsondecode(aws_iam_role_policy.admin_analytics[0].policy).Statement[5].Action == ["dynamodb:GetItem", "dynamodb:UpdateItem"] &&
+      jsondecode(aws_iam_role_policy.admin_analytics[0].policy).Statement[5].Resource == "arn:aws:dynamodb:us-east-1:123456789012:table/nfl-playoff-predictor-dev-admin-analytics-cache" &&
+      jsondecode(aws_iam_role_policy.admin_analytics[0].policy).Statement[5].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"] == ["goatcounter-export:v1:predictplayoffs"] &&
+      aws_lambda_function.backend.environment[0].variables.GOATCOUNTER_EXPORT_CACHE_TABLE == "nfl-playoff-predictor-dev-admin-analytics-cache"
+    )
+    error_message = "Seasons may scan only its own groups table; shared exports may access only one dev metadata key."
   }
 }

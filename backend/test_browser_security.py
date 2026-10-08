@@ -70,9 +70,9 @@ class BrowserSecurityTests(unittest.TestCase):
             for directive in ("script-src", "frame-src", "object-src"):
                 self.assertNotIn("blob:", directives[directive])
             self.assertEqual(directives["connect-src"], {"'self'", "https://cognito-idp.us-east-1.amazonaws.com"} |
-                             ({"https://predictplayoffs.goatcounter.com"} if env == "dev" else set()))
-            self.assertEqual("https://gc.zgo.at" in directives["script-src"], env == "dev")
-            self.assertEqual("https://predictplayoffs.goatcounter.com" in directives["connect-src"], env == "dev")
+                             {"https://predictplayoffs.goatcounter.com"})
+            self.assertIn("https://gc.zgo.at", directives["script-src"])
+            self.assertIn("https://predictplayoffs.goatcounter.com", directives["connect-src"])
 
     def test_headers_attach_to_both_behaviors_and_preserve_environment_guards(self):
         self.assertEqual(CONFIG.count("response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id"), 2)

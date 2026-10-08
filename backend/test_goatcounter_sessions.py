@@ -150,6 +150,15 @@ class SessionTests(unittest.TestCase):
         hosted_header[3] = "User-Agent"
         self.assertEqual(sessions.distinct_count(export(rows, hosted_header), START, END, COLLECTED, len(rows)), 1)
 
+    def test_unpadded_provider_session_halves_deduplicate_without_boundary_collisions(self):
+        # GoatCounter's zint.Uint128.Format prints each half without zero padding.
+        rows = [row(session="1-23"), row(session="0000000000000001-0000000000000023"),
+                row(session="00000000000000010000000000000023"), row(session="12-3"), row(session="0-ab")]
+        self.assertEqual(self.count(rows), 3)
+        for malformed in ("0-0", "-1", "1-", "1-2-3", "1-" + "f" * 17):
+            with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                self.count([row(session=malformed)])
+
     def test_truncated_corrupt_or_oversized_exports_never_return_partial_counts(self):
         with self.assertRaises(ValueError):
             sessions.distinct_count(export([row()]), START, END, COLLECTED, 2)
@@ -257,6 +266,42 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(report["metrics"][-1]["value"], 3)
         self.assertIsNone(report["metrics"][0]["value"])
         self.assertNotIn("PRIVATE-TOKEN", json.dumps(report))
+
+    def test_shared_export_is_reused_between_environments_without_mixed_counts(self):
+        rows = [row(), row(path="/prod/", session=SESSION_B),
+                row(path="/prod/nba/picks", session=SESSION_B, created="2026-10-05T10:01:00Z"),
+                row(path="/prod/picks?invite=PRIVATE"), row(path="/prod/admin/analytics")]
+        def request(suffix, **kw):
+            if suffix == "export/123":
+                return {"format": "csv", "finished_at": "2026-10-06T12:00:01Z", "num_rows": len(rows)}
+            if kw.get("binary"):
+                return export(rows)
+            return self.request(suffix, **kw)
+        request = Mock(side_effect=request)
+        table = Mock(return_value=self.cache)
+        with patch.object(sessions.boto3, "resource", return_value=types.SimpleNamespace(Table=table)), \
+                patch.dict(os.environ, {"GOATCOUNTER_EXPORT_CACHE_TABLE": "shared-metadata"}):
+            dev, _, dev_traffic = sessions.report(SETTINGS, START, END, request, include_traffic=True)
+            with patch.dict(os.environ, {"ENVIRONMENT": "prod", "ADMIN_ANALYTICS_CACHE_TABLE": "prod-private-reports"}):
+                prod, _, prod_traffic = sessions.report(SETTINGS, START, END, request, include_traffic=True)
+        self.assertEqual(dev["value"], 1)
+        self.assertEqual(prod["value"], 1)
+        self.assertEqual(dev_traffic["pageviews"], 1)
+        self.assertEqual(prod_traffic["pageviews"], 2)
+        self.assertEqual(prod_traffic["pages"], {"/": 1, "/nba/picks": 1})
+        self.assertEqual(prod_traffic["duration"], 60)
+        self.assertEqual(sum(call.args[0] == "export" for call in request.call_args_list), 1)
+        self.assertTrue(all(call.args == ("shared-metadata",) for call in table.call_args_list))
+        self.assertNotIn("PRIVATE", json.dumps([dev_traffic, prod_traffic]))
+
+    def test_export_before_new_production_collection_is_pending_not_zero(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "prod"}):
+            result, ttl, traffic = sessions.report({**SETTINGS, "sessions_started_at": "2026-10-06T13:00:00Z"},
+                                                  END, END, self.request, include_traffic=True)
+        self.assertIsNone(result["value"])
+        self.assertIsNone(traffic)
+        self.assertEqual(ttl, 60)
+        self.assertIn("predates this environment", result["note"])
 
     def test_public_path_allowlist_stays_aligned_with_tracking_loader(self):
         loader = (Path(__file__).parent.parent / "frontend/goatcounter.js").read_text()

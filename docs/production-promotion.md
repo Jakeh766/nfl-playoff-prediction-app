@@ -16,15 +16,15 @@ do not require removing commits or manually deleting features before each releas
 | NBA picks | Follow the NBA deadline; no NFL testing override | Follow the NBA deadline | `backend/lambda/nba_season.json`, `frontend/sports.js` |
 | Demo participants and groups | Seeded by the dev workflow | Never seeded by the prod workflow | `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml` |
 | Private admin analytics page and API | Available to dev Cognito admins | Available only to production Cognito admins; separate pool/group/cache/parameters | `terraform/modules/app/main.tf`, `terraform/modules/app/admin-analytics.tf`, `backend/lambda/admin_analytics.py` |
-| GoatCounter and active-time measurements | Enabled subject to GPC/DNT | Disabled by environment guards | `frontend/goatcounter.js`, `frontend/engagement.js`, `backend/lambda/engagement.py` |
+| GoatCounter traffic | Enabled subject to GPC/DNT | Enabled subject to GPC/DNT; fixed `/prod/...` page labels isolate counts on the existing site | `frontend/goatcounter.js`, `frontend/engagement.js`, `backend/lambda/engagement.py` |
 
 Production's current NFL lock is `2026-09-10T00:20:00Z`. Advance it only as an
 intentional season-maintenance change. Keep it separate from reopening dev for
 testing. Production still collects guarded first-party aggregate activity via
 `frontend/monitoring.js`; the private reporting interface reports production
-events and saved-season data. GoatCounter traffic and active engagement time
-remain explicitly unavailable in production. Enabling reports must never enable
-additional collection.
+events and saved-season data. GoatCounter traffic reuses the existing site and
+token, with exact environment path filters for exports and fallback statistics.
+Active engagement time remains dev-only; its production guards remain enabled.
 
 Terraform sets `environment = "prod"` in `terraform/envs/prod/main.tf` and
 generates both `window.AUTH_CONFIG.environment` and the Lambda `ENVIRONMENT`

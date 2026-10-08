@@ -121,9 +121,8 @@ an estimate from current standings. See [group history](group-history.md).
 ## Analytics
 
 The private page `/admin/analytics` combines the environment's AWS activity and
-season data with separately configured Google Search Console reports. Dev also
-has GoatCounter traffic and active-time reports; production leaves those
-metrics unavailable and preserves its collector guards. Provider credentials
+season data with separately configured Google Search Console reports. Both environments have GoatCounter traffic reports isolated by fixed page labels on
+the existing site. Active-time reports remain development-only. Provider credentials
 stay on the server, and access requires Cognito admin membership. See
 [admin analytics](admin-analytics.md) for setup and metric definitions.
 

@@ -417,7 +417,7 @@ const server = http.createServer((request, response) => {
       await target.page.locator("[data-share-download]:not([disabled])").waitFor();
       const supportsFiles = profile.native && !profile.noFiles && !profile.noCanShare;
       assert.equal(await target.page.locator("[data-share-native]").isVisible(), supportsFiles);
-      assert.match(await target.page.locator(".prediction-share-help").textContent(), /download the PNG and upload it/);
+      assert.equal(await target.page.locator(".prediction-share-help").isVisible(), profile.name === "iphone-safari");
       assert.equal(await target.page.locator(".prediction-share-preview img").isVisible(), true);
       await target.page.screenshot({ path: path.join(output, `social-compat-${profile.name}-ready.png`) });
       if (profile.name === "iphone-safari") {

@@ -2,7 +2,7 @@
   try {
     const pages = new Set(["/", "/index.html", "/nba", "/nba.html", "/picks", "/picks.html",
       "/leaderboard", "/leaderboard.html", "/scoring", "/scoring.html", "/privacy", "/privacy.html"]);
-    const permitted = () => window.AUTH_CONFIG?.environment === "dev" &&
+    const permitted = () => ["dev", "prod"].includes(window.AUTH_CONFIG?.environment) &&
       navigator.doNotTrack !== "1" && !navigator.globalPrivacyControl &&
       pages.has(window.location.pathname) && window.location.hash !== "#toggle-goatcounter";
     if (!permitted()) return;
@@ -16,7 +16,9 @@
       "/leaderboard": { nfl: "/nfl/leaderboard", nba: "/nba/leaderboard" },
       "/scoring": { nfl: "/nfl/scoring", nba: "/nba/scoring" },
     };
-    const page = sportPages[route]?.[sport] || window.location.pathname;
+    const publicPage = sportPages[route]?.[sport] || window.location.pathname;
+    // Both environments reuse one site; production owns a fixed path namespace.
+    const page = (window.AUTH_CONFIG.environment === "prod" ? "/prod" : "") + publicPage;
     const title = `Predict Playoffs — ${page === "/" ? "home" : page.slice(1).replace(/\.html$/, "")}`;
     let referrer = "";
     try {
