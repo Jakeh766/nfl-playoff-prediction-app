@@ -85,7 +85,7 @@
         <section class="bracket-section hidden" id="bracket-section">
           <div class="section-heading bracket-heading">
             <div><p class="eyebrow">02 · PICK EVERY GAME</p><h2>Your playoff bracket.</h2><p>Click a team to advance it. Later rounds update automatically.</p></div>
-            <div class="save-state" id="save-state" role="status"><span class="save-dot"></span><span>Not saved yet</span></div>
+            <div class="save-state" id="save-state" role="status"><span class="save-dot" aria-hidden="true"></span><time>Not saved yet</time></div>
           </div>
           <div class="bracket-shell">
             <div class="bracket-conference">
@@ -116,16 +116,13 @@
           </div>
           <div class="final-actions">
             <button class="button button-secondary" id="reset-picks" type="button">Reset game picks</button>
+            <div class="bracket-share-action" id="bracket-share-slot"><p class="bracket-share-help" id="bracket-share-help"></p></div>
             <button class="button button-primary button-large" id="save-prediction" type="button">Save prediction</button>
           </div>
         </section>
       </section>
 
-      <section class="saved-section hidden" id="saved-section">
-        <div class="section-heading compact"><div><p class="eyebrow">SAVED TO YOUR ACCOUNT</p><h2>My prediction.</h2></div></div>
-        <div class="saved-grid" id="saved-grid"></div>
-        <p class="empty-locker" id="empty-locker">You have not saved a bracket yet. Your first prediction will appear here.</p>
-      </section>
+      <p class="validation-message hidden" id="prediction-load-error" role="alert"></p>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <footer id="site-footer" data-no-sport-copy>

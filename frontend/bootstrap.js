@@ -5,6 +5,7 @@ elements.buildBracket?.addEventListener("click", buildBracket);
 elements.randomizeBracket?.addEventListener("click", randomizeBracket);
 elements.savePrediction?.addEventListener("click", savePrediction);
 elements.resetPicks?.addEventListener("click", resetGamePicks);
+if (PAGE === "picks") initializePredictionActions();
 elements.signInForm.addEventListener("submit", submitSignIn);
 elements.createAccountForm.addEventListener("submit", submitCreateAccount);
 elements.confirmAccountForm.addEventListener("submit", submitConfirmAccount);

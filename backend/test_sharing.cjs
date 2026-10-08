@@ -131,6 +131,26 @@ test("sharing inside a group refetches public data and never uses the group boar
   assert.equal("groupLeaderboard" in opened[0], false);
 });
 
+test("editor sharing checks eligibility before fetching and again before opening the image", async () => {
+  const source = fs.readFileSync(`${__dirname}/../frontend/share-entry.js`, "utf8");
+  const requests = [], opened = [];
+  let eligible = false, finish;
+  const sandbox = vm.createContext({
+    loadSharing: () => new Promise(resolve => { finish = () => resolve({ openShareCard: async value => opened.push(value) }); }),
+    apiRequest: async path => { requests.push(path); return context().bracket; },
+    showToast() {},
+  });
+  vm.runInContext(source.replace('import("./sharing.js")', "loadSharing()"), sandbox);
+  await sandbox.sharePrediction("JakeH", "picks", "classic", () => eligible);
+  assert.equal(requests.length, 0, "unsaved drafts never fetch a saved image");
+  eligible = true;
+  const sharing = sandbox.sharePrediction("JakeH", "picks", "classic", () => eligible);
+  eligible = false;
+  finish(); await sharing;
+  assert.equal(requests.length, 2);
+  assert.equal(opened.length, 0, "a draft edited during loading cannot open a stale image");
+});
+
 test("share logos reuse only sport-specific public CDN paths with anonymous CORS and no referrer", async () => {
   const { loadShareLogos } = await import("../frontend/share-card.js");
   const previousImage = global.Image, requested = [];

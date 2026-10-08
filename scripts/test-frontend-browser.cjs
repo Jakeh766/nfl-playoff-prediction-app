@@ -29,6 +29,7 @@ const server = http.createServer((request, response) => {
   const errors = [];
   const events = [];
   const records = new Map();
+  let savedAt = Date.UTC(2026, 9, 8, 14, 57);
   async function boot(signedIn, hasNativeShare = true) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
     await context.addInitScript(({ signedIn, hasNativeShare }) => {
@@ -83,10 +84,12 @@ const server = http.createServer((request, response) => {
       else if (url.pathname.endsWith("/invite")) result = { groupId: "fixture-group", groupName: "Browser Crew", inviteCode: "PRIVATE" };
       else if (url.pathname === "/api/analytics") { events.push(JSON.parse(request.postData())); status = 202; }
       else if (url.pathname === "/api/prediction" && request.method() === "PUT") {
-        result = { ...JSON.parse(request.postData()), leaderboardName: "JakeH", savedAt: Date.now(), season: sport === "nba" ? 2027 : 2026,
+        result = { ...JSON.parse(request.postData()), leaderboardName: "JakeH", savedAt: (savedAt += 60000), season: sport === "nba" ? 2027 : 2026,
           score: { status: "Playoffs in progress", regularSeason: 100, playoffs: 72, total: 172, possible: 200, maximum: 300 },
           vegasScore: { possible: 260, total: 181.25 }, championStatus: "alive" };
         records.set(sport, result);
+      } else if (url.pathname === "/api/prediction" && request.method() === "DELETE") {
+        records.delete(sport); result = { deleted: true };
       } else if (url.pathname === "/api/prediction" || url.pathname.endsWith("/bracket")) {
         result = record || { message: "No prediction" }; status = record ? 200 : 404;
         if (url.pathname.endsWith("/bracket")) assert.equal(request.headers().authorization, undefined);
@@ -126,14 +129,41 @@ const server = http.createServer((request, response) => {
       await page.locator("#randomize-bracket").click();
       assert.equal(await page.evaluate(() => allGamesPicked()), true);
       assert.equal(await page.evaluate(() => validateSeeding()), "");
+      assert.equal(await page.locator("#saved-section, .saved-card").count(), 0);
+      assert.equal(await page.locator("#save-state").textContent(), "Not saved yet");
+      assert.equal(await page.locator("#share-bracket").isDisabled(), true);
+      assert.equal(await page.locator("#save-prediction").textContent(), "Save prediction");
       await page.locator("#save-prediction").click();
+      await page.waitForFunction(() => document.querySelector("#share-bracket").disabled === false);
+      assert.equal(await page.locator("#toast").textContent(), "Prediction saved");
+      assert.equal(await page.locator("#save-prediction").isDisabled(), true);
+      const firstSaved = records.get(sport).savedAt;
+      assert.equal(await page.locator("#save-state time").getAttribute("datetime"), new Date(firstSaved).toISOString());
+      const originalChampion = records.get(sport).picks.superBowl;
+      await page.locator("#super-bowl-game .team-pick:not(.selected)").click();
+      assert.equal(await page.locator("#save-state").textContent(), "Unsaved changes");
+      assert.equal(await page.locator("#share-bracket").isDisabled(), true);
+      assert.equal(await page.locator("#bracket-share-help").textContent(), "Save changes before sharing");
+      assert.equal(await page.locator("#save-prediction").textContent(), "Save changes");
+      await page.locator(".final-actions").screenshot({ path: path.join(output, `prediction-status-${sport}-dirty-desktop.png`) });
+      await page.evaluate(champion => handleGamePick("", "super-bowl", champion, true), originalChampion);
+      assert.equal(await page.locator("#share-bracket").isEnabled(), true, "reverting a draft restores the saved state");
+      await page.locator("#super-bowl-game .team-pick:not(.selected)").click();
+      await page.locator("#save-prediction").click();
+      await page.waitForFunction(() => document.querySelector("#share-bracket").disabled === false);
+      assert.ok(records.get(sport).savedAt > firstSaved);
+      assert.equal(await page.locator("#save-state time").getAttribute("datetime"), new Date(records.get(sport).savedAt).toISOString());
       const shareBracket = page.getByRole("button", { name: "Share bracket", exact: true });
       await shareBracket.waitFor();
       assert.equal(await shareBracket.locator("span").textContent(), "Share bracket");
       assert.equal(await shareBracket.getAttribute("aria-label"), "Share bracket");
       assert.equal(await shareBracket.locator('svg[aria-hidden="true"] circle').count(), 3);
-      await page.locator(".saved-card").screenshot({ path: path.join(output, `share-${sport}-saved-card-desktop.png`) });
-      await shareBracket.click();
+      await page.waitForFunction(() => !document.querySelector("#toast").classList.contains("show"));
+      await page.locator("#bracket-section").screenshot({ path: path.join(output, `prediction-status-${sport}-bracket-desktop.png`) });
+      await page.locator(".bracket-heading").screenshot({ path: path.join(output, `prediction-status-${sport}-heading-desktop.png`) });
+      await page.locator(".final-actions").screenshot({ path: path.join(output, `prediction-status-${sport}-actions-desktop.png`) });
+      await shareBracket.focus();
+      await shareBracket.press("Enter");
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       assert.equal(await page.locator('.prediction-share-dialog [role="status"]').textContent(), "");
       assert.equal(await page.locator('.prediction-share-dialog [role="status"]').evaluate(node => node.getBoundingClientRect().height), 0);
@@ -202,10 +232,20 @@ const server = http.createServer((request, response) => {
       await page.screenshot({ path: path.join(output, `share-${sport}-mobile-viewport.png`) });
       assert.equal(await page.locator(".prediction-share-dialog").evaluate(node => node.scrollWidth <= node.clientWidth), true);
       await page.getByRole("button", { name: "Close sharing" }).click();
-      await page.locator(".saved-card").screenshot({ path: path.join(output, `share-${sport}-saved-card-mobile.png`) });
-      assert.equal(await page.locator(".saved-card").evaluate(node => node.scrollWidth <= node.clientWidth), true);
-      const rowTops = await page.locator(".saved-card-actions").first().locator("button").evaluateAll(buttons => buttons.map(button => Math.round(button.getBoundingClientRect().top)));
-      assert.equal(new Set(rowTops).size, 1, "Open bracket, Share bracket, and Delete fit one mobile row");
+      await page.waitForFunction(() => !document.querySelector("#toast").classList.contains("show"));
+      await page.locator(".bracket-heading").screenshot({ path: path.join(output, `prediction-status-${sport}-heading-mobile.png`) });
+      await page.locator(".final-actions").screenshot({ path: path.join(output, `prediction-status-${sport}-actions-mobile.png`) });
+      await page.locator("#save-prediction").scrollIntoViewIfNeeded();
+      await page.screenshot({ path: path.join(output, `prediction-status-${sport}-page-end-mobile.png`) });
+      for (const width of [320, 768]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.equal(await page.locator(".final-actions").evaluate(node => node.scrollWidth <= node.clientWidth), true);
+        assert.equal(await shareBracket.locator("span").isVisible(), true);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(await page.locator(".final-actions").evaluate(node => node.scrollWidth <= node.clientWidth), true);
+      assert.deepEqual(await page.locator(".final-actions button").allTextContents(), ["Reset game picks", "Share bracket", "Save changes"]);
       await page.evaluate(() => { window.disableImageSharing = true; });
       await shareBracket.click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
@@ -218,26 +258,18 @@ const server = http.createServer((request, response) => {
       await page.screenshot({ path: path.join(output, `share-${sport}-download-only-mobile.png`) });
       await page.getByRole("button", { name: "Close sharing" }).click();
       await page.evaluate(() => { window.disableImageSharing = false; });
-      await page.getByRole("button", { name: "Share my results", exact: true }).click();
-      await page.locator("[data-share-download]:not([disabled])").waitFor();
-      const label = await page.locator("canvas").getAttribute("aria-label");
-      assert.match(label, /172 points/); assert.match(label, /Rank 1 overall/);
-      assert.match(label, /Full playoff bracket/);
-      const resultsDownloading = page.waitForEvent("download");
-      await page.locator("[data-share-download]").click();
-      const resultsDownload = await resultsDownloading;
-      const resultsPath = path.join(output, `share-${sport}-results-download.png`);
-      await resultsDownload.saveAs(resultsPath);
-      const resultsBytes = fs.readFileSync(resultsPath);
-      assert.equal(resultsBytes.readUInt32BE(16), 1200); assert.equal(resultsBytes.readUInt32BE(20), 630);
-      await page.locator("canvas").screenshot({ path: path.join(output, `share-${sport}-results.png`) });
-      await page.screenshot({ path: path.join(output, `share-${sport}-results-mobile-viewport.png`) });
-      await page.getByRole("button", { name: "Close sharing" }).click();
       await page.setViewportSize({ width: 1440, height: 1000 });
       // Reload the saved record, then exercise locked/read-only behavior.
       await page.reload({ waitUntil: "networkidle" });
       assert.equal(await page.evaluate(() => allGamesPicked()), true);
+      const persistedTime = records.get(sport).savedAt;
+      assert.equal(await page.locator("#save-state time").getAttribute("datetime"), new Date(persistedTime).toISOString(), "reload keeps the saved timestamp");
+      await page.locator("#super-bowl-game .team-pick:not(.selected)").click();
       await page.evaluate(() => setPredictionEditingLocked(true));
+      assert.equal(await page.locator("#save-state time").getAttribute("datetime"), new Date(persistedTime).toISOString());
+      assert.equal(await page.evaluate(() => state.picks.superBowl), records.get(sport).picks.superBowl, "locking restores the persisted bracket");
+      assert.equal(await page.locator(".team-pick:enabled").count(), 0);
+      await page.locator(".final-actions").screenshot({ path: path.join(output, `prediction-status-${sport}-locked-desktop.png`) });
       assert.equal(await page.locator("#save-prediction").isDisabled(), true);
       assert.equal(await shareBracket.isEnabled(), true);
       // Missing/CORS-blocked logos must still yield a downloadable, origin-clean PNG.
@@ -256,6 +288,21 @@ const server = http.createServer((request, response) => {
       await page.getByRole("button", { name: "Close sharing" }).click();
       await context.unroute("https://a.espncdn.com/**");
     }
+    await page.evaluate(() => setPredictionEditingLocked(false));
+    await page.locator("#header-account").click();
+    await page.locator("#delete-prediction").click();
+    await page.locator("#cancel-delete-prediction").click();
+    assert.ok(records.has("nba"));
+    await page.locator("#delete-prediction").click();
+    await page.locator("#account-settings-view").screenshot({ path: path.join(output, "prediction-status-account-delete-desktop.png") });
+    await page.locator("#confirm-delete-prediction").click();
+    await page.waitForFunction(() => state.savedPrediction === null && !state.predictionDeleting);
+    assert.equal(records.has("nba"), false);
+    assert.equal(records.has("nfl"), true, "deletion affects only the selected sport");
+    assert.equal(await page.locator("#save-state").textContent(), "Not saved yet");
+    await page.locator("#randomize-bracket").click();
+    await page.locator("#save-prediction").click();
+    await page.waitForFunction(() => document.querySelector("#share-bracket").disabled === false);
     await context.close();
     const anonymous = await boot(false, false);
     for (const sport of ["nfl", "nba"]) {
@@ -282,7 +329,7 @@ const server = http.createServer((request, response) => {
     for (const name of ["share_card_opened", "share_image_generated", "share_native_used", "share_image_downloaded"]) assert.ok(events.some(event => event.event === name));
     assert.ok(!events.some(event => event.event === "share_link_copied"));
     await anonymous.context.close();
-    console.log("Browser checks passed: page loading, account modal, home group creation/invite, NFL/NBA randomize/save/reload/lock, anonymous public brackets, accessible share icon/text, Classic/Upset Edge images, image-only native sharing/cancel/error, download-only fallbacks, missing logos, and mobile overflow.");
+    console.log("Browser checks passed: page loading, account modal, home group creation/invite, NFL/NBA saved status, dirty/revert/resave/reload/lock and settings deletion, anonymous public brackets, accessible share icon/text, Classic/Upset Edge images, image-only native sharing/cancel/error, download-only fallbacks, missing logos, and mobile overflow.");
   } finally {
     await browser.close();
     server.close();

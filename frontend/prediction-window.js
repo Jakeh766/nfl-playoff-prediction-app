@@ -14,6 +14,10 @@ function predictionLockDateLabel(lockAt) {
 
 function setPredictionEditingLocked(locked, message = "") {
   state.predictionsLocked = locked;
+  if (PAGE === "picks" && locked && state.savedPrediction && predictionHasUnsavedChanges()) {
+    // At the deadline, the persisted bracket becomes the read-only view.
+    loadPredictionIntoEditor(false);
+  }
   document.body.classList.toggle("predictions-locked", locked);
 
   if (elements.predictionLockNotice) {
@@ -38,6 +42,7 @@ function setPredictionEditingLocked(locked, message = "") {
     renderSeedSelectors();
     if (state.bracketBuilt) renderBracket();
   }
+  if (PAGE === "picks") updateSaveState();
 }
 
 function renderPredictionCountdown() {

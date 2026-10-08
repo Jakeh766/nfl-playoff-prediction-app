@@ -161,6 +161,18 @@ if (dialogs) {
           <button class="button button-secondary" id="change-leaderboard-name" type="button">Change leaderboard name</button>
           <button class="button button-ghost" id="account-sign-out" type="button">Sign out</button>
         </div>
+        ${pageName === "picks" ? `
+        <section class="prediction-settings hidden" id="prediction-settings" aria-label="${SPORT.toUpperCase()} prediction settings">
+          <button class="delete-account-button" id="delete-prediction" type="button">Delete ${SPORT.toUpperCase()} prediction</button>
+          <div class="hidden" id="delete-prediction-confirmation">
+            <p>Delete your saved ${SPORT.toUpperCase()} prediction? This removes it from standings and group scores. Your account and other sport’s prediction stay saved.</p>
+            <div class="dialog-actions">
+              <button class="button button-secondary" id="cancel-delete-prediction" type="button">Cancel</button>
+              <button class="button button-danger" id="confirm-delete-prediction" type="button">Delete prediction</button>
+            </div>
+          </div>
+          <p class="dialog-message" id="delete-prediction-message" role="status"></p>
+        </section>` : ""}
         <button class="delete-account-button" id="delete-account" type="button">Delete account</button>
       </div>
       </div>
@@ -312,7 +324,8 @@ if (dialogs) {
 document.querySelectorAll(".sport-selector button").forEach(button => button.addEventListener("click", () => {
   const sport = button.dataset.sport;
   if (sport === SPORT) return;
-  if (typeof state !== "undefined" && state.bracketBuilt && !state.savedAt &&
+  if (typeof state !== "undefined" && state.bracketBuilt &&
+      (typeof predictionHasUnsavedChanges === "function" ? predictionHasUnsavedChanges() : !state.savedAt) &&
       !window.confirm("Switch sports and discard your unsaved bracket?")) {
     return;
   }

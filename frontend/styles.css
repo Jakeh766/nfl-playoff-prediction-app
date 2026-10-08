@@ -952,7 +952,6 @@ select:focus {
 }
 
 .predictor,
-.saved-section,
 .leaderboard-section,
 .scoring-section {
   max-width: 1440px;
@@ -1261,7 +1260,7 @@ body.account-modal-open {
 body.predictions-locked .predictor select,
 body.predictions-locked .predictor .team-pick,
 body.predictions-locked .predictor .field-actions button,
-body.predictions-locked .predictor .final-actions button {
+body.predictions-locked .predictor .final-actions button:disabled {
   cursor: not-allowed;
 }
 
@@ -2625,10 +2624,45 @@ body .champion-display strong {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  align-items: flex-start;
 }
 
-.saved-section {
+.bracket-share-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.bracket-share-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.bracket-share-help:empty,
+.prediction-settings .dialog-message:empty {
+  display: none;
+}
+
+.prediction-settings {
+  margin-top: 28px;
+  padding-top: 20px;
   border-top: 1px solid var(--section-line);
+}
+
+.prediction-settings p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.save-state time {
+  font-variant-numeric: tabular-nums;
+}
+
+.save-dot {
+  flex-shrink: 0;
 }
 
 .leaderboard-section {
@@ -3400,111 +3434,6 @@ body .champion-display strong {
   margin-bottom: 28px;
 }
 
-.saved-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.saved-card {
-  padding: 23px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  box-shadow: 0 7px 24px rgba(16, 34, 58, 0.05);
-}
-
-.saved-card-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.saved-card h3 {
-  margin-bottom: 5px;
-  font-family: var(--display);
-  font-size: 24px;
-  text-transform: uppercase;
-}
-
-.saved-card time {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.champion-chip {
-  display: inline-flex;
-  margin: 20px 0;
-  padding: 8px 11px;
-  align-items: center;
-  gap: 8px;
-  color: var(--warning-text);
-  background: var(--chip-background);
-  border: 1px solid var(--chip-border);
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.score-summary {
-  margin: 0 0 20px;
-  padding: 16px;
-  color: white;
-  background: var(--ink);
-  border-radius: 6px;
-}
-
-.score-summary-top {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.score-summary-label {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
-
-.score-summary-total {
-  font-family: var(--display);
-  font-size: 30px;
-  line-height: 1;
-}
-
-.score-summary-status {
-  margin: 11px 0 0;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.score-summary-status:empty { display: none; }
-
-.score-splits {
-  margin-top: 14px;
-  padding-top: 12px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.13);
-}
-
-.score-splits span {
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 10px;
-}
-
-.score-splits strong {
-  display: block;
-  margin-top: 3px;
-  color: white;
-  font-size: 13px;
-}
-
 .scoring-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
@@ -3692,26 +3621,6 @@ body .champion-display strong {
   font-size: 11px;
 }
 
-.saved-result-actions {
-  margin-top: 8px;
-}
-
-.delete-button {
-  margin-left: auto;
-  color: var(--danger-text);
-  background: transparent;
-  border: 0;
-}
-
-.empty-locker {
-  padding: 34px;
-  color: var(--muted);
-  background: var(--soft-white-45);
-  border: 1px dashed var(--line);
-  border-radius: 7px;
-  text-align: center;
-}
-
 .toast {
   position: fixed;
   z-index: 10;
@@ -3830,10 +3739,6 @@ footer p {
   .super-bowl-card {
     min-height: 440px;
     order: 3;
-  }
-
-  .saved-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .scoring-layout {
@@ -4043,7 +3948,6 @@ footer p {
   }
 
   .predictor,
-  .saved-section,
   .leaderboard-section,
   .scoring-section {
     padding-top: 68px;
@@ -4196,10 +4100,6 @@ footer p {
 
   .round.championship {
     margin-top: 8px;
-  }
-
-  .saved-grid {
-    grid-template-columns: 1fr;
   }
 
   .groups-toolbar,

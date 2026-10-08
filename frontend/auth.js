@@ -474,11 +474,11 @@ function renderLeaderboardProfile() {
   elements.changeLeaderboardName.textContent = state.leaderboardName
     ? "Change leaderboard name"
     : "Choose leaderboard name";
-  elements.savedSection?.classList.toggle("hidden", !state.signedIn);
 }
 
 function renderAuthentication(signedIn) {
   state.signedIn = signedIn;
+  if (PAGE === "picks" && signedIn) state.predictionLoading = true;
   state.userEmail = signedIn ? currentUserEmail() : "";
   if (signedIn) {
     Object.values(authPanels).forEach((panel) => panel.classList.add("hidden"));
@@ -498,15 +498,18 @@ function renderAuthentication(signedIn) {
     state.leaderboardName = "";
     pendingPredictionSave = false;
     state.savedPrediction = null;
+    state.savedAt = null;
+    state.predictionLoadFailed = false;
+    state.predictionLoading = false;
     state.groups = [];
     state.groupsLoaded = false;
     groupMembershipRequest++;
     state.activeGroupId = "";
     state.groupLeaderboard = null;
     state.groupSummaries = {};
-    elements.savedSection?.classList.add("hidden");
   }
   renderLeaderboardProfile();
+  if (PAGE === "picks") updateSaveState();
   if (!signedIn && typeof renderGroups === "function") renderGroups();
   updateGroupsNavigation();
 }

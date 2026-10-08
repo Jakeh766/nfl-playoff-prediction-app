@@ -420,7 +420,9 @@ class LoginFormTests(unittest.TestCase):
         self.assertNotIn('id="leaderboard-section"', home)
         self.assertNotIn('id="scoring-section"', home)
         self.assertIn('id="predictor"', picks)
-        self.assertIn('id="saved-section"', picks)
+        self.assertNotIn('id="saved-section"', picks)
+        self.assertNotIn('id="saved-grid"', picks)
+        self.assertIn('id="bracket-share-slot"', picks)
         self.assertIn('id="leaderboard-section"', leaderboard)
         self.assertIn('id="scoring-section"', scoring)
 
