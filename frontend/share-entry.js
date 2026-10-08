@@ -15,6 +15,7 @@ async function sharePrediction(leaderboardName, kind = "picks", mode = "classic"
     const season = bracket.season || board?.season || state.predictionWindow?.season;
     const seasonLabel = IS_NBA && Number(season) === NBA_SEASON.season ? NBA_SEASON.label : season;
     await sharing.openShareCard({ bracket, kind, mode, rank: entry?.rank,
+      buildGames: buildConferenceGames,
       sport: SPORT, season: seasonLabel, origin: window.location.origin, local: LOCAL_PREVIEW,
       track: (event, details) => window.siteAnalytics?.track(event, details) });
   } catch (_error) {

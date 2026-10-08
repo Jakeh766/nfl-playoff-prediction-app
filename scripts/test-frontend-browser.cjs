@@ -38,6 +38,13 @@ const server = http.createServer((request, response) => {
         if (window.cancelShare) throw new DOMException("Cancelled", "AbortError");
         window.sharedPayload = { title: payload.title, url: payload.url, files: payload.files?.map(file => ({ name: file.name, type: file.type, size: file.size })) };
       } });
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (...args) {
+        if (this.canvas.width === 1200 && this.canvas.height === 630) {
+          (this.canvas.bracketText || (this.canvas.bracketText = [])).push(String(args[0]));
+        }
+        return fillText.apply(this, args);
+      };
     }, { signedIn });
     await context.route("**/auth-config.js", route => route.fulfill({ contentType: "application/javascript", body: 'window.AUTH_CONFIG = {environment:"dev", clientId:"fixture", region:"us-east-1"};' }));
     await context.route("**/api/**", async route => {
@@ -89,6 +96,7 @@ const server = http.createServer((request, response) => {
     await page.locator("#group-password").fill("fixture-password");
     await page.locator("#submit-group").click();
     await page.locator("#group-invite-link").waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.querySelector("#group-invite-link").value.includes("invite="));
     assert.match(await page.locator("#group-invite-link").inputValue(), /invite=/);
     await page.locator("#close-group-invite").click();
     for (const sport of ["nfl", "nba"]) {
@@ -100,6 +108,18 @@ const server = http.createServer((request, response) => {
       await page.getByRole("button", { name: "Share my picks", exact: true }).click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       assert.deepEqual(await page.locator(".prediction-share-preview canvas").evaluate(node => [node.width, node.height]), [1200, 630]);
+      const bracketLabel = await page.locator("canvas").getAttribute("aria-label");
+      assert.match(bracketLabel, /Full playoff bracket/);
+      for (const conference of Object.keys(records.get(sport).seeds)) {
+        for (const team of records.get(sport).seeds[conference]) assert.ok(bracketLabel.includes(team));
+        for (const pick of Object.values(records.get(sport).picks[conference])) assert.ok(bracketLabel.includes(`pick ${pick}`));
+      }
+      const drawn = await page.locator("canvas").evaluate(node => node.bracketText);
+      const allTeams = Object.values(records.get(sport).seeds).flat();
+      for (const team of allTeams) {
+        for (const word of team.split(" ")) assert.ok(drawn.some(text => text.split(" ").includes(word)), `export draws ${team}`);
+      }
+      assert.equal(drawn.filter(text => text === "First-round bye").length, sport === "nfl" ? 2 : 0);
       await page.screenshot({ path: path.join(output, `share-${sport}-desktop.png`), fullPage: true });
       await page.screenshot({ path: path.join(output, `share-${sport}-desktop-viewport.png`) });
       await page.locator(".prediction-share-preview canvas").screenshot({ path: path.join(output, `share-${sport}-card.png`) });
@@ -128,6 +148,14 @@ const server = http.createServer((request, response) => {
       await page.locator("[data-share-download]:not([disabled])").waitFor();
       const label = await page.locator("canvas").getAttribute("aria-label");
       assert.match(label, /172 points/); assert.match(label, /Rank 1 overall/);
+      assert.match(label, /Full playoff bracket/);
+      const resultsDownloading = page.waitForEvent("download");
+      await page.locator("[data-share-download]").click();
+      const resultsDownload = await resultsDownloading;
+      const resultsPath = path.join(output, `share-${sport}-results-download.png`);
+      await resultsDownload.saveAs(resultsPath);
+      const resultsBytes = fs.readFileSync(resultsPath);
+      assert.equal(resultsBytes.readUInt32BE(16), 1200); assert.equal(resultsBytes.readUInt32BE(20), 630);
       await page.locator("canvas").screenshot({ path: path.join(output, `share-${sport}-results.png`) });
       await page.screenshot({ path: path.join(output, `share-${sport}-results-mobile-viewport.png`) });
       await page.getByRole("button", { name: "Close sharing" }).click();

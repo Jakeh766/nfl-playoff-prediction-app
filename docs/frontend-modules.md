@@ -27,8 +27,8 @@ implementation uses native ES modules loaded only when someone opens a card.
 | `picks.js` | Editable seeds/bracket and saved predictions | My Picks |
 | `share-entry.js` | Small adapter that fetches public data and lazily loads sharing | Home, My Picks, Leaderboard, Groups |
 | `sharing.js` | Accessible preview dialog, native sharing, download, link copy | On demand |
-| `share-model.js` | Pure public-field allowlist, public URL, share capability fallback | On demand |
-| `share-card.js` | Branded 1200×630 canvas/PNG renderer | On demand |
+| `share-model.js` | Public-field allowlist, shared bracket-rule adapter, public URL, share capability fallback | On demand |
+| `share-card.js` | Full bracket 1200×630 canvas/PNG renderer | On demand |
 | `monitoring.js`, `goatcounter.js`, `engagement.js` | Existing guarded analytics | Existing page placement |
 | `bootstrap.js` | Page-aware event binding and initialization | Main pages |
 
@@ -44,8 +44,13 @@ public brackets offer both actions as applicable; results respect the selected
 Classic or Upset Edge mode and use its overall rank and score.
 
 The image is generated locally as a PNG, with the site's trophy, colors, and
-Oswald/DM Sans fonts. It excludes the full bracket and uses text team names so
-third-party logo downloads cannot taint the canvas. Supported browsers share the
+Oswald/DM Sans fonts. Both picks and results exports show the complete saved
+bracket: every seeded team, matchup, chosen winner, conference champion, final,
+and champion pick. Results add a compact overall-rank/score line. NFL byes and
+divisional reseeding use the same `buildConferenceGames` rules as the page; NBA
+keeps its fixed bracket. Winning paths connect the rounds and selected winners
+are highlighted. The image uses text team names so third-party logo downloads
+cannot taint the canvas. Supported browsers share the
 image via Web Share; browsers without file sharing share the link. Download and
 copy-link actions remain available. Image export failure leaves the public link
 usable. Native-share cancellation leaves the preview open without a success event.

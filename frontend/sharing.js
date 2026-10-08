@@ -13,7 +13,7 @@ export async function openShareCard(context) {
     <div class="dialog-heading"><h2 id="prediction-share-title">${model.kind === "results" ? "Share my results" : "Share my picks"}</h2>
       <button class="dialog-close" type="button" aria-label="Close sharing">×</button></div>
     <div class="prediction-share-preview" aria-busy="true"></div>
-    <p class="input-hint">Your public picks and overall standings. Private group details are excluded.</p>
+    <p class="input-hint">Your full saved bracket, ready to share. Private group details are excluded.</p>
     <p class="dialog-message" role="status" aria-live="polite">Generating your image…</p>
     <div class="dialog-actions">
       <button class="button button-primary" data-share-native type="button" hidden disabled>Share</button>
