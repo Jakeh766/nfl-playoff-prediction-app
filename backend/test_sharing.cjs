@@ -90,6 +90,7 @@ test("sharing inside a group refetches public data and never uses the group boar
     rankLeaderboardEntries: entries => entries, state: { groupLeaderboard: { entries: [{ memberId: "PRIVATE" }] } },
     SPORT: "nfl", IS_NBA: false, LOCAL_PREVIEW: false,
     buildConferenceGames: rules("nfl"),
+    teamLogoUrl: name => `https://a.espncdn.com/i/teamlogos/nfl/500/${name}.png`,
     window: { location: { origin: "https://example.com" } }, showToast() {},
   });
   vm.runInContext(source.replace('import("./sharing.js")', "loadSharing()"), sandbox);
@@ -99,7 +100,61 @@ test("sharing inside a group refetches public data and never uses the group boar
   assert.equal(opened[0].mode, "vegas");
   assert.equal(opened[0].bracket, publicData);
   assert.equal(typeof opened[0].buildGames, "function");
+  assert.equal(typeof opened[0].logoUrl, "function");
   assert.equal("groupLeaderboard" in opened[0], false);
+});
+
+test("share logos reuse only sport-specific public CDN paths with anonymous CORS and no referrer", async () => {
+  const { loadShareLogos } = await import("../frontend/share-card.js");
+  const previousImage = global.Image, requested = [];
+  global.Image = class {
+    naturalWidth = 500;
+    naturalHeight = 500;
+    set src(url) {
+      requested.push({ url, cors: this.crossOrigin, referrer: this.referrerPolicy });
+      queueMicrotask(() => this.onload?.());
+    }
+  };
+  try {
+    for (const sport of ["NFL", "NBA"]) {
+      const model = { sport, conferences: [{ seeds: ["One", "One", "Two", "Bad", "Private", "WrongSport", "Missing"].map(name => ({ name })) }] };
+      const urls = { One: `https://a.espncdn.com/i/teamlogos/${sport.toLowerCase()}/500/min.png`,
+        Two: `https://a.espncdn.com/i/teamlogos/${sport.toLowerCase()}/500/bos.png`,
+        Bad: "https://untrusted.example/PRIVATE.png", Private: `https://a.espncdn.com/i/teamlogos/${sport.toLowerCase()}/500/min.png?invite=PRIVATE`,
+        WrongSport: `https://a.espncdn.com/i/teamlogos/${sport === "NFL" ? "nba" : "nfl"}/500/min.png` };
+      const logos = await loadShareLogos(model, name => urls[name]);
+      assert.deepEqual([...logos.keys()], ["One", "Two"]);
+    }
+    assert.equal(requested.length, 4); // Duplicate seeds are fetched once per export.
+    for (const request of requested) {
+      assert.equal(request.cors, "anonymous"); assert.equal(request.referrer, "no-referrer");
+      assert.doesNotMatch(request.url, /PRIVATE|invite/);
+    }
+  } finally { global.Image = previousImage; }
+});
+
+test("failed, empty, slow, or unavailable logos leave a usable text-only export", async () => {
+  const { loadShareLogos, shareTeamName } = await import("../frontend/share-card.js");
+  const previousImage = global.Image;
+  global.Image = class {
+    naturalWidth = 0;
+    naturalHeight = 0;
+    set src(url) {
+      if (!url) return;
+      if (url.endsWith("err.png")) queueMicrotask(() => this.onerror?.());
+      if (url.endsWith("emp.png")) queueMicrotask(() => this.onload?.());
+    }
+  };
+  try {
+    const model = { sport: "NBA", conferences: [{ seeds: ["err", "emp", "slow"].map(name => ({ name })) }] };
+    assert.equal((await loadShareLogos(model, name => `https://a.espncdn.com/i/teamlogos/nba/500/${name}.png`, { timeoutMs: 10 })).size, 0);
+    assert.equal((await loadShareLogos(model)).size, 0);
+    assert.equal((await loadShareLogos(model, () => { throw new Error("missing"); })).size, 0);
+    assert.equal(shareTeamName("Portland Trail Blazers"), "Trail Blazers");
+    assert.equal(shareTeamName("Minnesota Timberwolves"), "Timberwolves");
+    assert.equal(shareTeamName("San Francisco 49ers"), "49ers");
+    assert.equal(shareTeamName(null), "TBD");
+  } finally { global.Image = previousImage; }
 });
 
 test("full NFL export follows reseeding, including the first seed bye and every picked winner", async () => {

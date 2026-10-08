@@ -49,8 +49,14 @@ bracket: every seeded team, matchup, chosen winner, conference champion, final,
 and champion pick. Results add a compact overall-rank/score line. NFL byes and
 divisional reseeding use the same `buildConferenceGames` rules as the page; NBA
 keeps its fixed bracket. Winning paths connect the rounds and selected winners
-are highlighted. The image uses text team names so third-party logo downloads
-cannot taint the canvas. Supported browsers share the
+are highlighted. Compact franchise names and consistently sized team logos make
+the bracket easier to scan, with logos repeated in the final and champion area.
+Logos reuse `teamLogoUrl` and the existing ESPN CDN, with anonymous CORS,
+no referrer, sport-specific allowlisted paths, deduplication, and a four-second
+timeout. Failed or unavailable logos leave the team name and seed visible and
+the PNG downloadable. No credentials or share parameters reach logo requests.
+The image footer contains only the brand and `predictplayoffs.com`; it has no
+legend, structure explanation, or public prediction URL. Supported browsers share the
 image via Web Share; browsers without file sharing share the link. Download and
 copy-link actions remain available. Image export failure leaves the public link
 usable. Native-share cancellation leaves the preview open without a success event.

@@ -42,8 +42,16 @@ const server = http.createServer((request, response) => {
       CanvasRenderingContext2D.prototype.fillText = function (...args) {
         if (this.canvas.width === 1200 && this.canvas.height === 630) {
           (this.canvas.bracketText || (this.canvas.bracketText = [])).push(String(args[0]));
+          (this.canvas.bracketLabels || (this.canvas.bracketLabels = [])).push({ text: String(args[0]), color: this.fillStyle });
         }
         return fillText.apply(this, args);
+      };
+      const drawImage = CanvasRenderingContext2D.prototype.drawImage;
+      CanvasRenderingContext2D.prototype.drawImage = function (...args) {
+        if (this.canvas.width === 1200 && this.canvas.height === 630) {
+          (this.canvas.bracketLogos || (this.canvas.bracketLogos = [])).push({ src: args[0].src, x: args[1], y: args[2], width: args[3], height: args[4] });
+        }
+        return drawImage.apply(this, args);
       };
     }, { signedIn });
     await context.route("**/auth-config.js", route => route.fulfill({ contentType: "application/javascript", body: 'window.AUTH_CONFIG = {environment:"dev", clientId:"fixture", region:"us-east-1"};' }));
@@ -117,8 +125,18 @@ const server = http.createServer((request, response) => {
       const drawn = await page.locator("canvas").evaluate(node => node.bracketText);
       const allTeams = Object.values(records.get(sport).seeds).flat();
       for (const team of allTeams) {
-        for (const word of team.split(" ")) assert.ok(drawn.some(text => text.split(" ").includes(word)), `export draws ${team}`);
+        const nickname = team.endsWith("Trail Blazers") ? "Trail Blazers" : team.split(" ").at(-1);
+        assert.ok(drawn.includes(nickname), `export draws ${team}`);
       }
+      assert.ok(!drawn.includes("Selected winners"));
+      assert.ok(!drawn.includes("Fixed playoff bracket"));
+      assert.ok(!drawn.some(text => text.includes("?player=") || text.includes("View my bracket")));
+      const logos = await page.locator("canvas").evaluate(node => node.bracketLogos.filter(logo => logo.src.includes("teamlogos")));
+      assert.ok(logos.length >= 29, `${sport} export draws logos through every round`);
+      assert.ok(logos.some(logo => logo.x > 575 && logo.x < 625 && logo.y > 430), "champion logo is centered");
+      const labels = await page.locator("canvas").evaluate(node => node.bracketLabels);
+      assert.ok(labels.some(label => label.color === "#fffefa"), "selected winners use light text on navy");
+      assert.ok(labels.some(label => label.color === "#566479"), "non-advanced teams use quieter text");
       assert.equal(drawn.filter(text => text === "First-round bye").length, sport === "nfl" ? 2 : 0);
       await page.screenshot({ path: path.join(output, `share-${sport}-desktop.png`), fullPage: true });
       await page.screenshot({ path: path.join(output, `share-${sport}-desktop-viewport.png`) });
@@ -166,6 +184,21 @@ const server = http.createServer((request, response) => {
       await page.evaluate(() => setPredictionEditingLocked(true));
       assert.equal(await page.locator("#save-prediction").isDisabled(), true);
       assert.equal(await page.getByRole("button", { name: "Share my picks", exact: true }).isEnabled(), true);
+      // Missing/CORS-blocked logos must still yield a downloadable, origin-clean PNG.
+      await context.route("https://a.espncdn.com/**", route => sport === "nfl" ? route.abort() : route.fulfill({
+        status: 200, contentType: "image/png",
+        headers: { "access-control-allow-origin": "https://not-permitted.example" },
+        body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRZkAAAAASUVORK5CYII=", "base64"),
+      }));
+      await page.getByRole("button", { name: "Share my picks", exact: true }).click();
+      await page.locator("[data-share-download]:not([disabled])").waitFor();
+      assert.equal(await page.locator("canvas").evaluate(node => (node.bracketLogos || []).filter(logo => logo.src.includes("teamlogos")).length), 0);
+      assert.match(await page.locator("canvas").getAttribute("aria-label"), /Full playoff bracket/);
+      const fallbackDownloading = page.waitForEvent("download");
+      await page.locator("[data-share-download]").click();
+      await (await fallbackDownloading).saveAs(path.join(output, `share-${sport}-fallback-download.png`));
+      await page.getByRole("button", { name: "Close sharing" }).click();
+      await context.unroute("https://a.espncdn.com/**");
     }
     await context.close();
     const anonymous = await boot(false);

@@ -1,6 +1,41 @@
 // Full bracket export using the site's typography, colors, and trophy asset.
-// Text team names keep PNG export independent of third-party logo downloads.
-export async function renderShareCard(model) {
+// Only the existing public ESPN logo paths are eligible for export.
+export async function loadShareLogos(model, logoUrl, { timeoutMs = 4000 } = {}) {
+  const logos = new Map();
+  if (typeof logoUrl !== "function") return logos;
+  const names = new Set(model.conferences.flatMap(c => c.seeds.filter(Boolean).map(t => t.name)));
+  const allowed = new RegExp(`^https://a\\.espncdn\\.com/i/teamlogos/${model.sport.toLowerCase()}/500/[a-z0-9]{2,4}\\.png$`);
+  await Promise.all([...names].map(async name => {
+    let url;
+    try { url = logoUrl(name); } catch (_error) { return; }
+    if (typeof url !== "string" || !allowed.test(url)) return;
+    const logo = new Image();
+    // Anonymous CORS prevents external images from tainting the PNG canvas.
+    logo.crossOrigin = "anonymous";
+    logo.referrerPolicy = "no-referrer";
+    const loaded = await new Promise(resolve => {
+      const finish = value => {
+        clearTimeout(timer);
+        logo.onload = logo.onerror = null;
+        resolve(value);
+      };
+      const timer = setTimeout(() => { finish(false); logo.src = ""; }, timeoutMs);
+      logo.onload = () => finish(Boolean(logo.naturalWidth && logo.naturalHeight));
+      logo.onerror = () => finish(false);
+      logo.src = url;
+    });
+    if (loaded) logos.set(name, logo);
+  }));
+  return logos;
+}
+
+export function shareTeamName(name) {
+  if (!name) return "TBD";
+  return name.endsWith("Trail Blazers") ? "Trail Blazers" : name.split(" ").at(-1);
+}
+
+export async function renderShareCard(model, { logoUrl } = {}) {
+  const logoPromise = loadShareLogos(model, logoUrl);
   await Promise.all([
     document.fonts?.load('500 60px "Oswald"'),
     document.fonts?.load('700 32px "DM Sans"'),
@@ -8,12 +43,13 @@ export async function renderShareCard(model) {
   const mark = new Image();
   mark.src = "/assets/predict-playoffs-mark.svg";
   await mark.decode().catch(() => {});
+  const logos = await logoPromise;
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
   canvas.height = 630;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Your browser could not generate an image. Copy the public link instead.");
-  const ink = "#10223a", muted = "#647084", accent = "#e33b3f", line = "#dcd9d1";
+  const ink = "#10223a", muted = "#566479", accent = "#e33b3f", line = "#dcd9d1";
   ctx.fillStyle = "#f5f3ee";
   ctx.fillRect(0, 0, 1200, 630);
   ctx.fillStyle = accent;
@@ -46,19 +82,16 @@ export async function renderShareCard(model) {
     ctx.fillStyle = fill;
     ctx.fill();
   }
-  text(model.player, 32, 54, 32, ink, 600);
+  text(model.player, 32, 49, 27, ink, 600);
   ctx.textAlign = "right";
   text(`${model.sport} · ${model.season}`, 1168, 52, 25, ink, 400);
   ctx.textAlign = "left";
-  text("My playoff bracket", 32, 89, 24, ink, 400, true);
+  text("My playoff bracket", 32, 91, 33, ink, 400, true);
   if (model.kind === "results") {
     ctx.textAlign = "right";
     const total = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(model.total);
     text(`${model.rank ? `#${model.rank} overall · ` : ""}${total} points · ${model.mode}`, 1168, 87, 22, ink, 720);
     ctx.textAlign = "left";
-  } else {
-    box(984, 72, 14, 14, ink);
-    text("Selected winners", 1006, 85, 14, muted, 162);
   }
   ctx.fillStyle = line;
   ctx.fillRect(32, 108, 1136, 1);
@@ -90,8 +123,8 @@ export async function renderShareCard(model) {
     ctx.lineTo(middle, rowY(source, row));
     ctx.lineTo(middle, rowY(target, targetRow));
     ctx.lineTo(toX, rowY(target, targetRow));
-    ctx.strokeStyle = "#8d9aaa";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#536a84";
+    ctx.lineWidth = 2;
     ctx.stroke();
   }
   positioned.forEach((rounds, side) => {
@@ -103,6 +136,18 @@ export async function renderShareCard(model) {
     const source = rounds[2][0];
     if (source && finalTeams[side]?.name === source.selected) connect(source, final, side, side);
   });
+
+  function drawLogo(name, x, y, size) {
+    const logo = logos.get(name);
+    if (!logo) return false;
+    // A pale plate keeps every team's logo visible on selected navy rows.
+    box(x, y, size, size, "#fffefa");
+    const inset = 2;
+    const scale = Math.min((size - inset * 2) / logo.naturalWidth, (size - inset * 2) / logo.naturalHeight);
+    const w = logo.naturalWidth * scale, h = logo.naturalHeight * scale;
+    ctx.drawImage(logo, x + (size - w) / 2, y + (size - h) / 2, w, h);
+    return true;
+  }
 
   function drawGame(game) {
     box(game.x, game.y, game.width, height);
@@ -119,8 +164,11 @@ export async function renderShareCard(model) {
         text("First-round bye", game.x + 10, top + 23, 13, muted, game.width - 20);
         return;
       }
-      text(String(team?.seed || "—"), game.x + 8, top + 23, 12, selected ? "#c9d9ed" : muted, 18);
-      wrapped(team?.name || "TBD", game.x + 28, top + 22, game.width - 36, 14, selected ? "#fffefa" : ink);
+      text(String(team?.seed || "—"), game.x + 7, top + 24, 14, selected ? "#dbe7f6" : muted, 14);
+      const hasLogo = drawLogo(team?.name, game.x + 23, top + 5, 26);
+      const nameX = game.x + (hasLogo ? 55 : 25);
+      text(shareTeamName(team?.name), nameX, top + 24, 16,
+        selected ? "#fffefa" : muted, game.x + game.width - nameX - 7);
     });
     ctx.restore();
     ctx.beginPath();
@@ -138,18 +186,19 @@ export async function renderShareCard(model) {
     labels.forEach((label, round) => text(label, columns[side][round], 171, 14, muted, width));
     positioned[side].flat().forEach(drawGame);
   });
-  if (mark.naturalWidth) ctx.drawImage(mark, 576, 214, 48, 48);
+  if (mark.naturalWidth) ctx.drawImage(mark, 580, 218, 40, 40);
   ctx.textAlign = "center";
-  text(model.final, 600, 292, 24, ink, 156, true);
+  text(model.final, 600, 294, 29, ink, 156, true);
   ctx.textAlign = "left";
   drawGame(final);
   ctx.textAlign = "center";
-  text("CHAMPION PICK", 600, 424, 13, muted, 156);
-  wrapped(model.champion || "TBD", 600, 455, 156, 21, ink, true, "center");
+  text("Champion pick", 600, 421, 16, ink, 156, true);
+  const championLogo = drawLogo(model.champion, 576, 433, 48);
+  wrapped(shareTeamName(model.champion), 600, championLogo ? 510 : 466, 156, 29, ink, true, "center");
   const statuses = { alive: "Still in contention", eliminated: "Eliminated", won: "Champion confirmed" };
   if (model.kind === "results" && model.championStatus) {
     ctx.textAlign = "center";
-    text(statuses[model.championStatus], 600, 494, 13,
+    text(statuses[model.championStatus], 600, championLogo ? 536 : 500, 13,
       model.championStatus === "eliminated" ? "#b7202d" : "#0d3972", 156);
   }
   ctx.textAlign = "left";
@@ -157,7 +206,6 @@ export async function renderShareCard(model) {
   ctx.fillRect(32, 556, 1136, 1);
   if (mark.naturalWidth) ctx.drawImage(mark, 32, 575, 32, 32);
   text("PREDICT PLAYOFFS", mark.naturalWidth ? 76 : 32, 602, 25, ink, 350, true);
-  text(model.sport === "NFL" ? "Divisional matchups reseeded after Wild Card" : "Fixed playoff bracket", 600, 600, 13, muted, 310);
   ctx.textAlign = "right";
   text("predictplayoffs.com", 1168, 601, 20, ink, 245);
   ctx.textAlign = "left";

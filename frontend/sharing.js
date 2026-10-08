@@ -83,7 +83,7 @@ export async function openShareCard(context) {
   dialog.showModal();
   track("share_card_opened");
   try {
-    const canvas = await renderShareCard(model);
+    const canvas = await renderShareCard(model, { logoUrl: context.logoUrl });
     if (!dialog.open) return;
     preview.appendChild(canvas);
     const blob = await canvasPng(canvas);
