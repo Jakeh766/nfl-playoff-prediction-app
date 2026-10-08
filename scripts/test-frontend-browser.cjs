@@ -293,7 +293,7 @@ const server = http.createServer((request, response) => {
       }
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await page.locator(".final-actions").evaluate(node => node.scrollWidth <= node.clientWidth), true);
-      assert.deepEqual(await page.locator(".final-actions button").allTextContents(), ["Reset game picks", "Share bracket", "Save changes"]);
+      assert.deepEqual(await page.locator(".final-actions button").allTextContents(), ["Share bracket", "Save changes"]);
       await page.evaluate(() => { window.disableImageSharing = true; });
       await shareBracket.click();
       await page.locator("[data-share-download]:not([disabled])").waitFor();

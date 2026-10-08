@@ -94,7 +94,6 @@ const elements = {
   superBowlGame: document.querySelector("#super-bowl-game"),
   championDisplay: document.querySelector("#champion-display"),
   savePrediction: document.querySelector("#save-prediction"),
-  resetPicks: document.querySelector("#reset-picks"),
   saveState: document.querySelector("#save-state"),
   bracketShareSlot: document.querySelector("#bracket-share-slot"),
   bracketShareHelp: document.querySelector("#bracket-share-help"),

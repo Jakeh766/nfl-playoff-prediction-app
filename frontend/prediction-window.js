@@ -32,7 +32,6 @@ function setPredictionEditingLocked(locked, message = "") {
   [
     elements.randomizeBracket,
     elements.buildBracket,
-    elements.resetPicks,
     elements.savePrediction,
   ].forEach((control) => {
     if (control) control.disabled = locked;

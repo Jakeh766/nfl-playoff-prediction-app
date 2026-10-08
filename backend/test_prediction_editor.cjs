@@ -31,7 +31,7 @@ function boot() {
   const elements = Object.fromEntries(["saveState", "savePrediction", "bracketShareSlot", "bracketShareHelp",
     "predictionSettings", "deletePrediction", "predictionLoadError", "predictor", "bracketSection",
     "confirmDeletePrediction", "cancelDeletePrediction", "deletePredictionConfirmation", "deletePredictionMessage",
-    "afcSeeds", "nfcSeeds", "buildBracket", "randomizeBracket", "resetPicks", "seedingMessage"].map(key => [key, control()]));
+    "afcSeeds", "nfcSeeds", "buildBracket", "randomizeBracket", "seedingMessage"].map(key => [key, control()]));
   const time = control(), share = control();
   elements.saveState.querySelector = () => time;
   elements.bracketShareSlot.querySelector = () => share;
@@ -78,7 +78,7 @@ test("first-save state and saved timestamps use persisted metadata and locale da
   assert.equal(state.savedAt, record.savedAt, "loading never generates a new saved timestamp");
 });
 
-test("pick, seed, division and reset changes gate sharing; reverting restores the saved state", () => {
+test("pick, seed and division changes gate sharing; reverting restores the saved state", () => {
   const { sandbox, state, elements, time, share, record } = boot();
   sandbox.handleGamePick("", "super-bowl", "Three", true);
   assert.equal(time.textContent, "Unsaved changes");
@@ -89,7 +89,7 @@ test("pick, seed, division and reset changes gate sharing; reverting restores th
   sandbox.handleGamePick("", "super-bowl", "One", true);
   assert.equal(share.disabled, false);
   for (const change of [() => { state.seeds.AFC.reverse(); },
-    () => { state.divisionWinners.AFC.North = "Two"; }, () => sandbox.resetGamePicks()]) {
+    () => { state.divisionWinners.AFC.North = "Two"; }]) {
     change(); sandbox.updateSaveState();
     assert.equal(share.disabled, true);
     sandbox.loadPredictionIntoEditor(false);
@@ -173,7 +173,6 @@ test("locking restores the persisted bracket, preserves its timestamp, and keeps
   assert.equal(state.picks.superBowl, record.picks.superBowl);
   assert.equal(time.dateTime, new Date(record.savedAt).toISOString());
   assert.equal(elements.savePrediction.disabled, true);
-  assert.equal(elements.resetPicks.disabled, true);
   assert.equal(share.disabled, false);
   sandbox.handleGamePick("", "super-bowl", "Three", true);
   await sandbox.savePrediction();

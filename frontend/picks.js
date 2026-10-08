@@ -774,14 +774,6 @@ function loadPredictionIntoEditor(scrollToPredictor = true) {
   }
 }
 
-function resetGamePicks() {
-  if (state.predictionsLocked) return;
-  state.picks = createEmptyPicks();
-  renderBracket();
-  updateSaveState();
-  showToast("Game picks reset. Your seeding is unchanged.");
-}
-
 async function deletePrediction() {
   if (!state.savedPrediction || state.predictionDeleting || state.predictionSaving) return;
   state.predictionDeleting = true;
