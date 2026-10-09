@@ -36,7 +36,7 @@ class Counters:
 
 class EngagementTests(unittest.TestCase):
     def setUp(self):
-        environment = patch.dict(os.environ, ENVIRONMENT="dev", ADMIN_ANALYTICS_CACHE_TABLE="dev-cache")
+        environment = patch.dict(os.environ, ENVIRONMENT="dev", ACTIVE_ENGAGEMENT_ENABLED="true", ADMIN_ANALYTICS_CACHE_TABLE="dev-cache")
         environment.start(); self.addCleanup(environment.stop)
         self.table = Counters()
         resource = patch.object(engagement.boto3, "resource", return_value=types.SimpleNamespace(Table=lambda name: self.table))
@@ -61,15 +61,38 @@ class EngagementTests(unittest.TestCase):
         self.assertGreater(item["expiresAt"], int(self.now.timestamp()))
         self.assertLess(item["expiresAt"], int(self.now.timestamp()) + 400 * 86400)
 
-    def test_rejects_extra_fields_scalars_routes_sports_and_production(self):
+    def test_rejects_extra_fields_scalars_routes_sports_and_unknown_environment(self):
         for change in [{"milliseconds": value} for value in [0, -1, 60001, True, None, "100", 1.5]] + [
             {"page": "/leaderboard?invite=private"}, {"page": []}, {"page": "/admin/analytics"},
             {"page": "/nba", "sport": "nfl"}, {"page": "/privacy", "sport": "nba"}, {"sport": []},
             {"event": "page_view"}, {"accountId": "private"}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 engagement.record({}, {**self.payload, **change})
-        with patch.dict(os.environ, ENVIRONMENT="prod"), self.assertRaises(ValueError):
+        with patch.dict(os.environ, ENVIRONMENT="preview"), self.assertRaises(ValueError):
             engagement.record({}, self.payload)
+        self.assertEqual(self.table.writes, [])
+
+    def test_prod_dispatch_stores_only_aggregate_counters_in_its_own_cache(self):
+        prod_table = Counters()
+        tables = {"dev-cache": self.table, "prod-cache": prod_table}
+        app = importlib.import_module("app")
+        event = {"rawPath": "/api/analytics", "requestContext": {"http": {"method": "POST"}},
+                 "body": json.dumps(self.payload)}
+        with patch.dict(os.environ, ENVIRONMENT="prod", ADMIN_ANALYTICS_CACHE_TABLE="prod-cache"), \
+                patch.object(engagement.boto3, "resource", return_value=types.SimpleNamespace(Table=tables.__getitem__)):
+            for headers in ({"Sec-GPC": "1"}, {"DNT": "1"}):
+                self.assertEqual(app.handler({**event, "headers": headers}, None)["statusCode"], 202)
+            self.assertEqual(prod_table.writes, [])
+            self.assertEqual(app.handler(event, None)["statusCode"], 202)
+            self.assertEqual(engagement.report(date(2026, 10, 6), date(2026, 10, 6))["value"], 30)
+        self.assertEqual(self.table.writes, [])
+        self.assertEqual(set(prod_table.items["engagement:v1:2026-10"]), {"d06_leaderboard_nba", "expiresAt"})
+
+    def test_disabled_or_missing_flag_prevents_collection_in_both_environments(self):
+        for environment in ("dev", "prod"):
+            for enabled in ("false", "", "TRUE"):
+                with patch.dict(os.environ, ENVIRONMENT=environment, ACTIVE_ENGAGEMENT_ENABLED=enabled), self.assertRaises(ValueError):
+                    engagement.record({}, self.payload)
         self.assertEqual(self.table.writes, [])
 
     def test_privacy_headers_block_writes_and_allows_only_valid_shared_privacy_label(self):

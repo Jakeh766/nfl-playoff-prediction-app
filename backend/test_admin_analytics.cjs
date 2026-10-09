@@ -63,6 +63,7 @@ async function boot(options = {}) {
           AccessToken: jwt(options.refreshedGroups), IdToken: "new-id-token", ExpiresIn: 3600 } }) };
       }
       const provider = url.split("?")[0].split("/").at(-1);
+      await options.beforeProvider?.(provider);
       const status = options.forbidden ? 403 : options.invalidRange && provider === "analytics" ? 400 : options.failedProvider === provider ? 503 : 200;
       return { status, ok: status === 200, json: async () => provider === "analytics" ?
         options.invalidRange ? { message: "Choose up to 93 days within the past year." } :
@@ -71,7 +72,8 @@ async function boot(options = {}) {
           { label: provider === "custom" ? "<img onerror=secret>" : "Visits", value: 100, format: "number" },
           { label: "CTR", value: .025, format: "percent" }], tables: [{ title: "Top pages",
           columns: [{ key: "page", label: "Page", format: "text" }], rows: [{ page: "<script>alert('private')</script>" }] }],
-          range: { start: "2026-09-01", end: "2026-09-28", timezone: "UTC" },
+          range: { start: new URLSearchParams(url.split("?")[1]).get("start"),
+            end: new URLSearchParams(url.split("?")[1]).get("end"), timezone: "UTC" },
           message: "Connect this provider using the setup guide.", ...options.reports?.[provider] } };
     },
   };
@@ -115,7 +117,7 @@ test("production admins verify access and see available production traffic", asy
   assert.equal(app.redirects.length, 0);
   assert.equal(app.elements.get("analytics-main").hidden, false);
   assert.match(app.elements.get("analytics-environment").textContent, /prod dashboard/);
-  assert.match(app.elements.get("analytics-coverage").textContent, /Traffic measures public production pages/);
+  assert.match(app.elements.get("analytics-coverage").textContent, /Traffic and active engagement time measure public production pages/);
   assert.match(app.elements.get("analytics-reports").text, /GoatCounter · production pages only/);
   assert.match(app.elements.get("analytics-status").textContent, /4 of 4/);
   assert.ok(app.requests.every(({ request }) => request.cache === "no-store"));
@@ -376,7 +378,7 @@ function dailyReport(rows, format = "number") {
 
 test("active time has a readable total, daily hover values, compact axes and a visible sport table", async () => {
   const app = await boot({ reports: { custom: {
-    engagement: { label: "Active engagement time", value: 4604, format: "seconds", note: "Total active time across public page visits" },
+    engagement: { label: "Total active engagement time", value: 4604, format: "seconds", note: "Total active time across public page visits" },
     tables: [{ title: "Daily activity", chart: "trend", series: ["active_time"],
       columns: [{ key: "day", label: "Day", format: "text" }, { key: "active_time", label: "Active engagement time", format: "seconds" }],
       rows: [{ day: "2026-10-01", active_time: null }, { day: "2026-10-02", active_time: 4604 }] },
@@ -384,7 +386,7 @@ test("active time has a readable total, daily hover values, compact axes and a v
         { key: "sport", label: "Sport", format: "text" }, { key: "seconds", label: "Active time", format: "seconds" }],
         rows: [{ page: "Leaderboard", sport: "NBA", seconds: 4604 }] }] } } });
   const section = app.elements.get("analytics-reports").children[1];
-  assert.match(section.text, /Active engagement time.*1 hr 16 min 44 sec.*Total active time across public/);
+  assert.match(section.text, /Total active engagement time.*1 hr 16 min 44 sec.*Total active time across public/);
   assert.match(section.text, /Active time by page.*Leaderboard.*NBA.*1 hr 16 min 44 sec/);
   const axes = nodes(section).filter(node => node.className === "analytics-axis");
   assert.ok(axes.some(node => node.textContent === "1.3 hr"));
@@ -395,6 +397,61 @@ test("active time has a readable total, daily hover values, compact axes and a v
   plot.listeners.keydown({ key: "Home", preventDefault() {} });
   assert.match(tooltip.text, /Unavailable.*No data/);
   assert.equal(app.requests.length, 5);
+});
+
+test("active-time estimate uses range-wide distinct sessions in dev and prod, without extra requests", async () => {
+  for (const environment of ["dev", "prod"]) {
+    const app = await boot({ environment, reports: {
+      custom: { engagement: { label: "Total active engagement time", value: 150, format: "seconds" } },
+      goatcounter: { metrics: [{ label: "Distinct visitors / sessions", value: 3, format: "number" },
+        { label: "Unique visits per page", value: 99 }], tables: [{ title: "Daily traffic", columns: [], rows: [{ sessions: 2 }, { sessions: 2 }] }] },
+    } });
+    const section = app.elements.get("analytics-reports").children[1];
+    assert.match(section.text, /Total active engagement time.*2 min 30 sec/);
+    assert.match(section.text, /Estimated active engagement time per session.*50 sec.*Estimate:.*coverage, delivery and freshness differ/);
+    assert.doesNotMatch(section.text, /Waiting for Traffic/);
+    assert.equal(app.requests.length, 5);
+  }
+});
+
+test("estimate stays unavailable for missing, invalid, zero or mismatched inputs while the total remains visible", async () => {
+  for (const [total, sessions, extra] of [[150, 0], [150, null], [null, 3], [150, -1], [150, 1.5],
+    [150, "3"], [-150, 3], [Infinity, 3], [150, 3, { status: "updating" }],
+    [150, 3, { range: { start: "2026-01-01", end: "2026-01-02", timezone: "UTC" } }],
+    [150, 3, { range: { timezone: "local" } }]]) {
+    const app = await boot({ environment: "prod", reports: {
+      custom: { engagement: { label: "Total active engagement time", value: total, format: "seconds" } },
+      goatcounter: { metrics: [{ label: "Distinct visitors / sessions", value: sessions }], ...extra },
+    } });
+    const section = app.elements.get("analytics-reports").children[1];
+    assert.match(section.text, /Estimated active engagement time per session.*Unavailable.*Requires measured active time/);
+    assert.match(section.text, /Total active engagement time/);
+    assert.equal(app.requests.length, 5);
+  }
+  const zero = await boot({ reports: { custom: { engagement: { label: "Total active engagement time", value: 0, format: "seconds" } },
+    goatcounter: { metrics: [{ label: "Distinct visitors / sessions", value: 3 }] } } });
+  assert.match(zero.elements.get("analytics-reports").children[1].text, /Estimated active engagement time per session.*0 sec/);
+});
+
+test("late or failed Traffic leaves active time usable and date changes never reuse an old denominator", async () => {
+  let finishTraffic;
+  const gate = new Promise(resolve => { finishTraffic = resolve; });
+  const options = { environment: "prod", beforeProvider: provider => provider === "goatcounter" ? gate : undefined,
+    reports: { custom: { engagement: { label: "Total active engagement time", value: 150, format: "seconds" } },
+      goatcounter: { metrics: [{ label: "Distinct visitors / sessions", value: 3 }] } } };
+  const app = await boot(options);
+  assert.match(app.elements.get("analytics-reports").children[1].text, /Waiting for Traffic/);
+  finishTraffic(); await settle();
+  assert.match(app.elements.get("analytics-reports").children[1].text, /Estimated active engagement time per session.*50 sec/);
+  app.elements.get("analytics-start").value = "2026-10-01";
+  app.elements.get("analytics-end").value = "2026-10-02";
+  options.failedProvider = "goatcounter";
+  await app.elements.get("analytics-range").listeners.submit({ preventDefault() {} });
+  const section = app.elements.get("analytics-reports").children[1];
+  assert.match(section.text, /Total active engagement time.*2 min 30 sec/);
+  assert.match(section.text, /Estimated active engagement time per session.*Unavailable/);
+  assert.doesNotMatch(section.text, /50 sec/);
+  assert.equal(app.requests.length, 10);
 });
 
 test("section tabs support clicks and arrow navigation, preserve the chosen section on refresh, and do not fetch on navigation", async () => {

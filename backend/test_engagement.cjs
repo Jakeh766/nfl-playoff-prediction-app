@@ -27,7 +27,8 @@ function boot(options = {}) {
   const storage = new Proxy({}, { get() { assert.fail("No analytics or auth storage access"); } });
   const url = new URL(options.path || "/leaderboard?sport=nba&invite=PRIVATE#secret", "https://dev.example");
   const navigator = { doNotTrack: options.dnt || "0", globalPrivacyControl: options.gpc || false };
-  Object.assign(window, { location: url, AUTH_CONFIG: { environment: options.environment || "dev" } });
+  Object.assign(window, { location: url, AUTH_CONFIG: { environment: options.environment || "dev",
+    activeEngagementEnabled: "activeEngagementEnabled" in options ? options.activeEngagementEnabled : true } });
   const context = { window, document, navigator, URL, performance: { now: () => time },
     localStorage: storage, sessionStorage: storage,
     setInterval(callback, interval) { assert.equal(interval, 5000); timer = callback; nextTick = time + interval; return 1; },
@@ -45,10 +46,13 @@ function boot(options = {}) {
   };
 }
 
-test("automatic collection on public dev pages only, with no consent UI or storage", () => {
-  const app = boot(); app.advance(30_000);
-  assert.equal(app.requests.length, 1);
-  for (const options of [{ environment: "prod" }, { environment: "unknown" }, { path: "/admin/analytics" }, { path: "/account" }]) {
+test("automatic collection on configured public dev and prod pages only, with no consent UI or storage", () => {
+  for (const environment of ["dev", "prod"]) {
+    const app = boot({ environment }); app.advance(30_000);
+    assert.equal(app.requests.length, 1);
+  }
+  for (const options of [{ environment: "unknown" }, { activeEngagementEnabled: false }, { activeEngagementEnabled: undefined },
+    { path: "/admin/analytics" }, { path: "/account" }, { path: "/groups?invite=PRIVATE" }]) {
     const excluded = boot(options); excluded.advance(120_000);
     assert.equal(excluded.document.listeners.size, 0); assert.equal(excluded.requests.length, 0);
   }
@@ -104,17 +108,33 @@ test("initially hidden or unfocused pages collect nothing until foreground inter
 });
 
 test("initial and newly enabled GPC/DNT block collection and discard unsent time", () => {
-  for (const options of [{ gpc: true }, { dnt: "1" }]) {
-    const app = boot(options); app.advance(60_000);
-    assert.equal(app.total(), 0); assert.equal(app.document.listeners.size, 0);
+  for (const environment of ["dev", "prod"]) {
+    for (const options of [{ gpc: true }, { dnt: "1" }]) {
+      const app = boot({ ...options, environment }); app.advance(60_000);
+      assert.equal(app.total(), 0); assert.equal(app.document.listeners.size, 0);
+    }
+    for (const key of ["globalPrivacyControl", "doNotTrack"]) {
+      const app = boot({ environment }); app.advance(10_000);
+      app.navigator[key] = key === "doNotTrack" ? "1" : true; app.advance(60_000);
+      assert.equal(app.total(), 0);
+      assert.ok([...app.document.listeners.values()].every(set => set.size === 0));
+      app.window.fire("pageshow", { persisted: true }); app.advance(60_000);
+      assert.equal(app.total(), 0);
+    }
   }
-  for (const key of ["globalPrivacyControl", "doNotTrack"]) {
-    const app = boot(); app.advance(10_000);
-    app.navigator[key] = key === "doNotTrack" ? "1" : true; app.advance(60_000);
-    assert.equal(app.total(), 0);
-    assert.ok([...app.document.listeners.values()].every(set => set.size === 0));
-    app.window.fire("pageshow", { persisted: true }); app.advance(60_000);
-    assert.equal(app.total(), 0);
+});
+
+test("prod retains idle and foreground rules and fixed page/sport labels without query data", () => {
+  for (const [path, page, sport] of [["/index.html?invite=PRIVATE", "/", "nfl"], ["/nba.html", "/nba", "nba"],
+    ["/picks.html?sport=nba&invite=PRIVATE", "/picks", "nba"], ["/privacy.html", "/privacy", "shared"]]) {
+    const app = boot({ environment: "prod", path }); app.advance(120_000);
+    assert.equal(app.total(), 60_000);
+    app.document.visibilityState = "hidden"; app.document.fire("visibilitychange"); app.advance(30_000);
+    assert.equal(app.total(), 60_000);
+    app.document.visibilityState = "visible"; app.window.fire("focus"); app.advance(7000); app.window.fire("pagehide");
+    assert.equal(app.total(), 67_000);
+    assert.equal(app.requests[0].body.page, page); assert.equal(app.requests[0].body.sport, sport);
+    assert.doesNotMatch(JSON.stringify(app.requests), /PRIVATE/);
   }
 });
 

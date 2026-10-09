@@ -375,6 +375,17 @@
     figure.append(layout, element("p", `Counts and percentages cover the ${rows.length} returned pages; omitted pages are not included.`, "analytics-chart-note"));
     return figure;
   }
+  function engagementEstimate(activity, traffic, selectedRange) {
+    const total = activity.engagement?.value;
+    const sessions = traffic?.metrics?.find(metric => metric.label === "Distinct visitors / sessions")?.value;
+    const matchingDates = [activity, traffic].every(report => report?.range?.timezone === "UTC" &&
+      report.range.start === selectedRange.get("start") && report.range.end === selectedRange.get("end"));
+    const available = activity.status === "ok" && traffic?.status === "ok" && matchingDates &&
+      Number.isFinite(total) && total >= 0 && Number.isSafeInteger(sessions) && sessions > 0;
+    return { label: "Estimated active engagement time per session", value: available ? total / sessions : null, format: "seconds",
+      note: "Estimate: total active time ÷ GoatCounter distinct sessions for the same dates. Page coverage, delivery and freshness differ; individual sessions are not matched." +
+        (available ? "" : " Requires measured active time and a positive distinct-session count for this range.") };
+  }
   function renderProvider(section, data) {
     section.replaceChildren();
     const heading = element("div", undefined, "analytics-provider-heading");
@@ -439,7 +450,14 @@
       guide.append(element("summary", "Definitions and coverage"), element("p", data.note, "analytics-provider-note"));
       section.append(guide);
     }
-    if (data.engagement) section.append(metricList([data.engagement]));
+    let updateEngagement;
+    if (data.engagement) {
+      const engagementMetrics = element("div");
+      section.append(engagementMetrics);
+      updateEngagement = estimate => engagementMetrics.replaceChildren(metricList([data.engagement, estimate]));
+      updateEngagement({ label: "Estimated active engagement time per session", value: null, format: "seconds",
+        note: "Waiting for Traffic and active-time measurements for the selected dates." });
+    }
     const breakdowns = element("div", undefined, "analytics-breakdowns");
     const searchBreakdowns = [];
     for (const report of data.tables || []) {
@@ -506,6 +524,7 @@
       breakdowns.append(explorer);
     }
     section.append(breakdowns);
+    return updateEngagement;
   }
   function dates(days = 28, includeToday = false) {
     const finish = new Date();
@@ -539,12 +558,13 @@
       coverage.seasons = [production ? "Production seasons" : "Dev seasons", "Saved brackets and group competition records"];
       document.getElementById("analytics-environment").textContent = `Private · ${session.environment} dashboard`;
       document.getElementById("analytics-coverage").textContent = session.environment === "prod"
-        ? "Traffic measures public production pages; activity and seasons measure production. Google Search covers predictplayoffs.com. Active engagement time remains unavailable because its collection is disabled in production. Seasons covers all retained seasons, independent of the date range."
+        ? "Traffic and active engagement time measure public production pages; activity and seasons measure production. Google Search covers predictplayoffs.com. Per-session active time is an estimate because measurement coverage differs. Seasons covers all retained seasons, independent of the date range."
         : "Traffic, activity and seasons measure dev; Google Search measures the connected property. Seasons covers all retained seasons, independent of the date range.";
       main.hidden = false;
       access.hidden = true;
       clearReports();
       const providers = order.filter(provider => session.providers.includes(provider));
+      const loaded = new Map();
       let available = 0;
       await Promise.allSettled(providers.map(async provider => {
         const section = element("section", undefined, "analytics-provider");
@@ -560,9 +580,14 @@
         try { data = await api(`/api/admin/analytics/${provider}?${params}`, token); }
         catch (_error) { data = { provider, status: "unavailable", message: "This report could not be loaded. Try again later." }; }
         if (denied) return;
-        renderProvider(section, { ...data, provider });
+        const updateEngagement = renderProvider(section, { ...data, provider });
+        loaded.set(provider, { data, updateEngagement });
         if (data.status === "ok") available++;
       }));
+      if (!denied) {
+        const activity = loaded.get("custom");
+        activity?.updateEngagement?.(engagementEstimate(activity.data, loaded.get("goatcounter")?.data, params));
+      }
       if (!denied) status.textContent = `${available} of ${providers.length} provider reports available. Update reports to retry; cached data is reused.`;
     } catch (error) {
       if (!denied) {

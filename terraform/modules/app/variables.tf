@@ -30,6 +30,12 @@ variable "resource_prefix" {
   default     = null
 }
 
+variable "active_engagement_enabled" {
+  description = "Collect anonymous aggregate active time on allowlisted public pages, subject to GPC/DNT."
+  type        = bool
+  default     = true
+}
+
 variable "stateful_table_protection_enabled" {
   description = "Whether saved predictions, profiles, and groups use deletion protection and point-in-time recovery."
   type        = bool
