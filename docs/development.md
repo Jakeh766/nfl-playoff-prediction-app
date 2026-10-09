@@ -147,7 +147,8 @@ the checks that keep those behaviors out of production.
 
 Each environment serves static files from a private S3 bucket through
 CloudFront, with API Gateway in front of the Python Lambda. Terraform manages
-these resources and a CloudWatch analytics dashboard. See the
+these resources; private analytics reports are served at `/admin/analytics`.
+CloudWatch Logs and standard AWS/Lambda/API metrics remain available. See the
 [infrastructure guide](../terraform/README.md) for bootstrap, state migration,
 Resend configuration, and required GitHub environment settings.
 

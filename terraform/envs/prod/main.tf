@@ -133,13 +133,6 @@ output "cognito_client_id" {
   value = module.nfl_app.cognito_client_id
 }
 
-output "analytics_dashboard_name" {
-  value = module.nfl_app.analytics_dashboard_name
-}
-
-output "analytics_dashboard_url" {
-  value = module.nfl_app.analytics_dashboard_url
-}
 
 output "admin_analytics_config_parameter" {
   value = module.nfl_app.admin_analytics_config_parameter
