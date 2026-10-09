@@ -444,6 +444,7 @@
     } else if (data.metrics?.length) section.append(metricList(data.metrics));
     if (data.provider === "seasons") {
       section.append(element("p", "Whole-season totals. People are members with saved brackets; a person in multiple groups counts once under People competing and once per group under Group entries. Group sizes count these competitors. Historical totals use archived competitions; deleted or unsaved brackets are not included.", "analytics-provider-coverage"));
+      if (data.groupScoringNote) section.append(element("p", data.groupScoringNote, "analytics-provider-coverage"));
     }
     if (data.note) {
       const guide = element("details", undefined, "analytics-explainer");
@@ -558,8 +559,8 @@
       coverage.seasons = [production ? "Production seasons" : "Dev seasons", "Saved brackets and group competition records"];
       document.getElementById("analytics-environment").textContent = `Private · ${session.environment} dashboard`;
       document.getElementById("analytics-coverage").textContent = session.environment === "prod"
-        ? "Traffic and active engagement time measure public production pages; activity and seasons measure production. Google Search covers predictplayoffs.com. Per-session active time is an estimate because measurement coverage differs. Seasons covers all retained seasons, independent of the date range."
-        : "Traffic, activity and seasons measure dev; Google Search measures the connected property. Seasons covers all retained seasons, independent of the date range.";
+        ? "Traffic and active engagement time measure public production pages; activity and seasons measure production. Google Search covers predictplayoffs.com. Per-session active time is an estimate because measurement coverage differs. Seasons covers all retained seasons and current group scoring modes, independent of the date range."
+        : "Traffic, activity and seasons measure dev; Google Search measures the connected property. Seasons covers all retained seasons and current group scoring modes, independent of the date range.";
       main.hidden = false;
       access.hidden = true;
       clearReports();

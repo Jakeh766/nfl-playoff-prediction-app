@@ -12,6 +12,14 @@ Four independently loaded sections show Traffic (GoatCounter), PredictPlayoffs a
 
 Activity totals are grouped into accounts/access, brackets, and groups. Search has a selector for query, page, country, or device; each selection retains the full returned table without another API request. Tables scroll locally with sticky headers. The selected section and metric survive date updates in memory; they are not written to browser storage.
 
+Seasons also shows current group scoring modes in captioned NFL and NBA tables,
+with Classic and Upset Edge group counts and percentages of all current groups
+supporting that sport. Empty groups are included; both-sport groups count once
+per sport. Per-sport mode overrides the legacy shared mode, with missing modes
+defaulting to Classic and `vegas` meaning Upset Edge. Missing sports means NFL.
+Zero-group percentages are Unavailable. Date filters do not change this snapshot;
+the existing private 15-minute cache and environment-specific scan apply.
+
 Trend graphs use native SVG and show the nearest day's exact date/value on pointer hover or touch. Each graph is one keyboard stop: Left/Right move by day, Home/End go to range boundaries, and Escape dismisses the tooltip. Focused values are announced politely for screen readers. Missing days show Unavailable, while measured zeroes show 0. Exact values remain accessible through chart keyboard controls, and daily charts retain gaps without inventing data. Page breakdowns use a pie chart with all valid returned pages, counts and percentages in a focusable legend; slice hover/tap and legend focus expose a readout. Percentages describe returned pages only. Session durations use hours, minutes and seconds. View data disclosures and duplicate chart tables are removed; bracket and search tables remain directly visible. Charts adapt to their visible panel width; observers are released on refresh, metric changes, and loss of access.
 
 Only aggregates reach the browser. Analytics are cookieless and honor GPC/DNT; authentication storage is unchanged. Active-time measurement starts automatically on public dev pages, with no consent UI or state.

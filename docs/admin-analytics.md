@@ -13,7 +13,7 @@ authorization. Authentication session format and storage are unchanged.
 |---|---|---|
 | Traffic | GoatCounter public pages in the signed-in environment; fixed production labels exclude dev traffic | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
 | PredictPlayoffs activity | The environment's AWS product events and aggregate active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Total active engagement time, an estimated active time per session, and active time by day, page and sport in both environments |
-| Seasons | The environment's retained DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season |
+| Seasons | The environment's retained DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season; current group scoring-mode counts and percentages by sport |
 | Google Search | Separately configured Search Console property; production queries only production hosts | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
 
 The default is 28 completed days. Today (UTC), 7/28/90 completed days and custom
@@ -39,6 +39,23 @@ group. Average and largest group sizes use these competitors, excluding members
 without brackets. Empty groups do not compete. Completed seasons use archived
 competition entries rather than today's memberships. Both-sport groups count
 separately for NFL and NBA. Missing historical bracket totals show unavailable.
+
+**Current group scoring modes** shows Classic and Upset Edge counts and percentages
+separately for NFL and NBA, with each sport's total groups in its table caption.
+The denominator includes all current group records supporting that sport, even
+empty groups or groups without saved brackets. A both-sport group counts once in
+each sport's breakdown; membership and archived competition records do not count
+as groups. Deleted groups are absent. These are current snapshots, independent
+of the date filter, cached privately for up to 15 minutes.
+
+The app stores modes as `scoringOptions[sport]`, falling back to the legacy shared
+`scoringOption`, then `"classic"` when missing. The breakdown follows that same
+precedence: `"vegas"` means Upset Edge; other values use Classic scoring.
+`scoringMode` is the display concept, not a new stored field. Groups without
+`sports` retain the app's NFL-only default. If a sport has no groups, both counts
+are zero and percentages show Unavailable because there is no denominator.
+The existing projected group scan supplies this data; no tracking, extra scans,
+tables, IAM grants, or personal/group identifiers are added to the report.
 
 Saved bracket totals count retained records, excluding unsaved builds and deleted
 brackets; they cannot reconstruct every bracket ever created. Legacy NFL records
@@ -93,6 +110,9 @@ type are shown as historical / unknown. New deletion/type metrics cannot be
 backfilled. One bounded CloudWatch query returns daily/event/type aggregates.
 The old AWS traffic/daily visitor collector is removed; existing TTL items expire
 under their existing settings. No new tables, schedules or IAM grants are needed.
+The redundant custom CloudWatch analytics dashboard and its Terraform outputs
+are removed. CloudWatch Logs, the private AWS activity reports, and standard
+AWS/Lambda/API metrics remain in place.
 
 ### Active engagement time
 

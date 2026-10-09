@@ -208,6 +208,8 @@ class AdminTests(unittest.TestCase):
             adapter["custom"].assert_not_called()
 
     def test_season_cache_is_shared_across_date_ranges_without_provider_credentials(self):
+        self.cache.items["v2:seasons:all"] = {"freshUntil": time.time() + 900,
+                                              "report": json.dumps({"status": "ok", "tables": []})}
         adapter = Mock(return_value={"metrics": [], "tables": [],
                                      "range": {"window": "All retained seasons", "timezone": "Season totals"}})
         with patch.dict(admin.PROVIDERS, seasons=adapter), patch.object(admin, "settings") as settings:
@@ -219,6 +221,7 @@ class AdminTests(unittest.TestCase):
         self.assertFalse(first["cached"])
         self.assertTrue(second["cached"])
         self.assertEqual(second["range"]["window"], "All retained seasons")
+        self.assertIn("v3:seasons:all", self.cache.items)
         adapter.assert_called_once()
         settings.assert_not_called()
 

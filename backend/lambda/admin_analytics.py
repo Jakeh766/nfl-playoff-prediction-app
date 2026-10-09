@@ -100,7 +100,7 @@ def cached_report(provider, start, end):
     # already checked; provider responses never live in public/CDN/browser caches.
     table = boto3.resource("dynamodb").Table(os.environ["ADMIN_ANALYTICS_CACHE_TABLE"])
     version = "v7" if provider == "custom" else "v7" if provider == "goatcounter" else "v4"
-    key = "v2:seasons:all" if provider == "seasons" else f"{version}:{provider}:{start}:{end}"
+    key = "v3:seasons:all" if provider == "seasons" else f"{version}:{provider}:{start}:{end}"
     now = int(time.time())
     item = table.get_item(Key={"cacheKey": key}, ConsistentRead=True).get("Item", {})
     if int(item.get("freshUntil", 0)) > now and item.get("report"):
