@@ -1274,6 +1274,10 @@ body.account-modal-open {
   text-align: right;
 }
 
+body.predictions-locked .home-hero .button-hero {
+  display: none;
+}
+
 body.predictions-locked .predictor select,
 body.predictions-locked .predictor .team-pick,
 body.predictions-locked .predictor .field-actions button,
