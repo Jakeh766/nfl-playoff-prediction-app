@@ -78,7 +78,10 @@ function renderPredictionCountdown() {
 
   elements.countdownStatus.textContent = remaining
     ? "Finish and save your bracket before the season starts."
-    : "The season has started. All saved brackets are read-only.";
+    : "";
+  elements.kickoffCountdownLabel.textContent = remaining
+    ? "BRACKETS LOCK IN"
+    : "Brackets are locked";
   elements.kickoffCountdown.classList.toggle("locked", !remaining);
 }
 
