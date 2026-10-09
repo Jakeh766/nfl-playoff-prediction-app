@@ -99,11 +99,3 @@ output "cognito_user_pool_id" {
 output "cognito_client_id" {
   value = module.nfl_app.cognito_client_id
 }
-
-output "analytics_dashboard_name" {
-  value = module.nfl_app.analytics_dashboard_name
-}
-
-output "analytics_dashboard_url" {
-  value = module.nfl_app.analytics_dashboard_url
-}

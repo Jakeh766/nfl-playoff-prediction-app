@@ -73,8 +73,10 @@ def report(_config, _start, _end):
 
     memberships = defaultdict(set)
     groups = {}
+    scoring = {sport: {"classic": 0, "vegas": 0} for sport in ("nfl", "nba")}
     records = scan_records(resource.Table(os.environ["GROUPS_TABLE"]),
-                           ["recordType", "groupId", "sports", "userId", "sport", "season", "entries"], deadline)
+                           ["recordType", "groupId", "sports", "scoringOption", "scoringOptions",
+                            "userId", "sport", "season", "entries"], deadline)
     for item in records:
         group = item.get("groupId")
         if not group:
@@ -82,6 +84,12 @@ def report(_config, _start, _end):
         kind = item.get("recordType")
         if kind == "group":
             groups[group] = item.get("sports", ["nfl"])
+            for sport in scoring:
+                if sport in groups[group]:
+                    # Match app.group_scoring_option: per-sport override, then
+                    # legacy shared mode, then Classic. Only vegas uses Upset Edge.
+                    mode = item.get("scoringOptions", {}).get(sport, item.get("scoringOption", "classic"))
+                    scoring[sport]["vegas" if mode == "vegas" else "classic"] += 1
         elif kind == "membership" and item.get("userId"):
             memberships[group].add(item["userId"])
         elif kind == "groupSeason":
@@ -110,11 +118,22 @@ def report(_config, _start, _end):
                      "competitions": len(groups), "people": len(people), "entries": entries,
                      "average": round(entries / len(groups), 1) if groups else None,
                      "largest": max((len(members) for members in groups.values()), default=0)})
+    scoring_tables = []
+    for sport, counts in scoring.items():
+        total = sum(counts.values())
+        scoring_tables.append({
+            "title": f"Current {sport.upper()} group scoring modes ({total} total groups)",
+            "columns": [{"key": "mode", "label": "Scoring mode", "format": "text"},
+                        {"key": "groups", "label": "Groups", "format": "number"},
+                        {"key": "share", "label": "% of total groups", "format": "percent"}],
+            "rows": [{"mode": label, "groups": counts[mode], "share": counts[mode] / total if total else None}
+                     for mode, label in (("classic", "Classic"), ("vegas", "Upset Edge"))]})
     return {"metrics": [], "range": {"window": "All retained seasons", "timezone": "Season totals"},
-            "note": "Saved brackets count retained brackets, not unsaved builds or deleted brackets. Legacy NFL brackets use the configured NFL season. A group competes when at least one member has a saved bracket for that sport and season. People counts unique competitors with brackets; group entries counts a person once in each group they compete in. Average and largest group sizes count those competitors, including commissioners with brackets. Completed seasons use archived competition entries; historical bracket totals without retained records are unavailable. Groups without saved brackets are excluded. Date filters do not change this report. Refreshes are cached for up to 15 minutes.",
+            "groupScoringNote": "Current scoring modes count all existing groups supporting each sport, including groups without saved brackets. Both-sport groups count once per sport. Per-sport settings override the legacy shared mode; missing settings default to Classic. Date filters do not change these counts; refreshes are cached for up to 15 minutes. Percentages are unavailable when a sport has no groups.",
+            "note": "Saved brackets count retained brackets, not unsaved builds or deleted brackets. Legacy NFL brackets use the configured NFL season. A group competes when at least one member has a saved bracket for that sport and season. People counts unique competitors with brackets; group entries counts a person once in each group they compete in. Average and largest group sizes count those competitors, including commissioners with brackets. Completed seasons use archived competition entries; historical bracket totals without retained records are unavailable. Season competition totals exclude groups without saved brackets. Date filters do not change this report. Refreshes are cached for up to 15 minutes.",
             "tables": [{"title": "Activity by season", "emptyMessage": "No season activity is available yet.",
                         "columns": [{"key": key, "label": label, "format": fmt} for key, label, fmt in [
                             ("season", "Season", "text"), ("brackets", "Saved brackets", "number"),
                             ("competitions", "Competing groups", "number"), ("people", "People competing", "number"),
                             ("entries", "Group entries", "number"), ("average", "Avg. people / group", "decimal"),
-                            ("largest", "Largest group", "number")]], "rows": rows}]}
+                            ("largest", "Largest group", "number")]], "rows": rows}, *scoring_tables]}

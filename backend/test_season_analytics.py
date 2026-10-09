@@ -83,12 +83,72 @@ class SeasonTests(unittest.TestCase):
             self.assertEqual(row["largest"], 0)
             self.assertIsNone(row["average"])
 
+        for table in report["tables"][1:]:
+            self.assertIn("0 total groups", table["title"])
+            self.assertEqual(table["rows"], [
+                {"mode": "Classic", "groups": 0, "share": None},
+                {"mode": "Upset Edge", "groups": 0, "share": None}])
+
+    def test_current_scoring_modes_use_per_sport_defaults_and_all_groups(self):
+        groups = Pages([{"Items": [
+            {"recordType": "group", "groupId": "legacy-classic"},
+            {"recordType": "group", "groupId": "legacy-edge", "scoringOption": "vegas"},
+            {"recordType": "group", "groupId": "mixed", "sports": ["nfl", "nba"],
+             "scoringOption": "vegas", "scoringOptions": {"nfl": "classic"}},
+            {"recordType": "membership", "groupId": "legacy-edge", "userId": "private-user",
+             "scoringOption": "vegas"}], "LastEvaluatedKey": {"groupKey": "next"}},
+            {"Items": [
+                {"recordType": "group", "groupId": "nba-only", "sports": ["nba"],
+                 "scoringOptions": {"nba": "classic"}},
+                {"recordType": "group", "groupId": "nba-empty-default", "sports": ["nba"],
+                 "scoringOptions": {}},
+                {"recordType": "groupSeason", "groupId": "deleted-archive", "sport": "nfl",
+                 "season": 2025, "scoringOption": "vegas", "entries": [{"memberId": "private-user"}]},
+                {"recordType": "invite", "groupId": "invite-only", "scoringOption": "vegas"}]}])
+        report = self.report(Pages([{}]), groups)
+        nfl, nba = report["tables"][1:]
+        self.assertEqual(nfl["title"], "Current NFL group scoring modes (3 total groups)")
+        self.assertEqual(nba["title"], "Current NBA group scoring modes (3 total groups)")
+        for table in (nfl, nba):
+            self.assertEqual(table["rows"], [
+                {"mode": "Classic", "groups": 2, "share": 2 / 3},
+                {"mode": "Upset Edge", "groups": 1, "share": 1 / 3}])
+        self.assertEqual(groups.calls[1]["ExclusiveStartKey"], {"groupKey": "next"})
+        fields = set(groups.calls[0]["ExpressionAttributeNames"].values())
+        self.assertTrue({"scoringOption", "scoringOptions", "sports"} <= fields)
+        self.assertFalse(fields & {"groupName", "passwordHash", "inviteCode", "picks"})
+        for private in ("private-user", "legacy-edge", "deleted-archive", "mixed"):
+            self.assertNotIn(private, json.dumps(report))
+
+    def test_single_mode_and_sport_have_complete_counts(self):
+        for mode, counts in (("classic", (1, 0)), ("vegas", (0, 1))):
+            report = self.report(Pages([{}]), Pages([{"Items": [
+                {"recordType": "group", "groupId": "empty", "scoringOption": mode}]}]))
+            self.assertEqual([row["groups"] for row in report["tables"][1]["rows"]], list(counts))
+            self.assertEqual([row["share"] for row in report["tables"][1]["rows"]], list(counts))
+            self.assertTrue(all(row["share"] is None for row in report["tables"][2]["rows"]))
+
+    def test_reporting_scans_only_the_configured_environments_tables(self):
+        for environment in ("dev", "prod"):
+            resource = types.SimpleNamespace(Table=lambda _name: Pages([{}]))
+            with patch.dict(os.environ, ENVIRONMENT=environment, RESULTS_SEASON="2026",
+                            PREDICTIONS_TABLE=f"{environment}-predictions", GROUPS_TABLE=f"{environment}-groups"), \
+                    patch.object(seasons, "reporting_resource", return_value=resource), \
+                    patch.object(resource, "Table", wraps=resource.Table) as table:
+                seasons.report({}, None, None)
+            self.assertEqual([call.args[0] for call in table.call_args_list],
+                             [f"{environment}-predictions", f"{environment}-groups"])
+
     def test_failed_and_bounded_scans_never_return_partial_totals(self):
         class Failing:
             def scan(self, **_arguments):
                 raise RuntimeError("private upstream data")
         with self.assertRaises(RuntimeError):
             self.report(Pages([{}]), Failing())
+        partial = Pages([{"Items": [{"recordType": "group", "groupId": "partial", "scoringOption": "vegas"}],
+                         "LastEvaluatedKey": {"key": 1}}])
+        with self.assertRaises(RuntimeError):
+            self.report(Pages([{}]), partial)
         table = Pages([{"Items": [{"profileKey": "person"}], "LastEvaluatedKey": {"key": 1}}] * 100)
         with self.assertRaises(RuntimeError):
             list(seasons.scan_records(table, ["profileKey"], time.monotonic() + 10))

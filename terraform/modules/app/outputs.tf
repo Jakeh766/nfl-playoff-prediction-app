@@ -57,13 +57,3 @@ output "results_updater_function" {
   description = "Lambda function that refreshes or manually corrects season results."
   value       = aws_lambda_function.results_updater.function_name
 }
-
-output "analytics_dashboard_name" {
-  description = "CloudWatch analytics dashboard name for environments where analytics are enabled."
-  value       = aws_cloudwatch_dashboard.analytics[0].dashboard_name
-}
-
-output "analytics_dashboard_url" {
-  description = "AWS console URL for the CloudWatch analytics dashboard."
-  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.analytics[0].dashboard_name}"
-}

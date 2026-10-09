@@ -299,6 +299,37 @@ test("season totals stay visible as a table with explicit participant definition
   assert.equal(nodes(section).filter(node => node.tag === "dl").length, 0);
   assert.equal(app.requests.length, 5);
 });
+test("current scoring tables show both modes, counts and percentages privately in dev and prod", async () => {
+  for (const environment of ["dev", "prod"]) {
+    const app = await boot({ environment, reports: { seasons: { metrics: [],
+      groupScoringNote: "Current groups include empty groups. Missing modes default to Classic. Date filters do not change these counts.",
+      tables: [
+        { title: "Current NFL group scoring modes (3 total groups)", columns: [
+          { key: "mode", label: "Scoring mode", format: "text" },
+          { key: "groups", label: "Groups", format: "number" },
+          { key: "share", label: "% of total groups", format: "percent" }],
+          rows: [{ mode: "Classic", groups: 2, share: 2 / 3 }, { mode: "Upset Edge", groups: 1, share: 1 / 3 }] },
+        { title: "Current NBA group scoring modes (0 total groups)", columns: [
+          { key: "mode", label: "Scoring mode", format: "text" },
+          { key: "groups", label: "Groups", format: "number" },
+          { key: "share", label: "% of total groups", format: "percent" }],
+          rows: [{ mode: "Classic", groups: 0, share: null }, { mode: "Upset Edge", groups: 0, share: null }] },
+      ] } } });
+    app.elements.get("analytics-tab-seasons").listeners.click();
+    const section = app.elements.get("analytics-reports").children.find(node => node.dataset.provider === "seasons");
+    assert.equal(section.hidden, false);
+    assert.match(section.text, /Missing modes default to Classic/);
+    assert.deepEqual(nodes(section).filter(node => node.tag === "caption").map(node => node.textContent), [
+      "Current NFL group scoring modes (3 total groups)", "Current NBA group scoring modes (0 total groups)"]);
+    assert.deepEqual(nodes(section).filter(node => node.tag === "td").map(node => node.textContent), [
+      "Classic", "2", "66.7%", "Upset Edge", "1", "33.3%", "Classic", "0", "Unavailable", "Upset Edge", "0", "Unavailable"]);
+    assert.ok(nodes(section).filter(node => node.tag === "th").every(node => node.scope === "col"));
+    assert.equal(app.requests.length, 5);
+    assert.ok(app.requests.every(({ request }) => request.cache === "no-store" && request.headers.Authorization));
+    assert.equal(app.store.size, 1);
+  }
+});
+
 test("daily charts keep all 93 days, gaps and exact daily values without cumulative controls", async () => {
   const rows = Array.from({ length: 93 }, (_, i) => ({ day: `day-${i}`, actions: i === 2 ? null : 1 }));
   const app = await boot({ reports: { custom: { tables: [{ title: "Daily activity", chart: "trend", series: ["actions"],

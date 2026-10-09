@@ -923,25 +923,6 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-resource "aws_cloudwatch_dashboard" "analytics" {
-  count = contains(["dev", "prod"], var.environment) ? 1 : 0
-
-  dashboard_name = "${local.resource_prefix}-analytics"
-  dashboard_body = jsonencode({ widgets = [
-    { type = "text", x = 0, y = 0, width = 24, height = 2, properties = {
-      markdown = "# Predict Playoffs — ${title(var.environment)} activity\nCookieless product event counts. GPC/DNT excluded. Traffic is reported by GoatCounter in the private dev admin dashboard."
-    } },
-    { type = "log", x = 0, y = 2, width = 24, height = 8, properties = {
-      region = var.aws_region, title = "Product activity totals", view = "table",
-      query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\" and event != \"leaderboard_viewed\"\n| stats count(*) as events by event, bracketType | sort events desc"
-    } },
-    { type = "log", x = 0, y = 10, width = 24, height = 8, properties = {
-      region = var.aws_region, title = "Daily product activity", view = "timeSeries",
-      query  = "SOURCE '${local.analytics_log_group}' | filter type = \"site_analytics\" and event != \"page_view\" and event != \"leaderboard_viewed\"\n| stats count(*) as events by bin(1d), event"
-    } }
-  ] })
-}
-
 resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowApiGatewayInvoke"
   action        = "lambda:InvokeFunction"

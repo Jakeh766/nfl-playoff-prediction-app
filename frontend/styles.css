@@ -1219,6 +1219,23 @@ body.account-modal-open {
   background: #162235;
 }
 
+.kickoff-countdown.locked > .card-kicker {
+  margin: 36px 0 22px;
+  color: inherit;
+  font-family: var(--display);
+  font-size: clamp(36px, 3.4vw, 48px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.kickoff-countdown.locked .countdown-grid,
+.kickoff-countdown.locked time,
+.kickoff-countdown.locked .countdown-status {
+  display: none;
+}
+
 .kickoff-countdown.dev-unlocked .countdown-grid {
   display: none;
 }
@@ -1255,6 +1272,10 @@ body.account-modal-open {
 .prediction-lock-notice span {
   color: var(--muted);
   text-align: right;
+}
+
+body.predictions-locked .home-hero .button-hero {
+  display: none;
 }
 
 body.predictions-locked .predictor select,
