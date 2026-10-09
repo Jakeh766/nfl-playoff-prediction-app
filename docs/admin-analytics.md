@@ -12,7 +12,7 @@ authorization. Authentication session format and storage are unchanged.
 | Section | Source and coverage | Reports |
 |---|---|---|
 | Traffic | GoatCounter public pages in the signed-in environment; fixed production labels exclude dev traffic | Distinct visitors/sessions, raw pageviews, pageviews by page, daily sessions/pageviews, estimated session duration |
-| PredictPlayoffs activity | The environment's AWS product events; dev also has active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Active time by day, page and sport is unavailable in production |
+| PredictPlayoffs activity | The environment's AWS product events and aggregate active-time counters | Sign-ins, accounts created/deleted, brackets created/completed/saved by NFL/NBA type, groups created, direct joins and invite joins; each by day and selected-range total. Total active engagement time, an estimated active time per session, and active time by day, page and sport in both environments |
 | Seasons | The environment's retained DynamoDB brackets and group competition records | Saved brackets, competing groups, unique people competing, group entries, average competitors per group and largest group, for each NFL/NBA season |
 | Google Search | Separately configured Search Console property; production queries only production hosts | Clicks, impressions, CTR, average position, daily history, top query/page/country/device rows |
 
@@ -96,7 +96,7 @@ under their existing settings. No new tables, schedules or IAM grants are needed
 
 ### Active engagement time
 
-Measurement starts automatically on public development pages. GPC/DNT prevent
+Measurement starts automatically on configured public dev and production pages. Terraform's `active_engagement_enabled` boolean defaults to true in both environments and controls the public `activeEngagementEnabled` flag and Lambda `ACTIVE_ENGAGEMENT_ENABLED` flag. Both runtime guards fail closed when missing or disabled; unknown environments and private pages remain excluded. No SSM setting or provider credential is needed for this collector. GPC/DNT prevent
 collection and discard pending time if enabled later. There is no consent UI or
 state, and Cognito is not used by the collector.
 
@@ -109,11 +109,11 @@ restarts it if privacy signals permit. Delivery is best effort, without retries,
 visitor IDs, credentials or referrers; missing deliveries undercount.
 
 The existing `POST /api/analytics` accepts exactly `event: active_time`, an allowlisted
-public `page`, fixed `sport`, and integer `milliseconds: 1..60000`. Dev-only validation
+public `page`, fixed `sport`, and integer `milliseconds: 1..60000`. Environment/configuration validation
 and privacy headers apply before persistence. Public browser reports can be forged;
 these are approximate product insights, not billing or security measurements.
 
-Atomic DynamoDB increments reuse the existing report-cache table and its
+Atomic DynamoDB increments reuse each environment's own existing report-cache table and its
 GetItem/UpdateItem permissions. Monthly `engagement:v1:YYYY-MM` items contain bounded
 day/page/sport counters, expiring 367 days after the month ends. No individual
 measurements are stored or logged. Intervals are attributed to their UTC receipt
@@ -121,13 +121,25 @@ day. Reports need at most four small reads. The
 existing 15-minute cache applies; a counter-read failure leaves product activity
 available and marks only active time unavailable.
 
-**Active engagement time** is the selected-range total across public page visits,
+**Total active engagement time** is the selected-range total across public page visits,
 not an average per visitor or GoatCounter session duration. The daily chart selector
 and **Active time by page** table show hours/minutes/seconds with hover, tap and
 keyboard readouts. Missing days are unavailable, not zero. Choose **Today (UTC)**
-for new measurements; the default completed-day range excludes today. Do not
-divide this total by GoatCounter sessions to infer average engagement; coverage and
-measurement methods differ. Earlier totals include only the former opt-in visits.
+for new measurements; the default completed-day range excludes today. Production history begins with deployment of this collector; missing days cannot be reconstructed. Earlier dev totals include only the former opt-in visits.
+
+**Estimated active engagement time per session** = total active engagement seconds ÷
+GoatCounter **Distinct visitors / sessions** for the same selected inclusive UTC dates
+and environment. The dashboard combines the two already-authorized reports in memory;
+no extra provider requests, session matching, identifiers or persistent data are added.
+It uses the range-wide session count, never a sum of daily sessions or per-page visits.
+It is an **estimate**, not a measured average for matched sessions: page coverage,
+best-effort delivery, receipt-day attribution, privacy-signal exclusions and freshness
+differ between the first-party collector and GoatCounter's hourly export.
+Missing active measurements, unavailable/refreshing Traffic, mismatched dates, and
+zero or invalid distinct sessions leave the estimate unavailable. A measured zero
+active-time total with positive sessions yields zero. Active totals and page/sport
+breakdowns remain available if Traffic fails. The existing 15-minute active-time
+cache and hourly session export can represent different snapshots within the range.
 
 GoatCounter temporarily links a random cookieless session identifier in memory to
 site + IP + User-Agent for up to eight hours. It estimates short-lived sessions,
@@ -207,8 +219,8 @@ respecting GPC/DNT without cookies, account identifiers, raw queries or invite c
 The existing `predictplayoffs` site and read/export token are reused. Production
 records fixed `/prod/...` virtual paths (`/prod` for home, matching GoatCounter's trailing-slash normalization); exports and fallback stats filter exact
 environment paths. Legacy unprefixed traffic remains dev-only. Production CSP
-permits only the existing GoatCounter script and count origins. Active-time
-collection remains dev-only.
+permits only the existing GoatCounter script and count origins. First-party active-time
+collection uses the same privacy behavior in both environments and each environment's own cache.
 
 The hourly export reservation and ID/time are shared in the existing dev cache.
 Production has only GetItem/UpdateItem on `goatcounter-export:v1:predictplayoffs`

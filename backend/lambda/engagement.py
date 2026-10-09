@@ -13,8 +13,8 @@ BUCKETS["privacy_shared"] = ("Privacy policy", "Shared")
 
 
 def record(event, payload):
-    if os.environ.get("ENVIRONMENT") != "dev":
-        raise ValueError("Engagement measurements are available only on dev")
+    if os.environ.get("ENVIRONMENT") not in {"dev", "prod"} or os.environ.get("ACTIVE_ENGAGEMENT_ENABLED") != "true":
+        raise ValueError("Active engagement collection is disabled")
     if set(payload) != {"event", "page", "sport", "milliseconds"} or payload["event"] != "active_time":
         raise ValueError("Only anonymous engagement fields are accepted")
     page, sport, milliseconds = payload["page"], payload["sport"], payload["milliseconds"]

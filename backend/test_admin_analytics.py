@@ -18,7 +18,7 @@ sys.modules.setdefault("boto3", types.SimpleNamespace(resource=lambda _name: Non
 admin = importlib.import_module("admin_analytics")
 providers = importlib.import_module("analytics_providers")
 
-ENV = {"ENVIRONMENT": "dev", "ADMIN_COGNITO_ISSUER": "https://cognito-idp.us-east-1.amazonaws.com/dev-pool",
+ENV = {"ENVIRONMENT": "dev", "ACTIVE_ENGAGEMENT_ENABLED": "true", "ADMIN_COGNITO_ISSUER": "https://cognito-idp.us-east-1.amazonaws.com/dev-pool",
        "ADMIN_COGNITO_CLIENT_ID": "dev-client", "ADMIN_ANALYTICS_CACHE_TABLE": "dev-cache",
        "ADMIN_ANALYTICS_CONFIG_PARAMETER": "/dev/admin-analytics/config",
        "ADMIN_GOOGLE_CREDENTIALS_PARAMETER": "/dev/admin-analytics/google-service-account",
@@ -201,7 +201,7 @@ class AdminTests(unittest.TestCase):
     def test_cache_lease_prevents_concurrent_provider_requests(self):
         request = event("custom")
         params = request["queryStringParameters"]
-        self.cache.items[f"v6:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
+        self.cache.items[f"v7:custom:{params['start']}:{params['end']}"] = {"leaseUntil": time.time() + 20}
         with patch.dict(admin.PROVIDERS, custom=Mock()) as adapter:
             result = admin.handler(request, None)
             self.assertEqual(json.loads(result["body"])["status"], "updating")
@@ -293,20 +293,31 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(kinds["NBA"]["bracket_created"], 2)
         self.assertEqual(kinds["Historical / unknown"]["bracket_created"], 3)
 
-    def test_activity_queries_own_environment_and_prod_never_reads_engagement(self):
+    def test_prod_activity_keeps_active_totals_breakdowns_and_disabled_configuration_isolated(self):
+        self.active.return_value = {"value": 30, "daily": {"2026-10-02": 30},
+                                   "rows": [{"page": "Leaderboard", "sport": "NBA", "seconds": 30}]}
+        with patch.dict(os.environ, ENVIRONMENT="prod"), patch.object(providers, "cloudwatch_query", return_value=[]):
+            report = providers.custom({}, self.start, self.end)
+            self.assertEqual(report["engagement"]["value"], 30)
+            self.assertEqual(report["tables"][-1]["rows"], self.active.return_value["rows"])
+            self.active.reset_mock()
+            with patch.dict(os.environ, ACTIVE_ENGAGEMENT_ENABLED="false"):
+                report = providers.custom({}, self.start, self.end)
+            self.active.assert_not_called()
+            self.assertEqual(len(report["metrics"]), 14)
+            self.assertIsNone(report["engagement"]["value"])
+            self.assertIn("collection is disabled", report["engagement"]["note"])
+
+    def test_activity_queries_and_engagement_are_aligned_in_both_environments(self):
         for environment in ("dev", "prod"):
             self.active.reset_mock()
             with patch.dict(os.environ, {"ENVIRONMENT": environment}), patch.object(providers, "cloudwatch_query", return_value=[]) as query:
                 report = providers.custom({}, self.start, self.end)
                 self.assertIn(f'environment = "{environment}"', query.call_args.args[0])
                 self.assertIn(f"AWS · {environment}", report["note"])
-                if environment == "prod":
-                    self.active.assert_not_called()
-                    self.assertIsNone(report["engagement"]["value"])
-                    self.assertIn("collection is disabled", report["engagement"]["note"])
-                    self.assertEqual(report["tables"][-1]["rows"], [])
-                else:
-                    self.active.assert_called_once()
+                self.active.assert_called_once_with(self.start, self.end)
+                self.assertEqual(report["engagement"]["label"], "Total active engagement time")
+                self.assertNotIn("disabled", report["engagement"]["note"])
         with patch.dict(os.environ, {"ENVIRONMENT": 'dev" | filter true'}), patch.object(providers, "cloudwatch_query") as query:
             with self.assertRaises(ValueError):
                 providers.custom({}, self.start, self.end)

@@ -1,7 +1,8 @@
 (function initializeEngagement() {
   try {
     const page = window.location.pathname === "/index.html" ? "/" : window.location.pathname.replace(/\.html$/, "");
-    if (window.AUTH_CONFIG?.environment !== "dev" || !["/", "/nba", "/picks", "/leaderboard", "/scoring", "/privacy"].includes(page)) return;
+    if (!["dev", "prod"].includes(window.AUTH_CONFIG?.environment) || window.AUTH_CONFIG?.activeEngagementEnabled !== true ||
+        !["/", "/nba", "/picks", "/leaderboard", "/scoring", "/privacy"].includes(page)) return;
     const permitted = () => navigator.doNotTrack !== "1" && !navigator.globalPrivacyControl;
     const sport = page === "/privacy" ? "shared" : page === "/nba" || new URL(window.location.href).searchParams.get("sport") === "nba" ? "nba" : "nfl";
     let enabled = false, running = false, pending = 0, lastTime = 0, lastActivity = 0, lastSent = 0, timer;

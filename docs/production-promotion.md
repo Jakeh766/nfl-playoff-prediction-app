@@ -16,7 +16,8 @@ do not require removing commits or manually deleting features before each releas
 | NBA picks | Follow the NBA deadline; no NFL testing override | Follow the NBA deadline | `backend/lambda/nba_season.json`, `frontend/sports.js` |
 | Demo participants and groups | Seeded by the dev workflow | Never seeded by the prod workflow | `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml` |
 | Private admin analytics page and API | Available to dev Cognito admins | Available only to production Cognito admins; separate pool/group/cache/parameters | `terraform/modules/app/main.tf`, `terraform/modules/app/admin-analytics.tf`, `backend/lambda/admin_analytics.py` |
-| GoatCounter traffic | Enabled subject to GPC/DNT | Enabled subject to GPC/DNT; fixed `/prod/...` page labels isolate counts on the existing site | `frontend/goatcounter.js`, `frontend/engagement.js`, `backend/lambda/engagement.py` |
+| GoatCounter traffic | Enabled subject to GPC/DNT | Enabled subject to GPC/DNT; fixed `/prod/...` page labels isolate counts on the existing site | `frontend/goatcounter.js`, `backend/lambda/analytics_providers.py`, `backend/lambda/goatcounter_sessions.py` |
+| Active engagement time | Anonymous page/sport totals subject to GPC/DNT and foreground/idle rules | Same definitions and privacy rules; own aggregate cache; per-session value is explicitly an estimate | `frontend/engagement.js`, `backend/lambda/engagement.py`, `terraform/modules/app/main.tf` |
 
 Production's current NFL lock is `2026-09-10T00:20:00Z`. Advance it only as an
 intentional season-maintenance change. Keep it separate from reopening dev for
@@ -24,7 +25,7 @@ testing. Production still collects guarded first-party aggregate activity via
 `frontend/monitoring.js`; the private reporting interface reports production
 events and saved-season data. GoatCounter traffic reuses the existing site and
 token, with exact environment path filters for exports and fallback statistics.
-Active engagement time remains dev-only; its production guards remain enabled.
+Active engagement time is configured in both environments by Terraform's `active_engagement_enabled` boolean (default true). It controls the public `activeEngagementEnabled` boolean and Lambda `ACTIVE_ENGAGEMENT_ENABLED` flag; unknown environments, private pages and GPC/DNT remain excluded. Each environment stores only aggregate counters in its own cache. The per-session metric is explicitly an estimate using GoatCounter range-wide distinct sessions for the same dates.
 
 Terraform sets `environment = "prod"` in `terraform/envs/prod/main.tf` and
 generates both `window.AUTH_CONFIG.environment` and the Lambda `ENVIRONMENT`

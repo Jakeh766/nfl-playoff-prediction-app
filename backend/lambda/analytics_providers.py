@@ -142,9 +142,9 @@ def custom(_config, start, end):
             bracket_daily.setdefault((day, kind), {key: 0 for key in BRACKET_EVENTS})[event] += count
     totals = {key: sum(row[key] for row in daily.values()) for key, _ in ACTIVITY}
     engagement_note = "Total active time across public page visits; pauses after 1 minute idle. GPC and Do Not Track exclude collection."
-    if environment == "prod":
+    if os.environ.get("ACTIVE_ENGAGEMENT_ENABLED") != "true":
         active = {"value": None, "daily": {}, "rows": []}
-        engagement_note = "Active time is unavailable in production because active-time collection is disabled. Product activity remains available."
+        engagement_note = "Active-time collection is disabled. Product activity remains available."
     else:
         try:
             active = engagement.report(start, end)
@@ -171,7 +171,7 @@ def custom(_config, start, end):
                       for day in daily for kind in ("nfl", "nba", "unknown")
                       if kind != "unknown" or (day, kind) in bracket_daily]
     return {"metrics": [metric(label, totals[key]) for key, label in ACTIVITY],
-            "engagement": metric("Active engagement time", active["value"], "seconds",
+            "engagement": metric("Total active engagement time", active["value"], "seconds",
                                  engagement_note),
             "tables": [day_table, table("Brackets by type", type_columns, type_rows), by_day,
                        table("Active time by page", [("page", "Page", "text"), ("sport", "Sport", "text"),

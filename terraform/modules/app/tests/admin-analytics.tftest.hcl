@@ -28,6 +28,22 @@ mock_provider "aws" {
   }
 }
 
+run "active_engagement_disabled" {
+  command = plan
+  variables {
+    environment               = "prod"
+    active_engagement_enabled = false
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables.ACTIVE_ENGAGEMENT_ENABLED == "false" &&
+      !jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")).activeEngagementEnabled &&
+      length(aws_dynamodb_table.admin_analytics_cache) == 1
+    )
+    error_message = "Disabling active engagement must close browser and server collection without deleting the existing cache."
+  }
+}
+
 mock_provider "archive" {
   override_during = plan
 }
@@ -73,10 +89,13 @@ run "dev_admin_resources" {
     condition = (
       aws_lambda_function.backend.environment[0].variables.PREDICTIONS_TABLE == "nfl-playoff-predictor-dev-predictions" &&
       aws_lambda_function.backend.environment[0].variables.GROUPS_TABLE == "nfl-playoff-predictor-dev-groups" &&
+      aws_lambda_function.backend.environment[0].variables.ACTIVE_ENGAGEMENT_ENABLED == "true" &&
+      jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")).activeEngagementEnabled &&
+      contains(keys(aws_s3_object.frontend), "engagement.js") &&
       aws_lambda_function.backend.environment[0].variables.ADMIN_ANALYTICS_CACHE_TABLE == aws_dynamodb_table.admin_analytics_cache[0].name &&
       aws_lambda_function.backend.environment[0].variables.ADMIN_COGNITO_CLIENT_ID == aws_cognito_user_pool_client.browser.id &&
       contains(keys(aws_s3_object.frontend_pages), "admin/analytics") &&
-      toset(keys(jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")))) == toset(["environment", "clientId", "region"])
+      toset(keys(jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")))) == toset(["environment", "clientId", "region", "activeEngagementEnabled"])
     )
     error_message = "Dev data and client must remain separate; only public auth fields may reach the browser."
   }
@@ -123,12 +142,15 @@ run "prod_admin_resources" {
       contains(keys(aws_s3_object.frontend), "admin-analytics.css") &&
       strcontains(local.content_security_policy, "https://predictplayoffs.goatcounter.com") &&
       strcontains(local.content_security_policy, "https://gc.zgo.at") &&
-      toset(keys(jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")))) == toset(["environment", "clientId", "region"])
+      toset(keys(jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")))) == toset(["environment", "clientId", "region", "activeEngagementEnabled"])
     )
     error_message = "Production must permit the guarded GoatCounter collector without exposing provider config."
   }
   assert {
     condition = (
+      aws_lambda_function.backend.environment[0].variables.ACTIVE_ENGAGEMENT_ENABLED == "true" &&
+      jsondecode(replace(trimspace(aws_s3_object.auth_config.content), "/^window.AUTH_CONFIG = |;$/", "")).activeEngagementEnabled &&
+      contains(keys(aws_s3_object.frontend), "engagement.js") &&
       aws_lambda_function.backend.environment[0].variables.ADMIN_ANALYTICS_CACHE_TABLE == aws_dynamodb_table.admin_analytics_cache[0].name &&
       aws_lambda_function.backend.environment[0].variables.PREDICTIONS_TABLE == "nfl-playoff-predictor-predictions" &&
       aws_lambda_function.backend.environment[0].variables.GROUPS_TABLE == "nfl-playoff-predictor-groups" &&

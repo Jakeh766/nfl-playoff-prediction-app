@@ -669,6 +669,7 @@ resource "aws_lambda_function" "backend" {
       ADMIN_COGNITO_ISSUER               = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
       ADMIN_COGNITO_CLIENT_ID            = aws_cognito_user_pool_client.browser.id
       ADMIN_ANALYTICS_CACHE_TABLE        = aws_dynamodb_table.admin_analytics_cache[0].name
+      ACTIVE_ENGAGEMENT_ENABLED          = tostring(var.active_engagement_enabled)
       GOATCOUNTER_EXPORT_CACHE_TABLE     = "${var.project_name}-dev-admin-analytics-cache"
       ADMIN_ANALYTICS_CONFIG_PARAMETER   = "/${local.resource_prefix}/admin-analytics/config"
       ADMIN_GOOGLE_CREDENTIALS_PARAMETER = "/${local.resource_prefix}/admin-analytics/google-service-account"
@@ -1021,9 +1022,10 @@ moved {
 
 locals {
   auth_config_javascript = "window.AUTH_CONFIG = ${jsonencode({
-    environment = var.environment
-    clientId    = aws_cognito_user_pool_client.browser.id
-    region      = var.aws_region
+    environment             = var.environment
+    clientId                = aws_cognito_user_pool_client.browser.id
+    region                  = var.aws_region
+    activeEngagementEnabled = var.active_engagement_enabled
   })};\n"
 }
 
