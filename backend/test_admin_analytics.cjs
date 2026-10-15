@@ -549,7 +549,7 @@ test("charts resize with their panel, release observers on redraw and logout, an
   const observer = app.observers[0];
   observer.node.rect = { width: 320, left: 0 };
   observer.callback();
-  assert.equal(nodes(section).find(node => node.tag === "svg").viewBox, "0 0 320 244");
+  assert.equal(nodes(section).find(node => node.tag === "svg").viewBox, "0 0 320 344");
   observer.node.listeners.keydown({ key: "End", preventDefault() {} });
   assert.match(nodes(section).find(node => node.className === "analytics-tooltip").text, /25%/);
   assert.ok(nodes(section).filter(node => node.className === "analytics-axis").some(node => node.textContent === "25%"));

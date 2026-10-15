@@ -160,7 +160,7 @@
     plot.append(svg, tooltip, announcement);
     figure.append(plot, hint);
     let viewWidth = 540, width = 462, index = rows.findLastIndex(row => numeric(row[key]));
-    const left = 62, top = 24, height = 168;
+    const left = 62, top = 24, height = 268;
     let crosshair, marker;
     let focused = false, pinned = false;
     const xFor = i => left + (rows.length > 1 ? i / (rows.length - 1) : 0.5) * width;
@@ -196,7 +196,7 @@
       const measuredWidth = plot.getBoundingClientRect().width;
       if (measuredWidth > 0) viewWidth = Math.max(240, measuredWidth);
       width = viewWidth - left - 16;
-      svg.setAttribute("viewBox", `0 0 ${viewWidth} 244`);
+      svg.setAttribute("viewBox", `0 0 ${viewWidth} 344`);
       svg.replaceChildren();
       for (const fraction of type === "number" && maximum < 4 ? [0, 1] : [0, 0.25, 0.5, 0.75, 1]) {
         const y = top + height * (1 - fraction);
@@ -207,7 +207,7 @@
         svg.append(svgElement("text", { x: left - 12, y: y + 4, "text-anchor": "end", class: "analytics-axis" }, tick));
       }
       for (const i of [...new Set([0, ...(rows.length > 14 && viewWidth > 500 ? [Math.floor(rows.length / 2)] : []), rows.length - 1])]) {
-        svg.append(svgElement("text", { x: xFor(i), y: 224, "text-anchor": i === 0 ? "start" : i === rows.length - 1 ? "end" : "middle",
+        svg.append(svgElement("text", { x: xFor(i), y: 324, "text-anchor": i === 0 ? "start" : i === rows.length - 1 ? "end" : "middle",
           class: "analytics-axis" }, dayLabel(rows[i][dateKey])));
       }
       let segment = [];
